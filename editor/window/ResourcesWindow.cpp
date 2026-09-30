@@ -22,11 +22,13 @@
 #include "command/type/CreateMaterialFileCmd.h"
 #include "command/type/RenameFileCmd.h"
 #include "command/type/CreateDirCmd.h"
+#include "command/type/CreateFileCmd.h"
 #include "command/type/DeleteFileCmd.h"
 #include "command/type/CreateEntityBundleCmd.h"
 
 #include "Backend.h"
 #include "App.h"
+#include "Factory.h"
 #include "Theme.h"
 #include "Widgets.h"
 #include "Stream.h"
@@ -163,7 +165,7 @@ editor::ResourcesWindow::ResourcesWindow(Project* project, CodeEditor* codeEdito
     this->clipboardCut = false;
     this->isRenaming = false;
     this->renameSelectPending = false;
-    this->isCreatingNewDirectory = false;
+    this->isCreatingNewItem = false;
     this->timeSinceLastCheck = 0.0f;
     this->windowOpen = true;
     this->focusRequested = false;
@@ -1288,6 +1290,11 @@ void editor::ResourcesWindow::renderFileListing(bool showDirectories){
                     ImGui::Separator();
                 }
 
+                if (file.isDirectory){
+                    renderNewItemMenu(currentPath / file.name);
+                    ImGui::Separator();
+                }
+
                 if (ImGui::MenuItem(ICON_FA_COPY " Copy")) copySelectedFiles(false);
                 if (ImGui::MenuItem(ICON_FA_SCISSORS " Cut")) copySelectedFiles(true);
                 if (ImGui::MenuItem(ICON_FA_PASTE " Paste", nullptr, false, !clipboardFiles.empty())){
@@ -1347,11 +1354,7 @@ void editor::ResourcesWindow::renderFileListing(bool showDirectories){
 
         ImGui::Separator();
 
-        if (ImGui::MenuItem(ICON_FA_FOLDER " New Folder")){
-            isCreatingNewDirectory = true;
-            memset(nameBuffer, 0, sizeof(nameBuffer));
-            ImGui::CloseCurrentPopup();
-        }
+        renderNewItemMenu(currentPath);
 
         if (ImGui::MenuItem(ICON_FA_PASTE " Paste", nullptr, false, !clipboardFiles.empty())){
             pasteFiles(currentPath);
@@ -1754,23 +1757,57 @@ void editor::ResourcesWindow::handleInternalDragAndDrop(const fs::path& targetDi
     scanDirectory(currentPath);
 }
 
-void editor::ResourcesWindow::handleNewDirectory(){
-    // Handle new directory creation popup
-    if (isCreatingNewDirectory) {
-        ImGui::OpenPopup("Create New Directory");
+void editor::ResourcesWindow::startNewItem(NewItemType type, const fs::path& directory){
+    isCreatingNewItem = true;
+    newItemType = type;
+    newItemDirectory = directory;
+    memset(nameBuffer, 0, sizeof(nameBuffer));
+}
+
+void editor::ResourcesWindow::renderNewItemMenu(const fs::path& directory){
+    if (!ImGui::BeginMenu(ICON_FA_PLUS " New")) return;
+
+    if (ImGui::MenuItem(ICON_FA_FOLDER " Folder")) startNewItem(NewItemType::FOLDER, directory);
+
+    ImGui::Separator();
+
+    bool inLuaDir = Util::isInsidePath(directory, project->getLuaPath());
+    if (ImGui::MenuItem(ICON_FA_FILE_CODE " Lua Script", nullptr, false, inLuaDir)) startNewItem(NewItemType::LUA_SCRIPT, directory);
+    if (!inLuaDir) ImGui::SetItemTooltip("Lua scripts must be inside the Lua directory");
+
+    if (ImGui::MenuItem(ICON_FA_FILE_CODE " C++ Source")) startNewItem(NewItemType::CPP_SOURCE, directory);
+    if (ImGui::MenuItem(ICON_FA_FILE_CODE " C++ Header")) startNewItem(NewItemType::CPP_HEADER, directory);
+
+    ImGui::EndMenu();
+}
+
+void editor::ResourcesWindow::handleNewItem(){
+    bool isFolder = (newItemType == NewItemType::FOLDER);
+    const char* popupName = "Create New Directory";
+    if (newItemType == NewItemType::LUA_SCRIPT) popupName = "Create New Lua Script";
+    else if (newItemType == NewItemType::CPP_SOURCE) popupName = "Create New C++ Source";
+    else if (newItemType == NewItemType::CPP_HEADER) popupName = "Create New C++ Header";
+
+    // Handle new item creation popup
+    if (isCreatingNewItem) {
+        ImGui::OpenPopup(popupName);
         ImVec2 center = ImGui::GetMainViewport()->GetCenter();
         ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
     }
 
-    if (ImGui::BeginPopupModal("Create New Directory", &isCreatingNewDirectory, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::Text("Enter directory name:");
+    if (ImGui::BeginPopupModal(popupName, &isCreatingNewItem, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextUnformatted(isFolder ? "Enter directory name:" : "Enter file name:");
 
         // Auto-focus the input field when the popup opens
         if (ImGui::IsWindowAppearing()) {
             ImGui::SetKeyboardFocusHere();
         }
 
-        bool enterPressed = ImGui::InputText("##newdir", nameBuffer, sizeof(nameBuffer), ImGuiInputTextFlags_EnterReturnsTrue);
+        bool enterPressed = ImGui::InputText("##newitem", nameBuffer, sizeof(nameBuffer), ImGuiInputTextFlags_EnterReturnsTrue);
+
+        if (newItemType == NewItemType::CPP_SOURCE && !project->isInsideScriptDirs(newItemDirectory)) {
+            ImGui::TextDisabled("Outside the Script Directories, it compiles only as an attached script.");
+        }
 
         // Calculate total width of the buttons
         float buttonWidth = 120.0f;
@@ -1782,7 +1819,7 @@ void editor::ResourcesWindow::handleNewDirectory(){
         ImGui::SetCursorPosX((windowWidth - totalWidth) * 0.5f);
 
         if (ImGui::Button("Cancel", ImVec2(buttonWidth, 0))) {
-            isCreatingNewDirectory = false;
+            isCreatingNewItem = false;
             ImGui::CloseCurrentPopup();
         }
 
@@ -1790,32 +1827,53 @@ void editor::ResourcesWindow::handleNewDirectory(){
 
         bool confirmed = ImGui::Button("Create", ImVec2(buttonWidth, 0)) || enterPressed;
         if (confirmed) {
-            std::string dirName = nameBuffer;
-            if (!dirName.empty()) {
-                try {
-                    fs::path newDirPath = currentPath / dirName;
+            std::string itemName = nameBuffer;
+            if (!itemName.empty()) {
+                std::string content;
+                if (newItemType == NewItemType::LUA_SCRIPT) {
+                    if (!Util::isLuaFile(itemName)) itemName += ".lua";
+                    std::string moduleName = Factory::toIdentifier(fs::path(itemName).stem().string());
+                    content = "local " + moduleName + " = {}\n\nreturn " + moduleName + "\n";
+                } else if (newItemType == NewItemType::CPP_SOURCE) {
+                    if (!Util::isSourceFile(itemName)) itemName += ".cpp";
+                } else if (newItemType == NewItemType::CPP_HEADER) {
+                    if (!Util::isHeaderFile(itemName)) itemName += ".h";
+                    content = "#pragma once\n";
+                }
 
-                    // Check if directory already exists
-                    if (fs::exists(newDirPath)) {
-                        ImGui::OpenPopup("Directory Already Exists");
+                try {
+                    fs::path newItemPath = newItemDirectory / itemName;
+
+                    // Check if the name is already taken
+                    if (fs::exists(newItemPath)) {
+                        ImGui::OpenPopup("Name Already Exists");
                     } else {
-                        project->getProjectCommandHistory()->addCommand(new CreateDirCmd(dirName, currentPath.string()));
-                        scanDirectory(currentPath);
-                        isCreatingNewDirectory = false;
-                        ImGui::CloseCurrentPopup();
+                        if (isFolder) {
+                            project->getProjectCommandHistory()->addCommand(new CreateDirCmd(itemName, newItemDirectory.string()));
+                        } else {
+                            project->getProjectCommandHistory()->addCommand(new CreateFileCmd(project, newItemPath, content));
+                        }
+
+                        if (fs::exists(newItemPath)) {
+                            scanDirectory(currentPath);
+                            isCreatingNewItem = false;
+                            ImGui::CloseCurrentPopup();
+                        } else {
+                            ImGui::OpenPopup("Creation Error");
+                        }
                     }
                 } catch (const fs::filesystem_error& e) {
                     ImGui::OpenPopup("Creation Error");
                 }
             }
-            if (dirName.empty()) {
+            if (itemName.empty()) {
                 ImGui::OpenPopup("Invalid Name");
             }
         }
 
-        // Error popup for existing directory
-        if (ImGui::BeginPopupModal("Directory Already Exists", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-            ImGui::Text("A directory with this name already exists.");
+        // Error popup for a name already taken
+        if (ImGui::BeginPopupModal("Name Already Exists", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::Text("A file or directory with this name already exists.");
             ImGui::Separator();
 
             float popupWidth = ImGui::GetWindowSize().x;
@@ -1830,7 +1888,7 @@ void editor::ResourcesWindow::handleNewDirectory(){
 
         // Error popup for creation failure
         if (ImGui::BeginPopupModal("Creation Error", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-            ImGui::Text("Failed to create the directory.");
+            ImGui::TextUnformatted(isFolder ? "Failed to create the directory." : "Failed to create the file.");
             ImGui::Separator();
 
             float popupWidth = ImGui::GetWindowSize().x;
@@ -1845,7 +1903,7 @@ void editor::ResourcesWindow::handleNewDirectory(){
 
         // Error popup for invalid name
         if (ImGui::BeginPopupModal("Invalid Name", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-            ImGui::Text("Please enter a valid directory name.");
+            ImGui::TextUnformatted(isFolder ? "Please enter a valid directory name." : "Please enter a valid file name.");
             ImGui::Separator();
 
             float popupWidth = ImGui::GetWindowSize().x;
@@ -2801,6 +2859,6 @@ void editor::ResourcesWindow::show() {
         setOpen(false);
     }
 
-    handleNewDirectory();
+    handleNewItem();
     handleRename();
 }

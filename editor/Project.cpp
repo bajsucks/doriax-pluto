@@ -2115,6 +2115,15 @@ std::filesystem::path editor::Project::normalizeToLuaRelative(const std::filesys
     return normalizeAgainstRoot(getLuaPath(), path);
 }
 
+bool editor::Project::isInsideScriptDirs(const std::filesystem::path& path) const{
+    for (const std::filesystem::path& scriptDir : scriptDirs){
+        if (isInsideRoot(path, resolveRootDir(projectPath, scriptDir))){
+            return true;
+        }
+    }
+    return false;
+}
+
 // Only a directory without project files can be moved as a whole: those are referenced
 // from the project root and would need their own remap.
 static bool holdsOnlyAssets(const std::filesystem::path& directory){

@@ -139,7 +139,15 @@ namespace doriax::editor {
         bool renameSelectPending;
         std::string fileBeingRenamed;
 
-        bool isCreatingNewDirectory;
+        enum class NewItemType {
+            FOLDER,
+            LUA_SCRIPT,
+            CPP_SOURCE,
+            CPP_HEADER
+        };
+        bool isCreatingNewItem;
+        NewItemType newItemType = NewItemType::FOLDER;
+        fs::path newItemDirectory;
 
         std::filesystem::file_time_type lastWriteTime;
         float timeSinceLastCheck;
@@ -201,6 +209,7 @@ namespace doriax::editor {
         void renderHeader();
         void renderPathBreadcrumb(const ImVec2& size);
         void renderFileListing(bool showDirectories);
+        void renderNewItemMenu(const fs::path& directory);
         void renderDirectoryTree(const fs::path& path);
         const std::vector<fs::path>& treeSubdirectories(const fs::path& path);
 
@@ -208,7 +217,8 @@ namespace doriax::editor {
         void sortWithSortSpecs(ImGuiTableSortSpecs* sortSpecs, std::vector<FileEntry>& files);
         void highlightDragAndDrop();
         void handleInternalDragAndDrop(const fs::path& targetDirectory);
-        void handleNewDirectory();
+        void startNewItem(NewItemType type, const fs::path& directory);
+        void handleNewItem();
         void startRename(const std::string& fileName);
         void handleRename();
         void copySelectedFiles(bool cut);

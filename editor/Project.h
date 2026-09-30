@@ -568,6 +568,7 @@ namespace doriax::editor{
         // sources under it compile without a script component referencing them.
         void setScriptDirs(std::vector<std::filesystem::path> scriptDirs);
         const std::vector<std::filesystem::path>& getScriptDirs() const;
+        bool isInsideScriptDirs(const std::filesystem::path& path) const;
 
         void setCxxStandard(int standard);
         int getCxxStandard() const;

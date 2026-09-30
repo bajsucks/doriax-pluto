@@ -1422,19 +1422,6 @@ bool canSwitchProject(Project* project, std::string& error) {
     return error.empty();
 }
 
-// A source under a script root compiles by living there, not by being referenced.
-bool isInsideScriptDir(Project* project, const fs::path& fullPath) {
-    const fs::path target = fullPath.lexically_normal();
-    for (const fs::path& scriptDir : project->getScriptDirs()) {
-        const fs::path root = (scriptDir.is_absolute() ? scriptDir : project->getProjectPath() / scriptDir).lexically_normal();
-        const fs::path relative = target.lexically_relative(root);
-        if (!relative.empty() && !relative.is_absolute() && *relative.begin() != "..") {
-            return true;
-        }
-    }
-    return false;
-}
-
 // Json::value() throws when the key is present with another type.
 std::string optionalString(const Json& args, const char* key, const char* fallback = "") {
     const auto it = args.find(key);
@@ -4059,7 +4046,7 @@ ActionResult EditorActionExecutor::createSourceFile(const Json& arguments) {
     Out::info("AI created source file: %s", rel.generic_string().c_str());
 
     // A header under a root only joins the include path; a source becomes a translation unit.
-    const bool inScriptDir = isInsideScriptDir(project, fullPath);
+    const bool inScriptDir = project->isInsideScriptDirs(fullPath);
     std::string nextStep;
     if (ext == ".h" || ext == ".hpp") {
         nextStep = inScriptDir
