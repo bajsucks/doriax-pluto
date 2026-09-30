@@ -6177,7 +6177,7 @@ bool editor::Project::createEntityBundle(uint32_t sceneId, fs::path filepath, YA
     std::vector<Entity> branchEntities;
     ProjectUtils::collectEntities(entityNode, branchEntities);
 
-    std::vector<Entity> regEntities = Stream::decodeEntitySelection(clearEntitiesNode(entityNode), newGroup.registry.get(), &newGroup.registryEntities);
+    std::vector<Entity> regEntities = Stream::decodeEntitySelection(clearEntitiesNode(YAML::Clone(entityNode)), newGroup.registry.get(), &newGroup.registryEntities);
     if (branchEntities.size() == regEntities.size()) {
         std::unordered_map<Entity, Entity> localToRegistry;
         for (size_t i = 0; i < branchEntities.size(); ++i) {
@@ -6255,13 +6255,57 @@ bool editor::Project::createEntityBundle(uint32_t sceneId, fs::path filepath, YA
         ProjectUtils::moveEntityOrderByTarget(scene, sceneProject->entities, rootEntity, moveTarget, InsertionType::BEFORE, oldParent, oldIndex, hasTransform);
     }
 
-    // Reparent top-level transformed bundle entities under the new root.
+    // Reparent top-level transformed bundle entities under the new root, which takes their placement.
     if (hasTopLevelTransform) {
-        std::vector<Entity> sceneTopLevelEntities = getTopLevelEntities(scene, branchEntities);
-        for (Entity topLevelEntity : sceneTopLevelEntities) {
+        std::vector<Entity> sceneTopLevelEntities;
+        bool hasAnchoredUI = false;
+        for (Entity topLevelEntity : getTopLevelEntities(scene, branchEntities)) {
             if (scene->findComponent<Transform>(topLevelEntity)) {
-                scene->addEntityChild(rootEntity, topLevelEntity, true);
+                sceneTopLevelEntities.push_back(topLevelEntity);
+
+                // Anchors already place UI, so its root stays at the origin
+                UILayoutComponent* layout = scene->findComponent<UILayoutComponent>(topLevelEntity);
+                if (layout && layout->usingAnchors) {
+                    hasAnchoredUI = true;
+                }
             }
+        }
+
+        Transform& rootTransform = scene->getComponent<Transform>(rootEntity);
+        bool changeTransform = true;
+        if (sceneTopLevelEntities.size() == 1 && !hasAnchoredUI) {
+            Entity entity = sceneTopLevelEntities[0];
+            Transform& transform = scene->getComponent<Transform>(entity);
+
+            rootTransform.position = transform.position;
+            rootTransform.rotation = transform.rotation;
+            rootTransform.scale = transform.scale;
+            // The matrix origin of a pivoted UI element is not its position
+            if (UILayoutComponent* layout = scene->findComponent<UILayoutComponent>(entity)) {
+                rootTransform.position += getUIPivotShift(*layout, transform.rotation, transform.scale);
+            }
+
+            transform.position = Vector3::ZERO;
+            transform.rotation = Quaternion::IDENTITY;
+            transform.scale = Vector3::UNIT_SCALE;
+            changeTransform = false;
+        } else if (!hasAnchoredUI) {
+            // Same pivot as the move gizmo
+            Vector3 pivot;
+            for (Entity topLevelEntity : sceneTopLevelEntities) {
+                pivot += scene->getComponent<Transform>(topLevelEntity).worldPosition;
+            }
+            pivot /= sceneTopLevelEntities.size();
+
+            Transform* parentTransform = scene->findComponent<Transform>(rootTransform.parent);
+            rootTransform.position = parentTransform ? parentTransform->modelMatrix.inverse() * pivot : pivot;
+            rootTransform.rotation = Quaternion::IDENTITY;
+            rootTransform.scale = Vector3::UNIT_SCALE;
+            scene->getSystem<RenderSystem>()->updateTransform(rootTransform, rootEntity);
+        }
+
+        for (Entity topLevelEntity : sceneTopLevelEntities) {
+            scene->addEntityChild(rootEntity, topLevelEntity, changeTransform);
         }
         ProjectUtils::sortEntitiesByTransformOrder(scene, sceneProject->entities);
     }
@@ -6270,6 +6314,15 @@ bool editor::Project::createEntityBundle(uint32_t sceneId, fs::path filepath, YA
 
     for (int i = 0; i < regEntities.size(); i++) {
         newInstance.members.push_back({branchEntities[i], regEntities[i]});
+
+        // The bundle stores top-level members relative to the root
+        Transform* transform = scene->findComponent<Transform>(branchEntities[i]);
+        Transform* regTransform = newGroup.registry->findComponent<Transform>(regEntities[i]);
+        if (transform && regTransform && transform->parent == rootEntity) {
+            regTransform->position = transform->position;
+            regTransform->rotation = transform->rotation;
+            regTransform->scale = transform->scale;
+        }
     }
 
     // References to entities outside the bundle stayed on the scene members while the
