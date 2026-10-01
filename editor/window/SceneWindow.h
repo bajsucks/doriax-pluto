@@ -91,7 +91,9 @@ namespace doriax::editor {
         ImVec2 canvasEngineScale(uint32_t sceneId) const;
         float canvasDpi(uint32_t sceneId) const;
         void toEngineCanvas(uint32_t sceneId, float& x, float& y) const;
-        
+        void toEditorCanvas(const SceneProject* sceneProject, float& x, float& y) const;
+        ImVec2 getEditorCanvasSize(const SceneProject* sceneProject) const;
+
     public:
         SceneWindow(Project* project);
 

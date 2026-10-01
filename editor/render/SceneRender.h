@@ -175,6 +175,9 @@ namespace doriax::editor{
 
         bool multipleEntitiesSelected;
         bool isPlaying;
+        bool cameraDetached;
+
+        bool isGameView() const { return isPlaying && !cameraDetached; }
 
         SceneDisplaySettings displaySettings;
 
@@ -190,8 +193,13 @@ namespace doriax::editor{
         static AABB getMeshLocalAABB(const MeshComponent& mesh);
 
         virtual void hideAllGizmos();
+        // per-entity icons and lines, rebuilt by the next update()
+        virtual void clearEntityOverlays() {}
 
         void setPlayMode(bool isPlaying);
+
+        void setCameraDetached(bool detached);
+        bool isCameraDetached() const;
 
         virtual void activate();
         virtual void updateSize(int width, int height);

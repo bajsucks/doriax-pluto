@@ -52,6 +52,7 @@ namespace doriax::editor{
 
     protected:
         void hideAllGizmos() override;
+        void clearEntityOverlays() override;
 
     public:
         SceneRender2D(Scene* scene, unsigned int width, unsigned int height, bool isUI);

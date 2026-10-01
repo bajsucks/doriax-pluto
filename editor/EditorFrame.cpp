@@ -77,9 +77,9 @@ bool EditorFrame::run(EditorFrameState& state){
     const bool playSessionActive = project->isPlaySessionActive();
 
     // Hand the cursor back to the editor while a play session isn't actively
-    // running (paused or loading) so a game-held cursor lock can't trap the mouse.
+    // running (paused, detached or loading) so a game-held cursor lock can't trap the mouse.
     Backend::setMouseControlSuspended(
-        playSessionActive && !project->isMainScenePlaying());
+        playSessionActive && !project->isGameInputActive());
 
     const double frameStart = monotonicSeconds();
     const bool idleFrame = !state.forceRedraw && isIdle();

@@ -899,7 +899,9 @@ void editor::SceneWindow::forwardPlayKeyboardInput(ImGuiIO& io, int mods){
 
     forwardKeyRange(ImGuiKey_0, D_KEY_0, 10);
     forwardKeyRange(ImGuiKey_A, D_KEY_A, 26);
-    forwardKeyRange(ImGuiKey_F1, D_KEY_F1, 24);
+    // F8 detaches the camera, so the game never gets it (a reattach would forward its press)
+    forwardKeyRange(ImGuiKey_F1, D_KEY_F1, 7);
+    forwardKeyRange(ImGuiKey_F9, D_KEY_F9, 16);
     forwardKeyRange(ImGuiKey_Keypad0, D_KEY_KP_0, 10);
 
     forwardKey(ImGuiKey_KeypadDecimal, D_KEY_KP_DECIMAL);
@@ -978,8 +980,17 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
     if (io.KeyAlt) mods |= D_MODIFIER_ALT;
     if (io.KeySuper) mods |= D_MODIFIER_SUPER;
 
+    const bool cameraDetached = sceneProject->sceneRender->isCameraDetached();
+    const bool gameView = !cameraDetached &&
+        (sceneProject->playState == ScenePlayState::PLAYING || sceneProject->playState == ScenePlayState::PAUSED);
+
+    // End an editor camera look left running by re-attaching
+    if (gameView && (draggingMouse[sceneProject->id] || lookActive[sceneProject->id])) {
+        endLook(sceneProject->id);
+    }
+
     // When scene is playing, forward mouse and keyboard events to Engine
-    if (sceneProject->playState == ScenePlayState::PLAYING) {
+    if (sceneProject->playState == ScenePlayState::PLAYING && !cameraDetached) {
         // A captured cursor reports a virtual position that leaves the viewport,
         // so the mouse follows window focus like the keyboard below.
         const bool capturedMouse = Engine::getMouseMode() == MouseMode::CAPTURED;
@@ -1064,9 +1075,14 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
             return;
         }
     } else {
-        // Play stopped or paused with input still held
+        // Play stopped, paused or detached with input still held
         if (playKeysSceneId == sceneProject->id) releasePlayKeys(mods);
         if (playMouseSceneId == sceneProject->id) releasePlayMouseButtons(mods);
+    }
+
+    // The editor camera takes no input while the game camera is drawn
+    if (gameView) {
+        return;
     }
 
     if (sceneProject->playState == ScenePlayState::STOPPED && sceneProject->sceneRender->isPreviewCameraActive()) {
@@ -1105,7 +1121,7 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
         float logicalY = mousePos.y - windowPos.y;
         float x = logicalX;
         float y = logicalY;
-        toEngineCanvas(sceneId, x, y);
+        toEditorCanvas(sceneProject, x, y);
 
         if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && (!altHeld || altGizmoDrag) && !suppressLeftMouse && !handPanEnabled){
             subSelectionClickConsumesRelease[sceneId] = false;
@@ -1391,7 +1407,7 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
             if (mouseLeftDraggedInside){
                 float origX = mouseLeftStartPos.x;
                 float origY = mouseLeftStartPos.y;
-                toEngineCanvas(sceneId, origX, origY);
+                toEditorCanvas(sceneProject, origX, origY);
                 sceneProject->sceneRender->mouseDragEvent(x, y, origX, origY, project, sceneId, project->getSelectedEntities(sceneId), disableSelection, io.KeyCtrl, io.KeyShift);
             }
         }
@@ -1448,7 +1464,7 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
     if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)){
         float x = mousePos.x - windowPos.x;
         float y = mousePos.y - windowPos.y;
-        toEngineCanvas(sceneId, x, y);
+        toEditorCanvas(sceneProject, x, y);
 
         if (suppressLeftMouse){
             suppressLeftMouseUntilRelease[sceneId] = false;
@@ -1458,8 +1474,15 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
         }else{
 
             if (mouseLeftDraggedInside && !disableSelection){
-                Vector2 clickStartPos = Vector2((2 * mouseLeftStartPos.x / width[sceneId]) - 1, -((2 * mouseLeftStartPos.y / height[sceneId]) - 1));
-                Vector2 clickEndPos = Vector2((2 * mouseLeftDragPos.x / width[sceneId]) - 1, -((2 * mouseLeftDragPos.y / height[sceneId]) - 1));
+                float startX = mouseLeftStartPos.x;
+                float startY = mouseLeftStartPos.y;
+                float endX = mouseLeftDragPos.x;
+                float endY = mouseLeftDragPos.y;
+                toEditorCanvas(sceneProject, startX, startY);
+                toEditorCanvas(sceneProject, endX, endY);
+                ImVec2 canvasSize = getEditorCanvasSize(sceneProject);
+                Vector2 clickStartPos = Vector2((2 * startX / canvasSize.x) - 1, -((2 * startY / canvasSize.y) - 1));
+                Vector2 clickEndPos = Vector2((2 * endX / canvasSize.x) - 1, -((2 * endY / canvasSize.y) - 1));
                 sceneProject->sceneRender->clearTileSelection();
                 sceneProject->sceneRender->clearInstanceSelection();
                 sceneProject->sceneRender->clearOccluderPointSelection();
@@ -1944,6 +1967,7 @@ void editor::SceneWindow::show() {
             bool isSaving = (sceneProject.playState == ScenePlayState::SAVING);
             bool isLoading = (sceneProject.playState == ScenePlayState::LOADING);
             bool isCancelling = (sceneProject.playState == ScenePlayState::CANCELLING);
+            bool isCameraDetached = sceneProject.sceneRender->isCameraDetached();
             bool isCameraPreview = isStopped && sceneProject.sceneRender->isPreviewCameraActive();
             Entity previewCameraEntity = isCameraPreview ? sceneProject.sceneRender->getPreviewCameraEntity() : NULL_ENTITY;
             if (isCameraPreview) {
@@ -1980,6 +2004,20 @@ void editor::SceneWindow::show() {
             if (ImGui::Button(ICON_FA_STOP " Stop")) {
                 project->stop(sceneProject.id);
             }
+            ImGui::EndDisabled();
+
+            ImGui::SameLine(0, Theme::dpi(10.0f));
+            ImGui::Dummy(ImVec2(1.0f, Theme::dpi(20.0f)));
+
+            // Detach camera toggle - only while the scene runs
+            ImGui::BeginDisabled(!isPlaying && !isPaused);
+            ImGui::SameLine();
+            if (isCameraDetached) ImGui::PushStyleColor(ImGuiCol_Button, Theme::Colors::ButtonActivated);
+            if (ImGui::Button(ICON_FA_VIDEO)) {
+                project->toggleCameraDetached(sceneProject.id);
+            }
+            if (isCameraDetached) ImGui::PopStyleColor();
+            ImGui::SetItemTooltip("Detach camera (F8)");
             ImGui::EndDisabled();
 
             // Touch simulation toggle - disabled while any scene plays
@@ -2423,18 +2461,19 @@ void editor::SceneWindow::show() {
                 }
 
                 // Viewport gizmo click-to-snap (3D scenes only)
-                if (sceneProject.sceneType == SceneType::SCENE_3D && sceneProject.playState == ScenePlayState::STOPPED && !isCameraPreview) {
+                if (sceneProject.sceneType == SceneType::SCENE_3D && (isStopped || isCameraDetached) && !isCameraPreview) {
                     if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
                         ImVec2 windowPos = ImGui::GetWindowPos();
                         ImGuiIO& io = ImGui::GetIO();
                         float canvasX = io.MousePos.x - windowPos.x;
                         float canvasY = io.MousePos.y - windowPos.y;
-                        toEngineCanvas(sceneProject.id, canvasX, canvasY);
-                        suppressLeftMouseUntilRelease[sceneProject.id] = handleViewportGizmoClick(&sceneProject, canvasX, canvasY, getWidth(sceneProject.id), getHeight(sceneProject.id));
+                        toEditorCanvas(&sceneProject, canvasX, canvasY);
+                        ImVec2 canvasSize = getEditorCanvasSize(&sceneProject);
+                        suppressLeftMouseUntilRelease[sceneProject.id] = handleViewportGizmoClick(&sceneProject, canvasX, canvasY, (int)canvasSize.x, (int)canvasSize.y);
                     }
                 }
 
-                if (sceneProject.playState == ScenePlayState::PLAYING && ImGui::IsWindowHovered()) {
+                if (isPlaying && !isCameraDetached && ImGui::IsWindowHovered()) {
                     gameCursorInSceneRect = true;
                 }
 
@@ -2473,6 +2512,23 @@ void editor::SceneWindow::toEngineCanvas(uint32_t sceneId, float& x, float& y) c
     ImVec2 scale = canvasEngineScale(sceneId);
     x *= scale.x;
     y *= scale.y;
+}
+
+// Detached, the engine keeps the game's canvas mapped onto the view rect, as for game input
+void editor::SceneWindow::toEditorCanvas(const SceneProject* sceneProject, float& x, float& y) const {
+    toEngineCanvas(sceneProject->id, x, y);
+    if (sceneProject->sceneRender->isCameraDetached()) {
+        const Rect view = Engine::getViewRect();
+        x = (x - view.getX()) * Engine::getCanvasWidth() / view.getWidth();
+        y = (y - view.getY()) * Engine::getCanvasHeight() / view.getHeight();
+    }
+}
+
+ImVec2 editor::SceneWindow::getEditorCanvasSize(const SceneProject* sceneProject) const {
+    if (sceneProject->sceneRender->isCameraDetached()) {
+        return ImVec2(Engine::getCanvasWidth(), Engine::getCanvasHeight());
+    }
+    return ImVec2(getWidth(sceneProject->id), getHeight(sceneProject->id));
 }
 
 int editor::SceneWindow::getWidth(uint32_t sceneId) const{

@@ -7215,7 +7215,7 @@ void RenderSystem::updateSwapchainRedirect(){
     if (redirect != swapchainRedirect){
         swapchainRedirect = redirect;
         // the flip is baked in the MVP matrices
-        scene->getComponent<CameraComponent>(scene->getCamera()).needUpdate = true;
+        scene->getComponent<CameraComponent>(scene->getRenderCamera()).needUpdate = true;
     }
 }
 
@@ -7313,7 +7313,7 @@ void RenderSystem::updateMVP(size_t index, Transform& transform, CameraComponent
 uint16_t RenderSystem::getScenePipelines() const{
     uint16_t pipelines = 0;
 
-    Entity mainCameraEntity = scene->getCamera();
+    Entity mainCameraEntity = scene->getRenderCamera();
     auto cameras = scene->getComponentArray<CameraComponent>();
 
     for (int i = 0; i < cameras->size(); i++){
@@ -7416,7 +7416,7 @@ void RenderSystem::update(double dt){
     // the pipeline mask below depends on the redirect
     updateSwapchainRedirect();
 
-    Entity mainCameraEntity = scene->getCamera();
+    Entity mainCameraEntity = scene->getRenderCamera();
     uint16_t pipelines = getScenePipelines();
 
     hasMultipleCameras = false;
@@ -7970,8 +7970,9 @@ void RenderSystem::draw(){
 
     updateShadowBindings();
     updateAllTerrainRenderTextures();
-    if (CameraComponent* mainCamera = scene->findComponent<CameraComponent>(scene->getCamera())){
-        if (Transform* mainCameraTransform = scene->findComponent<Transform>(scene->getCamera())){
+    Entity mainCameraEntity = scene->getRenderCamera();
+    if (CameraComponent* mainCamera = scene->findComponent<CameraComponent>(mainCameraEntity)){
+        if (Transform* mainCameraTransform = scene->findComponent<Transform>(mainCameraEntity)){
             buildInstanceViews(*mainCamera, *mainCameraTransform);
         }
     }
@@ -8204,7 +8205,7 @@ void RenderSystem::draw(){
             continue;
         Transform& cameraTransform = *cameraTransformPtr;
 
-        bool isMainCamera = (cameraEntity == scene->getCamera());
+        bool isMainCamera = (cameraEntity == mainCameraEntity);
 
         if (!isMainCamera && !camera.renderToTexture){
             continue; // camera is not used

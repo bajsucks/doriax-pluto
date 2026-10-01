@@ -3600,7 +3600,7 @@ void MeshSystem::updateTerrainFoliage(Entity entity, TerrainComponent& terrain, 
     }
     layers.resize(terrain.foliageLayers.size());
 
-    Transform* cameraTransform = scene->findComponent<Transform>(scene->getCamera());
+    Transform* cameraTransform = scene->findComponent<Transform>(scene->getRenderCamera());
     if (!cameraTransform){
         return;
     }
@@ -3650,11 +3650,11 @@ void MeshSystem::updateTerrainAutoRanges(TerrainComponent& terrain){
         return;
     }
 
-    if (scene->getCamera() == NULL_ENTITY){
+    if (scene->getRenderCamera() == NULL_ENTITY){
         return;
     }
 
-    CameraComponent& camera = scene->getComponent<CameraComponent>(scene->getCamera());
+    CameraComponent& camera = scene->getComponent<CameraComponent>(scene->getRenderCamera());
 
     // Each level doubles the node size, so its range doubles too and every level keeps
     // the same detail on screen. Halving the far clip down instead leaves every range

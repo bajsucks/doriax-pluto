@@ -32,6 +32,7 @@ editor::SceneRender::SceneRender(Scene* scene, bool use2DGizmos, bool enable3DOv
     this->lastCommand = nullptr;
     this->useGlobalTransform = true;
     this->isPlaying = false;
+    this->cameraDetached = false;
 
     this->gizmoScale = gizmoScale;
     this->selectionOffset = selectionOffset;
@@ -495,8 +496,27 @@ void editor::SceneRender::setPlayMode(bool isPlaying){
         previewCameraEntity = NULL_ENTITY;
         hideAllGizmos();
     }else{
+        setCameraDetached(false);
         syncSceneCamera();
     }
+}
+
+void editor::SceneRender::setCameraDetached(bool detached){
+    if (cameraDetached == detached || (detached && !isPlaying)){
+        return;
+    }
+
+    cameraDetached = detached;
+    scene->setViewCamera(detached ? camera->getEntity() : NULL_ENTITY);
+
+    // update() skips the overlays on the game camera
+    if (!detached && isPlaying){
+        hideAllGizmos();
+    }
+}
+
+bool editor::SceneRender::isCameraDetached() const{
+    return cameraDetached;
 }
 
 void editor::SceneRender::activate(){
@@ -571,15 +591,18 @@ void editor::SceneRender::update(std::vector<Entity> selEntities, std::vector<En
     scene->getSystem<RenderSystem>()->setDisableFaceCulling(displaySettings.disableFaceCulling && !isPlaying);
     scene->getSystem<RenderSystem>()->setDisableFog(displaySettings.disableFog && !isPlaying);
 
-    // Fixed game resolution only applies while playing: edit-mode viewports stay
-    // at native resolution (gizmos and overlays would otherwise mismatch).
-    scene->getSystem<RenderSystem>()->setDisableFixedResolution(!isPlaying);
+    // Fixed game resolution only applies to the game view: editor camera viewports
+    // stay at native resolution (gizmos and overlays would otherwise mismatch).
+    scene->getSystem<RenderSystem>()->setDisableFixedResolution(!isGameView());
 
-    if (isPlaying){
+    if (isGameView()){
         return;
     }
 
-    syncSceneCamera();
+    // while detached the game keeps its main camera
+    if (!isPlaying){
+        syncSceneCamera();
+    }
     if (isPreviewCameraActive()){
         hideAllGizmos();
         return;
@@ -799,16 +822,18 @@ void editor::SceneRender::update(std::vector<Entity> selEntities, std::vector<En
 
     toolslayer.updateCamera(cameracomp, cameratransform);
 
-    // Determine selLines visibility: hide for single entity with OBJECT2D gizmo or empty selBB
+    // Determine selLines visibility: hide for single entity with OBJECT2D gizmo (none while playing) or empty selBB
+    bool object2DGizmo = toolslayer.getGizmoSelected() == GizmoSelected::OBJECT2D && !isPlaying;
     bool showSelLines = selectionVisibility;
-    if (!multipleEntitiesSelected && (toolslayer.getGizmoSelected() == GizmoSelected::OBJECT2D || selBB.size() == 0)) {
+    if (!multipleEntitiesSelected && (object2DGizmo || selBB.size() == 0)) {
         if (selectedTileIndex < 0 && selectedInstanceIndex < 0) {
             showSelLines = false;
         }
     }
     selLines->setVisible(showSelLines && !displaySettings.hideSelectionOutline);
 
-    if (terrainEditing){
+    // no editing while playing, hiding also clears the hovered side
+    if (terrainEditing || isPlaying){
         toolslayer.setGizmoVisible(false);
     }else if (toolslayer.getGizmoSelected() == GizmoSelected::OBJECT2D && !sameRotation){
         toolslayer.setGizmoVisible(false);
@@ -1074,7 +1099,7 @@ void editor::SceneRender::mouseDragEvent(float x, float y, float origX, float or
         }
     }
 
-    if (!disableSelection && !isPlaying){
+    if (!disableSelection && !isGameView()){
         uilayer.setSelectionBoxVisible(true);
         uilayer.updateRect(Vector2(origX, origY), Vector2(x, y) - Vector2(origX, origY));
     }
@@ -1212,7 +1237,7 @@ void editor::SceneRender::mouseDragEvent(float x, float y, float origX, float or
                     }
                 };
 
-                if (toolslayer.getGizmoSelected() == GizmoSelected::TRANSLATE){
+                if (toolslayer.getGizmoSelected() == GizmoSelected::TRANSLATE && toolslayer.getGizmoSideSelected() != GizmoSideSelected::NONE){
                     Vector3 deltaPos = gizmoRMatrix.inverse() * ((rretrun.point + cursorStartOffset) - gizmoStartPosition);
 
                     if (displaySettings.snapToGrid){

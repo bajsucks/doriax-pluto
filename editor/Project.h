@@ -926,9 +926,8 @@ namespace doriax::editor{
 
         bool isAnyScenePlaying() const;
         bool isPlaySessionActive() const;
-        // True only while the active play session's main scene is actually running
-        // (PLAYING) — false when paused, loading, or no session is active.
-        bool isMainScenePlaying() const;
+        // main scene running on its game camera (not paused, detached or loading)
+        bool isGameInputActive() const;
         bool isAnySceneSaving() const;
 
         void start(uint32_t sceneId);
@@ -936,6 +935,7 @@ namespace doriax::editor{
         void resume(uint32_t sceneId);
         void stop(uint32_t sceneId);
         void stopActivePlay();
+        void toggleCameraDetached(uint32_t sceneId);
         void waitForPlaySessionToFinish();
 
         std::vector<Scene*> getRunningRuntimeLayers(uint32_t sceneId);

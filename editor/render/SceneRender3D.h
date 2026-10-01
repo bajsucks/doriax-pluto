@@ -104,6 +104,7 @@ namespace doriax::editor{
 
     protected:
         void hideAllGizmos() override;
+        void clearEntityOverlays() override;
 
     public:
         SceneRender3D(Scene* scene);

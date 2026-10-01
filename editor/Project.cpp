@@ -4725,6 +4725,10 @@ void editor::Project::finalizeStop(SceneProject* mainSceneProject, std::vector<P
                 }
             }
 
+            // the cleanup below would destroy overlays a detached view made while playing
+            if (sceneProject->sceneRender) {
+                sceneProject->sceneRender->clearEntityOverlays();
+            }
             destroyPlayCreatedEntities(sceneProject);
 
             deselectDestroyedEntities(sceneProject);
@@ -5864,7 +5868,12 @@ Entity editor::Project::findObjectByRay(uint32_t sceneId, float x, float y, uint
     size_t index = 0;
     Entity selEntity = findBestEntityByRay(scenedata->entities, scenedata->scene, ray, scenedata->scene, scenedata->sceneType, distance, index);
 
-    if (selEntity != NULL_ENTITY || !outSceneId) {
+    // entities the game created, listed by the Structure while playing
+    Entity playEntity = findBestEntityByRay(getPlayCreatedEntities(scenedata), scenedata->scene, ray, scenedata->scene, scenedata->sceneType, distance, index);
+    if (playEntity != NULL_ENTITY) selEntity = playEntity;
+
+    // inline child scenes are only drawn while stopped
+    if (selEntity != NULL_ENTITY || !outSceneId || scenedata->playState != ScenePlayState::STOPPED) {
         if (outSceneId) *outSceneId = sceneId;
         return selEntity;
     }
@@ -5939,7 +5948,11 @@ bool editor::Project::selectObjectsByRect(uint32_t sceneId, Vector2 start, Vecto
 
     clearAllSelections(sceneId);
 
-    if (selectEntitiesInRect(sceneId, scenedata->entities, scenedata->scene, camera->getViewProjectionMatrix(), start, end)) {
+    bool found = selectEntitiesInRect(sceneId, scenedata->entities, scenedata->scene, camera->getViewProjectionMatrix(), start, end);
+    found = selectEntitiesInRect(sceneId, getPlayCreatedEntities(scenedata), scenedata->scene, camera->getViewProjectionMatrix(), start, end) || found;
+
+    // inline child scenes are only drawn while stopped
+    if (found || scenedata->playState != ScenePlayState::STOPPED) {
         return false;
     }
 
@@ -8738,7 +8751,7 @@ bool editor::Project::isPlaySessionActive() const{
     return activePlaySession != nullptr;
 }
 
-bool editor::Project::isMainScenePlaying() const{
+bool editor::Project::isGameInputActive() const{
     uint32_t mainSceneId;
     {
         std::scoped_lock lock(playSessionMutex);
@@ -8749,7 +8762,8 @@ bool editor::Project::isMainScenePlaying() const{
     }
     for (const auto& sceneProject : scenes) {
         if (sceneProject.id == mainSceneId) {
-            return sceneProject.playState == ScenePlayState::PLAYING;
+            return sceneProject.playState == ScenePlayState::PLAYING &&
+                !(sceneProject.sceneRender && sceneProject.sceneRender->isCameraDetached());
         }
     }
     return false;
@@ -9719,6 +9733,16 @@ void editor::Project::stopActivePlay() {
         mainSceneId = activePlaySession->mainSceneId;
     }
     stop(mainSceneId);
+}
+
+void editor::Project::toggleCameraDetached(uint32_t sceneId) {
+    SceneProject* sceneProject = getScene(sceneId);
+    if (!sceneProject || !sceneProject->sceneRender) {
+        return;
+    }
+
+    sceneProject->sceneRender->setCameraDetached(!sceneProject->sceneRender->isCameraDetached());
+    sceneProject->needUpdateRender = true;
 }
 
 void editor::Project::waitForPlaySessionToFinish() {

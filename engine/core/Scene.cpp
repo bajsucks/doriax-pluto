@@ -36,6 +36,7 @@ void Scene::init(){
 
     camera = NULL_ENTITY;
     defaultCamera = NULL_ENTITY;
+    viewCamera = NULL_ENTITY;
 
     // All persistent scene configuration (background, SSAO/SSR, gravity, default shaders, ...)
     // defaults through the SceneSettings member; see SceneSettings.h.
@@ -130,6 +131,24 @@ void Scene::setCamera(Entity camera){
 
 Entity Scene::getCamera() const{
     return camera;
+}
+
+void Scene::setViewCamera(Entity camera){
+    if (camera != NULL_ENTITY && !findComponent<CameraComponent>(camera)){
+        Log::error("Invalid view camera entity: need CameraComponent");
+        return;
+    }
+    if (camera != viewCamera){
+        viewCamera = camera;
+        if (CameraComponent* cameracomp = findComponent<CameraComponent>(getRenderCamera())){
+            cameracomp->needUpdate = true;
+        }
+        updateCameraSize();
+    }
+}
+
+Entity Scene::getRenderCamera() const{
+    return (viewCamera != NULL_ENTITY) ? viewCamera : camera;
 }
 
 Entity Scene::createDefaultCamera(){
@@ -679,4 +698,7 @@ void Scene::fixedUpdate(double dt){
 
 void Scene::updateCameraSize(){
     getSystem<RenderSystem>()->updateCameraSize(getCamera());
+    if (viewCamera != NULL_ENTITY && viewCamera != camera){
+        getSystem<RenderSystem>()->updateCameraSize(viewCamera);
+    }
 }

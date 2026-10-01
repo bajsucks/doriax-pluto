@@ -1010,7 +1010,7 @@ int editor::Backend::init(int argc, char* argv[]) {
                     ? activeProject->isVSyncEnabled()
                     : AppSettings::getEditorVSyncEnabled());
                 setMouseControlSuspended(playSessionActive &&
-                    !activeProject->isMainScenePlaying());
+                    !activeProject->isGameInputActive());
 
                 const bool desiredFrameSync = focused && frameSync;
                 if (desiredFrameSync != currentFrameSync) {

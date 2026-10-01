@@ -285,6 +285,10 @@ editor::SceneRender3D::~SceneRender3D(){
     delete lines;
     delete selLines;
 
+    clearEntityOverlays();
+}
+
+void editor::SceneRender3D::clearEntityOverlays(){
     for (auto& pair : lightObjects) {
         delete pair.second.icon;
         delete pair.second.lines;
@@ -1898,7 +1902,7 @@ void editor::SceneRender3D::updateSelLines(std::vector<OBB> obbs){
 void editor::SceneRender3D::update(std::vector<Entity> selEntities, std::vector<Entity> entities, Entity mainCamera, const SceneDisplaySettings& settings){
     SceneRender::update(selEntities, entities, mainCamera, settings);
 
-    if (isPlaying || isPreviewCameraActive()){
+    if (isGameView() || isPreviewCameraActive()){
         return;
     }
 

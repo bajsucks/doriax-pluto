@@ -32,6 +32,7 @@ namespace doriax{
 
         Entity camera;
         Entity defaultCamera;
+        Entity viewCamera;
 
         // All persistent scene configuration lives here (defaults from SceneSettings). The
         // public getters/setters below delegate to it, keeping the side effects (shader
@@ -61,6 +62,9 @@ namespace doriax{
         }
 
         void onEntityDestroyed(Entity entity, Signature signature) override {
+            if (entity == viewCamera) {
+                viewCamera = NULL_ENTITY;
+            }
             for (auto const& pair : systems) {
                 for (ComponentId componentId = 0; componentId < signature.size(); ++componentId) {
                     if (signature.test(componentId)) {
@@ -89,6 +93,10 @@ namespace doriax{
         void setCamera(Camera* camera);
         void setCamera(Entity camera);
         Entity getCamera() const;
+
+        // draws from this camera while getCamera() keeps the game one
+        void setViewCamera(Entity camera);
+        Entity getRenderCamera() const;
 
         void setBackgroundColor(Vector4 color);
         void setBackgroundColor(float red, float green, float blue);

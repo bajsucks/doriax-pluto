@@ -239,6 +239,7 @@ enum class AppMenuCommand : uint32_t {
     PauseScene,
     ResumeScene,
     StopScene,
+    DetachCamera,
     RemoveScene,
     About,
     Documentation,
@@ -326,6 +327,7 @@ editor::PlatformMenuModel editor::App::buildMenuModel(){
     bool canPause = hasSelectedScene && isPlaying;
     bool canResume = hasSelectedScene && isPaused;
     bool canStop = hasSelectedScene && !isSaving && (isPlaying || isPaused || isLoading);
+    bool canDetachCamera = hasSelectedScene && (isPlaying || isPaused);
     bool canRemove = hasSelectedScene && !isProjectBusy && project.getScenes().size() > 1;
 
     bool canSave = false;
@@ -429,6 +431,9 @@ editor::PlatformMenuModel editor::App::buildMenuModel(){
         menuCommand(AppMenuCommand::ClearTrash, "Empty Project Trash...", !isProjectBusy)
     }));
 
+    PlatformMenuItem detachCameraItem = menuShortcut(AppMenuCommand::DetachCamera, "Detach Camera", "F8", canDetachCamera);
+    detachCameraItem.checked = canDetachCamera && selectedScene->sceneRender && selectedScene->sceneRender->isCameraDetached();
+
     menu.menus.push_back(menuSubmenu("Scene", {
         menuSubmenu("New Scene", {
             menuCommand(AppMenuCommand::NewScene3D, "3D Scene"),
@@ -440,6 +445,7 @@ editor::PlatformMenuModel editor::App::buildMenuModel(){
         menuShortcut(AppMenuCommand::PauseScene, "Pause", "F6", canPause),
         menuShortcut(AppMenuCommand::ResumeScene, "Resume", "F5", canResume),
         menuShortcut(AppMenuCommand::StopScene, "Stop", "F7", canStop),
+        detachCameraItem,
         menuSeparator(),
         menuCommand(AppMenuCommand::RemoveScene, "Remove Scene from Project", canRemove)
     }));
@@ -649,6 +655,9 @@ void editor::App::executeMenuCommand(const PlatformMenuCommand& command){
                  scene->playState == ScenePlayState::LOADING))
                 project.stop(project.getSelectedSceneId());
             break;
+        case AppMenuCommand::DetachCamera:
+            project.toggleCameraDetached(project.getSelectedSceneId());
+            break;
         case AppMenuCommand::RemoveScene: {
             const uint32_t sceneId = project.getSelectedSceneId();
             if (project.getSelectedScene() && !project.isAnyScenePlaying() &&
@@ -692,7 +701,8 @@ void editor::App::executeMenuCommand(const PlatformMenuCommand& command){
                 "PLAYBACK\n"
                 "F5    Run current scene / Resume\n"
                 "F6    Pause\n"
-                "F7    Stop\n\n"
+                "F7    Stop\n"
+                "F8    Detach / attach camera\n\n"
                 "SCENE VIEW\n"
                 "W / E / R    Move / Rotate / Scale\n"
                 "T    Toggle local / global transforms\n"
@@ -1639,6 +1649,9 @@ void editor::App::show(){
                     project.stop(selectedSceneId);
                 }
             }
+            if (ImGui::IsKeyPressed(ImGuiKey_F8, false)) {
+                project.toggleCameraDetached(selectedSceneId);
+            }
         }
         if (ImGui::IsKeyPressed(ImGuiKey_F1)) executeMenuCommand({static_cast<uint32_t>(AppMenuCommand::Documentation), {}});
     }
@@ -2159,8 +2172,15 @@ void editor::App::engineRender(){
                 // to avoid delay when move objects with gizmo
                 sceneRender->updateRenderSystem();
 
+                std::vector<Entity> entities = project.getEntities(sceneProject.id);
+                // overlays for the game's own entities too while detached
+                if (sceneRender->isCameraDetached()){
+                    std::vector<Entity> created = project.getPlayCreatedEntities(&sceneProject);
+                    entities.insert(entities.end(), created.begin(), created.end());
+                }
+
                 //TODO: avoid calling every frame
-                sceneRender->update(project.getSelectedEntities(sceneProject.id), project.getEntities(sceneProject.id), sceneProject.mainCamera, sceneProject.displaySettings);
+                sceneRender->update(project.getSelectedEntities(sceneProject.id), entities, sceneProject.mainCamera, sceneProject.displaySettings);
 
                 Engine::systemDraw();
 

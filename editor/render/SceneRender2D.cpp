@@ -46,6 +46,13 @@ editor::SceneRender2D::SceneRender2D(Scene* scene, unsigned int width, unsigned 
 }
 
 editor::SceneRender2D::~SceneRender2D(){
+    clearEntityOverlays();
+
+    delete gridLines;
+    delete tileLines;
+}
+
+void editor::SceneRender2D::clearEntityOverlays(){
     for (auto& pair : containerLines) {
         delete pair.second;
     }
@@ -101,9 +108,6 @@ editor::SceneRender2D::~SceneRender2D(){
         delete pair.second.icon;
     }
     light2DObjects.clear();
-
-    delete gridLines;
-    delete tileLines;
 }
 
 bool editor::SceneRender2D::instanciateBodyLines(Entity entity){
@@ -921,7 +925,7 @@ void editor::SceneRender2D::updateSelLines(std::vector<OBB> obbs){
 void editor::SceneRender2D::update(std::vector<Entity> selEntities, std::vector<Entity> entities, Entity mainCamera, const SceneDisplaySettings& settings){
     SceneRender::update(selEntities, entities, mainCamera, settings);
 
-    if (isPlaying || isPreviewCameraActive()){
+    if (isGameView() || isPreviewCameraActive()){
         return;
     }
 
