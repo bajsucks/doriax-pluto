@@ -108,6 +108,8 @@ namespace doriax {
         virtual std::string getUserDataPath();
         virtual std::string getLuaPath();
         virtual std::string getShaderPath();
+        // Where the editor keeps the models it imports; empty when each sits next to its source
+        virtual std::string getImportPath();
 
         // *******
         // Used only for engine

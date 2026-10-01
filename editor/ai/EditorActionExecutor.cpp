@@ -4909,7 +4909,7 @@ ActionResult EditorActionExecutor::importProjectModel(const Json& arguments) {
 
     fs::path relPath(arguments.value("model_path", ""));
     if (!PathUtils::isSafeRelativePath(relPath) || !Util::isModelFile(relPath.string())) {
-        return failResult("model_path must be a safe project-relative .gltf, .glb, or .obj file.");
+        return failResult("model_path must be a safe project-relative .gltf, .glb, .obj, or .fbx file.");
     }
     fs::path fullPath = project->getProjectPath() / relPath;
     if (!fs::exists(fullPath)) {
@@ -5017,7 +5017,7 @@ ActionResult EditorActionExecutor::downloadCuratedAsset(const Json& arguments, c
     std::string filename = filenameFromUrl(url, slug + ".glb");
     fs::path filenamePath(filename);
     if (!Util::isModelFile(filenamePath.string())) {
-        return failResult("Only direct .gltf, .glb, and .obj downloads are supported in v1. Archive extraction is intentionally not enabled yet.");
+        return failResult("Only direct .gltf, .glb, .obj, and .fbx downloads are supported in v1. Archive extraction is intentionally not enabled yet.");
     }
 
     fs::path stagingDir = project->getProjectInternalPath() / "ai" / "staging" / slug;

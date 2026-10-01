@@ -2001,6 +2001,7 @@ void editor::App::engineRender(){
 
     processMainThreadTasks();
     project.refreshLinkedMaterials();
+    project.refreshFbxImports();
     project.updateGeneratedSources();
     renderedSceneThisFrame = false;
     const uint32_t selectedSceneId = project.getSelectedSceneId();

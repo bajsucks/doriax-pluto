@@ -533,7 +533,7 @@ const std::vector<ToolDefinition>& cachedTools() {
         },
         {
             "import_project_model",
-            "Import an existing project-relative glTF/GLB/OBJ model into a 3D scene using ModelLoadCmd.",
+            "Import an existing project-relative glTF/GLB/OBJ/FBX model into a 3D scene using ModelLoadCmd. An FBX is converted to glTF behind the scenes and still referenced by its .fbx path.",
             objectSchema({
                 {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
                 {"model_path", stringSchema("Project-relative model path inside the assets directory (get_project_summary reports it as assets_dir), e.g. assets/models/dog.glb")},
@@ -933,7 +933,7 @@ const std::vector<ToolDefinition>& cachedTools() {
                 {"author", stringSchema("Author name")},
                 {"license", stringSchema("License name or URL")},
                 {"source_url", stringSchema("Provider asset page URL")},
-                {"download_url", stringSchema("Direct HTTPS URL for a .glb, .gltf, or .obj file")},
+                {"download_url", stringSchema("Direct HTTPS URL for a .glb, .gltf, .obj, or .fbx file")},
                 {"slug", stringSchema("Filesystem-safe asset slug")},
                 {"entity_name", stringSchema("Optional imported entity name")},
                 {"position", vector3Schema("Optional import position")}

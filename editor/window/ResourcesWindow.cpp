@@ -37,6 +37,7 @@
 #include "util/FileDialogs.h"
 #include "util/FileUtils.h"
 #include "util/SHA1.h"
+#include "util/FbxImporter.h"
 #include "util/GraphicUtils.h"
 #include "util/EntityPayload.h"
 
@@ -1289,6 +1290,12 @@ void editor::ResourcesWindow::renderFileListing(bool showDirectories){
                     }
                     ImGui::Separator();
                 }
+                if (FbxImporter::isFbxFile(file.name)){
+                    if (ImGui::MenuItem(ICON_FA_ROTATE " Reimport")) {
+                        project->importFbxModel(currentPath / file.name, true);
+                    }
+                    ImGui::Separator();
+                }
 
                 if (file.isDirectory){
                     renderNewItemMenu(currentPath / file.name);
@@ -2283,6 +2290,9 @@ void editor::ResourcesWindow::thumbnailWorker() {
 
         } else if (thumbFile.type == FileType::MODEL) {
             try {
+                // An FBX previews through its import, created here on first sight
+                const bool loadable = !FbxImporter::isFbxFile(thumbFile.path) || project->importFbxModel(thumbFile.path);
+
                 // Run the load under the async-thread flag: building the multi-node child-entity
                 // hierarchy mutates the ECS, which is only safe on the main thread, so off-thread the
                 // loader bakes node transforms into one static preview mesh instead.
@@ -2290,7 +2300,7 @@ void editor::ResourcesWindow::thumbnailWorker() {
                 // Cap texture decode resolution too: a 128px preview never needs full 4K maps.
                 Engine::AsyncThreadScope loadAsyncScope;
                 MeshSystem::setImageDecodeMaxDimension(256);
-                const bool modelLoaded = modelRender.loadModel(thumbFile.path.string());
+                const bool modelLoaded = loadable && modelRender.loadModel(thumbFile.path.string());
                 MeshSystem::setImageDecodeMaxDimension(0);
                 if (modelLoaded) {
                     modelRender.fixDarkMaterials();

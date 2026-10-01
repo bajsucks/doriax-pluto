@@ -36,7 +36,7 @@ namespace doriax::editor{
         }
 
         inline static std::string getModelExtensions() {
-             return "gltf,glb,obj";
+             return "gltf,glb,obj,fbx";
         }
 
         inline static std::string getBundleExtensions() {
@@ -243,7 +243,7 @@ namespace doriax::editor{
 
         inline static bool isModelFile(const std::string& path) {
              static const std::unordered_set<std::string> modelExtensions = {
-                ".gltf", ".glb", ".obj"
+                ".gltf", ".glb", ".obj", ".fbx"
             };
 
             std::string ext = std::filesystem::path(path).extension().string();

@@ -2525,6 +2525,14 @@ YAML::Node editor::Stream::encodeSceneProject(const Project* project, const Scen
         root["bundles"] = bundlesNode;
     }
 
+    if (!sceneProject->imports.empty()) {
+        YAML::Node importsNode;
+        for (const auto& [path, id] : sceneProject->imports) {
+            importsNode[path] = id;
+        }
+        root["imports"] = importsNode;
+    }
+
     YAML::Node entitiesNode;
     for (Entity entity : sceneProject->entities) {
         // Skip bundle children (they are stored in the bundle file)
@@ -2645,6 +2653,13 @@ void editor::Stream::decodeSceneProject(SceneProject* sceneProject, const YAML::
             info.bundlePath = pathNode.as<std::string>();
             info.functionName = Factory::bundleToFunctionName(info.bundlePath);
             sceneProject->bundles.push_back(std::move(info));
+        }
+    }
+
+    sceneProject->imports.clear();
+    if (node["imports"] && node["imports"].IsMap()) {
+        for (const auto& entry : node["imports"]) {
+            sceneProject->imports[entry.first.as<std::string>()] = entry.second.as<std::string>();
         }
     }
 }

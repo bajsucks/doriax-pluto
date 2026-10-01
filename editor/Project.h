@@ -26,6 +26,7 @@
 #include <unordered_set>
 #include <tuple>
 #include <atomic>
+#include <future>
 #include <mutex>
 
 namespace doriax::editor{
@@ -115,6 +116,8 @@ namespace doriax::editor{
         std::vector<ChildSceneRef> childScenes;
         std::vector<SceneScriptSource> cppScripts;
         std::vector<BundleSceneInfo> bundles;
+        // FBX model path -> the import its saved model parts were built from
+        std::map<std::string, std::string> imports;
         YAML::Node editorCameraState;
     };
 
@@ -393,6 +396,33 @@ namespace doriax::editor{
         std::map<std::filesystem::path, EntityBundle> entityBundles;
         std::vector<std::filesystem::path> standaloneBundles;  // built without a scene instance
 
+        // FBX imports run on any thread; their models reload on the main one
+        struct FbxImportFailure {
+            uintmax_t size = 0;
+            std::filesystem::file_time_type time;
+        };
+        std::mutex fbxImportMutex;
+        std::mutex fbxImportCallMutex; // held for a whole importFbxModel call
+        std::atomic<bool> fbxImportsPaused{false};
+        std::set<std::filesystem::path> exportedImports; // FBX an export's scenes use, kept as they are
+        std::set<std::filesystem::path> modelReloads; // FBX whose loaded models may be out of date
+        std::map<std::filesystem::path, FbxImportFailure> failedFbxImports;
+        std::chrono::steady_clock::time_point lastFbxImportCheck;
+        static constexpr double fbxImportCheckIntervalSec = 1.0;
+        // Declared last, so it waits for the scan before the members it uses go
+        std::future<std::map<std::filesystem::path, FbxImportFailure>> fbxImportScan;
+
+        void queueModelReload(const std::filesystem::path& fbxPath);
+        // Reloads the models loaded from an older import; false while one of them is still loading
+        bool reloadModelFile(const std::filesystem::path& fbxPath, bool synchronous = false);
+        // Applies the queued reloads and returns an FBX left waiting for a model still loading
+        std::filesystem::path applyModelReloads(bool synchronous);
+        // FBX files the loaded scenes use, with the scenes where a model of one is not loaded
+        std::map<std::filesystem::path, std::vector<const SceneProject*>> collectSceneModelFiles() const;
+        void updateSceneImports(SceneProject* sceneProject);
+        // Imports every FBX in the assets, since scripts can load any of them by path
+        void importFbxModels();
+
         std::string libName;
 
         template<typename T>
@@ -669,6 +699,20 @@ namespace doriax::editor{
         bool loadProject(const std::filesystem::path path, bool updateLastOpened = true);
 
         void refreshLinkedMaterials(bool force = false);
+        // Reimports changed FBX files of the scenes' models and reloads them
+        void refreshFbxImports();
+        // Imports an FBX into its .glb when that is missing or stale, or always when forced. Any thread.
+        bool importFbxModel(const std::filesystem::path& fbxPath, bool force = false);
+        // An FBX model is imported when needed; false when it has nothing to load
+        bool prepareModelFile(const std::string& modelPath);
+        // The .glb an FBX is imported into
+        std::filesystem::path getImportedModelPath(const std::filesystem::path& fbxPath) const;
+        // Stops the reimports while an export reads the scenes
+        void setFbxImportsPaused(bool paused);
+        // For exports: applies the reloads of imports done before, fails while one of their models loads
+        bool flushFbxReloads(std::string& error);
+        // For exports, with all scenes loaded: makes the imports of their FBX models current or fails
+        bool prepareFbxModelsForExport(std::string& error);
         void updateGeneratedSources();
         void markGeneratedSourcesDirty();
 
@@ -771,6 +815,8 @@ namespace doriax::editor{
         bool isTempUnsavedProject() const;
         std::filesystem::path getProjectPath() const;
         std::filesystem::path getProjectInternalPath() const;
+        // Where imported models are kept, out of the assets and version control
+        std::filesystem::path getImportPath() const;
 
         // Where Play mode sends the engine's data:// writes, created on demand, so a
         // playtest does not dirty the working tree

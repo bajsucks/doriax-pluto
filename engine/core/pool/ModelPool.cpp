@@ -88,6 +88,11 @@ void ModelPool::removeObj(const std::string& id){
     }
 }
 
+void ModelPool::invalidate(const std::string& id){
+    getMap().erase(id);
+    getObjMap().erase(id);
+}
+
 void ModelPool::clear(){
     getMap().clear();
     getObjMap().clear();

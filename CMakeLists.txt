@@ -398,6 +398,7 @@ include_directories (SYSTEM ${DORIAX_ROOT}/libs/luabridge3)
 include_directories (SYSTEM ${DORIAX_ROOT}/libs/box2d/include)
 include_directories (SYSTEM ${DORIAX_ROOT}/libs/joltphysics)
 include_directories (SYSTEM ${DORIAX_ROOT}/libs/stb)
+include_directories (SYSTEM ${DORIAX_ROOT}/libs/tinygltf)
 include_directories (SYSTEM ${DORIAX_ROOT}/libs/harfbuzz)
 include_directories (SYSTEM ${DORIAX_ROOT}/libs/sheenbidi/Headers)
 include_directories (SYSTEM ${DORIAX_ROOT}/libs/soloud/include)
@@ -464,8 +465,9 @@ add_subdirectory(${SHADERCOMPILER_ROOT} EXCLUDE_FROM_ALL)
 
 add_subdirectory(libs/nfd)
 add_subdirectory(libs/yaml-cpp)
+add_subdirectory(libs/ufbx)
 
-foreach(lib IN ITEMS nfd yaml-cpp)
+foreach(lib IN ITEMS nfd yaml-cpp ufbx)
     target_compile_options(${lib} PRIVATE ${EXTERNAL_WARNING_FLAG})
     # Reaches the headers they export to the editor, which ImGui gets below
     get_target_property(lib_includes ${lib} INTERFACE_INCLUDE_DIRECTORIES)
@@ -549,6 +551,8 @@ set(DORIAX_EDITOR_SOURCES
     ${EDITOR_DIR}/util/ScriptParser.cpp
     ${EDITOR_DIR}/util/ScriptEvents.cpp
     ${EDITOR_DIR}/util/PngWriter.cpp
+    ${EDITOR_DIR}/util/FbxImporter.cpp
+    ${EDITOR_DIR}/util/GlbBuilder.cpp
     ${EDITOR_DIR}/util/TerrainMapFileWriter.cpp
     ${EDITOR_DIR}/util/TerrainMapUtils.cpp
     ${EDITOR_DIR}/util/TerrainErosion.cpp
@@ -676,6 +680,7 @@ function(configure_doriax_editor_target target_name)
         shadercompiler
         nfd
         yaml-cpp
+        ufbx
     )
 
     if(WIN32)
