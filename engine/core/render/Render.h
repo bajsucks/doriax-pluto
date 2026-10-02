@@ -185,7 +185,8 @@ namespace doriax{
         SPOTMASKATLAS,       // projected spot masks, one horizontal tile per 3D light slot
         BONES,
         WATERNORMAL,         // water ripple normal map
-        WATERREFLECTION      // water planar reflection camera target
+        WATERREFLECTION,     // water planar reflection camera target
+        WATERREFRACTION      // copy of the scene drawn before the water
     };
 
     enum class TextureType {

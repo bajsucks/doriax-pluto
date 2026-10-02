@@ -48,6 +48,7 @@ namespace doriax{
         uint16_t customShaderId = 0;
         int slotVSParams = -1;
         int slotFSParams = -1;
+        unsigned int fsParamsSize = 0; // as the shader declares it, shorter in forks of older versions
         int slotFSLighting = -1;
         int slotFSFog = -1;
         int slotVSShadows = -1;
@@ -89,6 +90,8 @@ namespace doriax{
         bool depthEffects = true; // shore foam and depth tint from the scene depth
         bool planarReflection = false;
         float reflectionDistortion = 0.04f;
+        bool refraction = true; // the scene behind is seen through, bent and absorbed
+        float refractionDistortion = 0.03f;
 
         // advanced by RenderSystem after each draw
         float wavePhase[WATER_WAVE_COUNT] = {0.0f, 0.0f, 0.0f, 0.0f};

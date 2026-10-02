@@ -30,6 +30,14 @@ void CameraRender::setLoadActionLoad(){
     backend.setLoadActionLoad();
 }
 
+void CameraRender::setDepthLoadActionLoad(){
+    backend.setDepthLoadActionLoad();
+}
+
+void CameraRender::setStoreDepth(bool storeDepth){
+    backend.setStoreDepth(storeDepth);
+}
+
 void CameraRender::startRenderPass(FramebufferRender* framebuffer, size_t face){
     backend.startRenderPass(framebuffer, face);
 }

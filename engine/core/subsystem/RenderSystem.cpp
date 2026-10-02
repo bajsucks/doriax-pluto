@@ -256,6 +256,10 @@ RenderSystem::RenderSystem(Scene* scene): SubSystem(scene){
     currentSSAOTexture = NULL;
     currentSceneDepthTexture = NULL;
     depthPrePassRendered = false;
+    currentSceneCopy = NULL;
+    currentSceneCopyRect = Vector4(0.0f, 0.0f, 0.0f, 0.0f);
+    resumePassRender.setLoadActionLoad();
+    resumePassRender.setDepthLoadActionLoad();
     hasWaterDepth = false;
     frameTime = 0.0f;
     passResolution = Vector2(0.0f, 0.0f);
@@ -4648,16 +4652,15 @@ void RenderSystem::destroySSR(){
     ssrLoaded = false;
 }
 
-bool RenderSystem::ensureSSRFramebuffers(unsigned int width, unsigned int height){
+// the redirected color pass target, of SSR or of a refracting water
+bool RenderSystem::ensureSceneColorFramebuffer(unsigned int width, unsigned int height){
     if (width == 0 || height == 0)
         return false;
 
-    if (sceneColorFramebuffer.isCreated() && ssrWidth == width && ssrHeight == height)
+    if (sceneColorFramebuffer.isCreated() && sceneColorFramebuffer.getWidth() == width && sceneColorFramebuffer.getHeight() == height)
         return true;
 
     sceneColorFramebuffer.destroy();
-    ssrFramebuffer.destroy();
-    ssrBlurFramebuffer.destroy();
 
     // offscreen opaque scene color (sampled bilinearly by ssr.frag); has a depth
     // attachment so the redirected main color pass can depth-test normally.
@@ -4668,6 +4671,19 @@ bool RenderSystem::ensureSSRFramebuffers(unsigned int width, unsigned int height
     sceneColorFramebuffer.setWrapU(TextureWrap::CLAMP_TO_EDGE);
     sceneColorFramebuffer.setWrapV(TextureWrap::CLAMP_TO_EDGE);
     sceneColorFramebuffer.create();
+
+    return sceneColorFramebuffer.isCreated();
+}
+
+bool RenderSystem::ensureSSRFramebuffers(unsigned int width, unsigned int height){
+    if (!ensureSceneColorFramebuffer(width, height))
+        return false;
+
+    if (ssrFramebuffer.isCreated() && ssrBlurFramebuffer.isCreated() && ssrWidth == width && ssrHeight == height)
+        return true;
+
+    ssrFramebuffer.destroy();
+    ssrBlurFramebuffer.destroy();
 
     // reflection color + mask
     ssrFramebuffer.setWidth(width);
@@ -4690,7 +4706,7 @@ bool RenderSystem::ensureSSRFramebuffers(unsigned int width, unsigned int height
     ssrWidth = width;
     ssrHeight = height;
 
-    return sceneColorFramebuffer.isCreated() && ssrFramebuffer.isCreated() && ssrBlurFramebuffer.isCreated();
+    return ssrFramebuffer.isCreated() && ssrBlurFramebuffer.isCreated();
 }
 
 void RenderSystem::renderSSR(CameraComponent& camera, FramebufferRender* destination){
@@ -4811,12 +4827,12 @@ void RenderSystem::loadBlit(){
     if (!blitShader || !blitShader->isCreated())
         return;
 
-    // the blit targets either the Engine framebuffer (PIP_RTT, editor) or the
-    // swapchain (PIP_DEFAULT, exported builds), so build both pipeline variants.
+    // the blit targets either an offscreen framebuffer (PIP_RTT) or the swapchain
+    // (PIP_DEFAULT, exported builds); PIP_RTT_NODEPTH copies into a camera pass in progress
     blitRender.beginLoad(PrimitiveType::TRIANGLES);
     blitRender.setShader(blitShader.get());
     blitSlotParams = blitShader.get()->shaderData.getUniformBlockIndex(UniformBlockType::BLIT_FS_PARAMS);
-    if (!blitRender.endLoad(PIP_RTT | PIP_DEFAULT, false, true, CullingMode::BACK, WindingOrder::CCW))
+    if (!blitRender.endLoad(PIP_RTT | PIP_DEFAULT | PIP_RTT_NODEPTH, false, true, CullingMode::BACK, WindingOrder::CCW))
         return;
 
     blitLoaded = true;
@@ -4832,6 +4848,7 @@ void RenderSystem::destroyBlit(){
     }
 
     fixedResFramebuffer.destroy();
+    sceneCopyFramebuffer.destroy();
 
     fixedResWidth = 0;
     fixedResHeight = 0;
@@ -4865,40 +4882,65 @@ bool RenderSystem::ensureFixedResFramebuffer(unsigned int width, unsigned int he
     return fixedResFramebuffer.isCreated();
 }
 
-void RenderSystem::renderBlit(TextureRender* source, Rect viewport){
+void RenderSystem::renderBlit(TextureRender* source, FramebufferRender* destination, const Rect* viewport){
     // bars outside the viewport keep the background color (same as the direct
     // path, which clears the whole destination before applying the viewport)
-    fixedResPassRender.setClearColor(scene->getBackgroundColor());
+    blitPassRender.setClearColor(scene->getBackgroundColor());
 
-    PipelineType blitPip;
-    float flipGL = 0.0f;
+    if (destination){
+        // source and destination are both flipped on GL, so no un-flip needed
+        blitPassRender.startRenderPass(destination);
+    }else{
+        blitPassRender.startRenderPass();
+    }
+    if (viewport){
+        blitPassRender.applyViewport(*viewport);
+    }
+
+    // the source was rendered flipped (PIP_RTT) but the GL swapchain is not
+    drawBlit(source, destination ? PIP_RTT : PIP_DEFAULT, !destination && Engine::isOpenGL());
+    blitPassRender.endRenderPass();
+}
+
+void RenderSystem::drawBlit(TextureRender* source, PipelineType pipeline, bool flipY){
+    if (blitRender.beginDraw(pipeline)){
+        ShaderData& bd = blitShader.get()->shaderData;
+        blitRender.addTexture(bd.getTextureIndex(TextureShaderType::SCENECOLORTEXTURE), ShaderStageType::FRAGMENT, source);
+        fs_blit.params = Vector4(flipY ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f);
+        blitRender.applyUniformBlock(blitSlotParams, sizeof(fs_blit_t), &fs_blit);
+        blitRender.draw(0, 3, 1);
+    }
+}
+
+void RenderSystem::renderFixedResolutionBlit(){
+    FramebufferRender* destination = nullptr;
     if (Engine::getFramebuffer()){
         if (!Engine::getFramebuffer()->isCreated()){
             Engine::getFramebuffer()->create();
         }
-        // source and destination are both flipped on GL, so no un-flip needed
-        fixedResPassRender.startRenderPass(&Engine::getFramebuffer()->getRender());
-        blitPip = PIP_RTT;
-    }else{
-        fixedResPassRender.startRenderPass();
-        blitPip = PIP_DEFAULT;
-        // the source was rendered flipped (PIP_RTT) but the GL swapchain is not
-        flipGL = Engine::isOpenGL() ? 1.0f : 0.0f;
+        destination = &Engine::getFramebuffer()->getRender();
     }
-    fixedResPassRender.applyViewport(viewport);
-
-    if (blitRender.beginDraw(blitPip)){
-        ShaderData& bd = blitShader.get()->shaderData;
-        blitRender.addTexture(bd.getTextureIndex(TextureShaderType::SCENECOLORTEXTURE), ShaderStageType::FRAGMENT, source);
-        fs_blit.params = Vector4(flipGL, 0.0f, 0.0f, 0.0f);
-        blitRender.applyUniformBlock(blitSlotParams, sizeof(fs_blit_t), &fs_blit);
-        blitRender.draw(0, 3, 1);
-    }
-    fixedResPassRender.endRenderPass();
+    const Rect viewport = Engine::getViewRect();
+    renderBlit(&fixedResFramebuffer.getRender().getColorTexture(), destination, &viewport);
 }
 
-void RenderSystem::renderFixedResolutionBlit(){
-    renderBlit(&fixedResFramebuffer.getRender().getColorTexture(), Engine::getViewRect());
+bool RenderSystem::ensureSceneCopyFramebuffer(unsigned int width, unsigned int height){
+    if (width == 0 || height == 0)
+        return false;
+
+    if (sceneCopyFramebuffer.isCreated() && sceneCopyFramebuffer.getWidth() == width && sceneCopyFramebuffer.getHeight() == height)
+        return true;
+
+    sceneCopyFramebuffer.destroy();
+    sceneCopyFramebuffer.setWidth(width);
+    sceneCopyFramebuffer.setHeight(height);
+    sceneCopyFramebuffer.setMinFilter(TextureFilter::LINEAR);
+    sceneCopyFramebuffer.setMagFilter(TextureFilter::LINEAR);
+    sceneCopyFramebuffer.setWrapU(TextureWrap::CLAMP_TO_EDGE);
+    sceneCopyFramebuffer.setWrapV(TextureWrap::CLAMP_TO_EDGE);
+    sceneCopyFramebuffer.create();
+
+    return sceneCopyFramebuffer.isCreated();
 }
 
 void RenderSystem::needReloadPostProcess(){
@@ -5087,7 +5129,8 @@ void RenderSystem::renderPostProcess(FramebufferRender* destination){
 
     // the swapchain is written by the blit pass, which handles the GL orientation flip
     if (!destination){
-        renderBlit(input, Engine::getViewRect());
+        const Rect viewport = Engine::getViewRect();
+        renderBlit(input, nullptr, &viewport);
     }
 }
 
@@ -5100,8 +5143,8 @@ void RenderSystem::presentFramebufferToSwapchain(Framebuffer* source){
         return;
 
     // the scene passes already letterboxed into the composite, so copy it 1:1
-    renderBlit(&source->getRender().getColorTexture(), Rect(0, 0,
-            (float)System::instance().getScreenWidth(), (float)System::instance().getScreenHeight()));
+    const Rect viewport(0, 0, (float)System::instance().getScreenWidth(), (float)System::instance().getScreenHeight());
+    renderBlit(&source->getRender().getColorTexture(), nullptr, &viewport);
 }
 
 void RenderSystem::destroyMesh(Entity entity, MeshComponent& mesh, bool clearAssets){
@@ -6148,7 +6191,7 @@ bool RenderSystem::loadWater(Entity entity, WaterComponent& water, uint16_t pipe
     render.beginLoad(PrimitiveType::TRIANGLES);
 
     const bool receiveShadows = hasLights && hasShadows && water.receiveShadows;
-    water.shaderProperties = ShaderPool::getWaterProperties(hasFog, water.depthEffects, water.planarReflection, receiveShadows);
+    water.shaderProperties = ShaderPool::getWaterProperties(hasFog, water.depthEffects, water.planarReflection, receiveShadows, water.refraction);
     water.customShaderId = ShaderPool::registerCustomShader(water.customShader);
     water.shader = ShaderPool::get(ShaderType::WATER, water.shaderProperties, water.customShaderId);
     if (!water.shader->isCreated()){
@@ -6177,6 +6220,13 @@ bool RenderSystem::loadWater(Entity entity, WaterComponent& water, uint16_t pipe
 
     water.slotVSParams = shaderData.getUniformBlockIndex(UniformBlockType::WATER_VS_PARAMS);
     water.slotFSParams = shaderData.getUniformBlockIndex(UniformBlockType::WATER_FS_PARAMS);
+    // fields are only appended, so a fork of an older version gets the ones it knows
+    unsigned int fsParamsSize = 0;
+    shaderData.getUniformBlockMembers("u_fs_waterParams", fsParamsSize);
+    water.fsParamsSize = std::min(fsParamsSize, (unsigned int)sizeof(fs_water_t));
+    if (water.customShaderId != 0 && fsParamsSize < sizeof(fs_water_t)){
+        Log::warn("Custom shader '%s' is a fork of an older water shader; fork it again for the newer effects", water.customShader.c_str());
+    }
     water.slotFSLighting = shaderData.getUniformBlockIndex(UniformBlockType::FS_LIGHTING);
     water.slotFSFog = hasFog ? shaderData.getUniformBlockIndex(UniformBlockType::FS_FOG) : -1;
     if (receiveShadows){
@@ -6291,7 +6341,8 @@ void RenderSystem::updateWater(Entity entity, WaterComponent& water, Transform& 
 
     // the variant follows the scene fog and shadows, and the water switches
     if (water.loaded && !water.needReload &&
-            water.shaderProperties != ShaderPool::getWaterProperties(hasFog, water.depthEffects, water.planarReflection, hasLights && hasShadows && water.receiveShadows)){
+            water.shaderProperties != ShaderPool::getWaterProperties(hasFog, water.depthEffects, water.planarReflection,
+                hasLights && hasShadows && water.receiveShadows, water.refraction)){
         water.needReload = true;
     }
 
@@ -6382,6 +6433,10 @@ bool RenderSystem::drawWater(Entity entity, WaterComponent& water, Transform& tr
         render.addTexture(shaderData.getTextureIndex(TextureShaderType::WATERREFLECTION), ShaderStageType::FRAGMENT, reflection);
     }
 
+    if (water.shaderProperties & (1u << 4)){ // 'Rfr'
+        render.addTexture(shaderData.getTextureIndex(TextureShaderType::WATERREFRACTION), ShaderStageType::FRAGMENT, currentSceneCopy ? currentSceneCopy : &emptyBlack);
+    }
+
     WaterWave waves[WATER_WAVE_COUNT];
     getWaterWaves(water, waves);
 
@@ -6411,9 +6466,12 @@ bool RenderSystem::drawWater(Entity entity, WaterComponent& water, Transform& tr
     fsParams.eyePos = Vector4(camTransform.worldPosition.x, camTransform.worldPosition.y, camTransform.worldPosition.z, water.time);
     // the planar reflection is rendered for the main camera, other views reflect the sky
     fsParams.flags = Vector4(hasLights ? 1.0f : 0.0f, iblAmbient ? 1.0f : 0.0f, (mainCamera && water.planarReflection) ? 1.0f : 0.0f, 0.0f);
+    // only a pass that copied its scene refracts, the others blend over it
+    fsParams.refraction = Vector4(water.refractionDistortion, (water.refraction && currentSceneCopy) ? 1.0f : 0.0f, 0.0f, 0.0f);
+    fsParams.refractionRect = currentSceneCopyRect;
 
     render.applyUniformBlock(water.slotVSParams, sizeof(vs_water_t), &vsParams);
-    render.applyUniformBlock(water.slotFSParams, sizeof(fs_water_t), &fsParams);
+    render.applyUniformBlock(water.slotFSParams, water.fsParamsSize, &fsParams);
     render.applyUniformBlock(water.slotFSLighting, sizeof(fs_lighting_t), &fs_lighting);
     if (water.slotFSFog != -1){
         render.applyUniformBlock(water.slotFSFog, sizeof(float) * 8, &fs_fog);
@@ -6464,6 +6522,7 @@ void RenderSystem::destroyWater(Entity entity, WaterComponent& water){
     //Shaders uniforms
     water.slotVSParams = -1;
     water.slotFSParams = -1;
+    water.fsParamsSize = 0;
     water.slotFSLighting = -1;
     water.slotFSFog = -1;
     water.slotVSShadows = -1;
@@ -7838,10 +7897,10 @@ bool RenderSystem::isFixedResolutionActive() const{
 }
 
 void RenderSystem::updateSwapchainRedirect(){
-    // SSR and the post-process chain need the scene in an offscreen color buffer. Without
-    // a framebuffer destination (exported builds) the color pass is redirected into it and
-    // the last pass targets the swapchain. Main scene only: a layer scene composites over
-    // the scene below, and its own pass would clear it.
+    // SSR, the post-process chain and refracting water need the scene in an offscreen color
+    // buffer. Without a framebuffer destination (exported builds) the color pass is redirected
+    // into it and the last pass targets the swapchain. Main scene only: a layer scene
+    // composites over the scene below, and its own pass would clear it.
     bool redirect = false;
 
     if (!Engine::getFramebuffer() && !isFixedResolutionActive()
@@ -7860,6 +7919,16 @@ void RenderSystem::updateSwapchainRedirect(){
             loadBlit();
             redirect = postProcessLoaded && blitLoaded && !postProcessPasses.empty()
                     && ensurePostProcessFramebuffers(w, h);
+        }
+
+        bool refractingWater = false;
+        auto waters = scene->getComponentArray<WaterComponent>();
+        for (int i = 0; i < waters->size(); i++){
+            refractingWater = refractingWater || waters->getComponentFromIndex(i).refraction;
+        }
+        if (!redirect && refractingWater){
+            loadBlit();
+            redirect = blitLoaded && ensureSceneColorFramebuffer(w, h);
         }
     }
 
@@ -8914,6 +8983,7 @@ void RenderSystem::draw(){
 
         depthPrePassRendered = false;
         currentSceneDepthTexture = NULL;
+        currentSceneCopy = NULL;
 
         // Screen-space reflections (main camera only). The G-buffer geometry pass runs
         // FIRST so SSAO can share its depth (a single geometry pre-pass feeds both
@@ -9021,11 +9091,45 @@ void RenderSystem::draw(){
             }
         }
 
+        // the waters this pass draws: transparencies across them go before them, the rest after
+        std::vector<WaterRenderData> passWaters;
+        std::vector<TransparentRenderData> afterWaterRenders; // in submission order
+        bool refractingWater = false;
+        auto waters = scene->getComponentArray<WaterComponent>();
+        for (int w = 0; w < waters->size(); w++){
+            Entity waterEntity = waters->getEntity(w);
+            WaterComponent& water = waters->getComponentFromIndex(w);
+            Transform* waterTransform = scene->findComponent<Transform>(waterEntity);
+            // a water cannot sample its own reflection while rendering it
+            if (!water.loaded || water.needReload || !waterTransform || !waterTransform->visible ||
+                    getMirrorCamera(waterEntity) == cameraEntity || !isInsideCamera(camera, water.worldAABB))
+                continue;
+
+            const Vector3& eye = cameraTransform.worldPosition;
+            const bool eyeAbove = eye.y > waterTransform->worldPosition.y + getWaterSurfaceOffset(water, eye.x, eye.z).y;
+            passWaters.push_back({waterEntity, &water, waterTransform, eyeAbove});
+            refractingWater = refractingWater || water.refraction;
+        }
+
+        // the swapchain redirect of a refracting water, when no other effect took it
+        const bool useSceneTarget = isMainCamera && swapchainRedirect && !useSSR && !usePostProcess
+                && !camera.renderToTexture && sceneColorFramebuffer.isCreated();
+
         // whether this camera's color pass targets an offscreen framebuffer
         // (selects PIP_RTT pipelines and flipped rendering on GL)
-        bool offscreenTarget = camera.renderToTexture || Engine::getFramebuffer() || useFixedRes || useSSR || usePostProcess;
+        bool offscreenTarget = camera.renderToTexture || Engine::getFramebuffer() || useFixedRes || useSSR || usePostProcess || useSceneTarget;
         PipelineType colorPip = colorPipeline(camera, offscreenTarget);
         bool distanceSort = sortsByDistance(camera);
+
+        // the main camera copies its scene before the water: refraction samples the copy, and
+        // SSR composites into it first so the reflections stay under the water
+        bool copyScene = isMainCamera && offscreenTarget && (refractingWater || (useSSR && !passWaters.empty()));
+        if (copyScene){
+            loadBlit();
+            copyScene = blitLoaded;
+        }
+        // the pass after the copy continues on this depth
+        camera.render.setStoreDepth(copyScene);
 
         if (Engine::getMainScene() == scene || camera.renderToTexture){
             camera.render.setClearColor(scene->getBackgroundColor());
@@ -9038,6 +9142,8 @@ void RenderSystem::draw(){
 
         // the space the UI scissor lives in
         Rect colorPassViewport;
+        // the offscreen framebuffer the pass draws into, null for the swapchain
+        Framebuffer* colorTarget = nullptr;
 
         if (useSSR || usePostProcess){
             // capture the real destination for the composite / post-process chain, then
@@ -9068,55 +9174,46 @@ void RenderSystem::draw(){
 
             if (useSSR){
                 colorPassViewport = Rect(0, 0, (float)ssrWidth, (float)ssrHeight);
-                camera.render.startRenderPass(&sceneColorFramebuffer.getRender());
-                camera.render.applyViewport(colorPassViewport);
+                colorTarget = &sceneColorFramebuffer;
             }else{
                 colorPassViewport = Rect(0, 0, (float)postProcessWidth, (float)postProcessHeight);
-                camera.render.startRenderPass(&postProcessFramebuffer[0].getRender());
-                camera.render.applyViewport(colorPassViewport);
+                colorTarget = &postProcessFramebuffer[0];
             }
+            camera.render.startRenderPass(&colorTarget->getRender());
+            camera.render.applyViewport(colorPassViewport);
         }else if (useFixedRes){
             // full offscreen target; letterbox/upscale happens in the blit pass
             colorPassViewport = Rect(0, 0, (float)fixedResWidth, (float)fixedResHeight);
+            colorTarget = &fixedResFramebuffer;
             camera.render.startRenderPass(&fixedResFramebuffer.getRender());
         }else if (!camera.renderToTexture){
+            colorPassViewport = Engine::getViewRect();
             if (Engine::getFramebuffer()){
                 if (!Engine::getFramebuffer()->isCreated()){
                     Engine::getFramebuffer()->create();
                 }
+                colorTarget = Engine::getFramebuffer();
                 camera.render.startRenderPass(&Engine::getFramebuffer()->getRender());
+            }else if (useSceneTarget){
+                // presented by a blit once the pass is done
+                colorPassViewport = Rect(0, 0, (float)sceneColorFramebuffer.getWidth(), (float)sceneColorFramebuffer.getHeight());
+                colorTarget = &sceneColorFramebuffer;
+                camera.render.startRenderPass(&sceneColorFramebuffer.getRender());
             }else{
                 camera.render.startRenderPass();
             }
-            colorPassViewport = Engine::getViewRect();
             camera.render.applyViewport(colorPassViewport);
         }else{
             if (!camera.framebuffer->isCreated()){
                 camera.framebuffer->create();
             }
             colorPassViewport = Rect(0, 0, (float)camera.framebuffer->getWidth(), (float)camera.framebuffer->getHeight());
+            colorTarget = camera.framebuffer;
             camera.render.startRenderPass(&camera.framebuffer->getRender());
         }
 
         passResolution = Vector2(colorPassViewport.getWidth(), colorPassViewport.getHeight());
 
-        // the waters this pass draws: transparencies across them go before them, the rest after
-        std::vector<WaterRenderData> passWaters;
-        std::vector<TransparentRenderData> afterWaterRenders; // in submission order
-        auto waters = scene->getComponentArray<WaterComponent>();
-        for (int w = 0; w < waters->size(); w++){
-            Entity waterEntity = waters->getEntity(w);
-            WaterComponent& water = waters->getComponentFromIndex(w);
-            Transform* waterTransform = scene->findComponent<Transform>(waterEntity);
-            // a water cannot sample its own reflection while rendering it
-            if (!water.loaded || water.needReload || !waterTransform || !waterTransform->visible ||
-                    getMirrorCamera(waterEntity) == cameraEntity || !isInsideCamera(camera, water.worldAABB))
-                continue;
-
-            const Vector3& eye = cameraTransform.worldPosition;
-            const bool eyeAbove = eye.y > waterTransform->worldPosition.y + getWaterSurfaceOffset(water, eye.x, eye.z).y;
-            passWaters.push_back({waterEntity, &water, waterTransform, eyeAbove});
-        }
 
         //---------Draw opaque meshes and UI----------
         bool hasActiveScissor = false;
@@ -9378,6 +9475,31 @@ void RenderSystem::draw(){
             behindWaterRenders.pop();
         }
 
+        // the scene copy: an SSR composite replaces the pass content too, a plain copy keeps it
+        CameraRender* passRender = &camera.render;
+        if (copyScene && ensureSceneCopyFramebuffer(colorTarget->getWidth(), colorTarget->getHeight())){
+            camera.render.endRenderPass();
+            if (useSSR){
+                renderSSR(camera, &sceneCopyFramebuffer.getRender());
+            }else{
+                renderBlit(&colorTarget->getRender().getColorTexture(), &sceneCopyFramebuffer.getRender());
+            }
+
+            passRender = &resumePassRender;
+            resumePassRender.startRenderPass(&colorTarget->getRender());
+            resumePassRender.applyViewport(colorPassViewport);
+            if (useSSR){
+                drawBlit(&sceneCopyFramebuffer.getRender().getColorTexture(), PIP_RTT_NODEPTH, false);
+            }
+
+            // view rects are centered, so the gap above the view matches the one below
+            const float copyWidth = (float)colorTarget->getWidth();
+            const float copyHeight = (float)colorTarget->getHeight();
+            currentSceneCopy = &sceneCopyFramebuffer.getRender().getColorTexture();
+            currentSceneCopyRect = Vector4(colorPassViewport.getX() / copyWidth, colorPassViewport.getY() / copyHeight,
+                    colorPassViewport.getWidth() / copyWidth, colorPassViewport.getHeight() / copyHeight);
+        }
+
         //---------Draw water----------
         for (const WaterRenderData& waterData : passWaters){
             drawWater(waterData.entity, *waterData.water, *waterData.transform, camera, cameraTransform, colorPip, isMainCamera);
@@ -9392,12 +9514,23 @@ void RenderSystem::draw(){
             transparentRenders.pop();
         }
 
-        camera.render.endRenderPass();
+        passRender->endRenderPass();
 
         // SSR: march the offscreen scene color and composite reflections into the
-        // real destination (the swapchain or the captured framebuffer).
+        // real destination (the swapchain or the captured framebuffer). After a scene
+        // copy it was composited already, and only the finished pass is left to present.
         if (useSSR){
-            renderSSR(camera, ssrDestination);
+            if (currentSceneCopy){
+                const Rect viewport = Engine::getViewRect();
+                renderBlit(&sceneColorFramebuffer.getRender().getColorTexture(), ssrDestination, ssrDestination ? nullptr : &viewport);
+            }else{
+                renderSSR(camera, ssrDestination);
+            }
+        }
+
+        if (useSceneTarget){
+            const Rect viewport = Engine::getViewRect();
+            renderBlit(&sceneColorFramebuffer.getRender().getColorTexture(), nullptr, &viewport);
         }
 
         // buffer 0 now holds the scene color (or the SSR composite)

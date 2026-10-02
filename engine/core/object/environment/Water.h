@@ -94,6 +94,12 @@ namespace doriax{
         void setReflectionDistortion(float reflectionDistortion);
         float getReflectionDistortion() const;
 
+        void setRefraction(bool refraction);
+        bool isRefraction() const;
+
+        void setRefractionDistortion(float refractionDistortion);
+        float getRefractionDistortion() const;
+
         void setCustomShader(const std::string& path);
         std::string getCustomShader() const;
 

@@ -332,6 +332,30 @@ float Water::getReflectionDistortion() const{
     return water.reflectionDistortion;
 }
 
+void Water::setRefraction(bool refraction){
+    WaterComponent& water = getComponent<WaterComponent>();
+
+    water.refraction = refraction;
+}
+
+bool Water::isRefraction() const{
+    WaterComponent& water = getComponent<WaterComponent>();
+
+    return water.refraction;
+}
+
+void Water::setRefractionDistortion(float refractionDistortion){
+    WaterComponent& water = getComponent<WaterComponent>();
+
+    water.refractionDistortion = refractionDistortion;
+}
+
+float Water::getRefractionDistortion() const{
+    WaterComponent& water = getComponent<WaterComponent>();
+
+    return water.refractionDistortion;
+}
+
 void Water::setCustomShader(const std::string& path){
     WaterComponent& water = getComponent<WaterComponent>();
 

@@ -170,6 +170,8 @@ namespace doriax{
 		Vector4 envColor;      // rgb = sky tint (linear), w = sky rotation (radians)
 		Vector4 eyePos;        // xyz = eye of this pass, w = time
 		Vector4 flags;         // x = scene lights on, y = IBL ambient available, z = planar reflection
+		Vector4 refraction;    // x = distortion, y = 1 when this pass has the scene copy
+		Vector4 refractionRect; // xy = view origin, zw = view size, in scene copy uv
 	} fs_water_t;
 
 	typedef struct vs_points_params_t {
@@ -452,6 +454,11 @@ namespace doriax{
 		// packed opaque depth of this camera pass, or null
 		TextureRender* currentSceneDepthTexture;
 		bool depthPrePassRendered;
+		// copy of the scene color drawn before the water, for the main camera
+		Framebuffer sceneCopyFramebuffer;
+		CameraRender resumePassRender; // continues the camera pass after the copy
+		TextureRender* currentSceneCopy;
+		Vector4 currentSceneCopyRect;
 
 		// engine-written custom uniforms: seconds since startup, sampled once per draw(),
 		// and the size of the target being drawn (shadow slot, SSAO depth or camera color)
@@ -493,7 +500,7 @@ namespace doriax{
 		unsigned int fixedResWidth;
 		unsigned int fixedResHeight;
 		Framebuffer fixedResFramebuffer;   // offscreen scene color at the fixed size
-		CameraRender fixedResPassRender;   // drives the upscale blit pass
+		CameraRender blitPassRender;       // drives the fullscreen blit passes
 		ObjectRender blitRender;           // fullscreen blit.frag draw
 		std::shared_ptr<ShaderRender> blitShader;
 		fs_blit_t fs_blit;
@@ -667,6 +674,7 @@ namespace doriax{
 		// SSR
 		void loadSSR();
 		void destroySSR();
+		bool ensureSceneColorFramebuffer(unsigned int width, unsigned int height);
 		bool ensureSSRFramebuffers(unsigned int width, unsigned int height);
 		void renderDepthPrePass(CameraComponent& camera); // shared depth for SSAO/SSR
 		// G-buffer geometry pass for SSR: MRT packed depth + view-space normal/roughness/metallic
@@ -680,9 +688,11 @@ namespace doriax{
 		void loadBlit();
 		void destroyBlit();
 		bool ensureFixedResFramebuffer(unsigned int width, unsigned int height, TextureFilter filter);
-		// draws source over the real destination (Engine framebuffer in the editor,
-		// swapchain in exported builds)
-		void renderBlit(TextureRender* source, Rect viewport);
+		// draws source over destination (the swapchain when null), in viewport or the whole target
+		void renderBlit(TextureRender* source, FramebufferRender* destination, const Rect* viewport = nullptr);
+		// the fullscreen blit draw alone, in the pass already started
+		void drawBlit(TextureRender* source, PipelineType pipeline, bool flipY);
+		bool ensureSceneCopyFramebuffer(unsigned int width, unsigned int height);
 		// upscales fixedResFramebuffer to the view rect
 		void renderFixedResolutionBlit();
 

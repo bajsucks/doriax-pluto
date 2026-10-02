@@ -8406,7 +8406,9 @@ void editor::Properties::drawWaterComponent(ComponentType cpType, SceneProject* 
     beginTable(cpType, getLabelSize("Shallow Color"), "water_color");
     RowSettings depthFadeSettings = floatSettings;
     depthFadeSettings.help = "Depth where the deep color takes over. Shallower water is lighter and clearer.";
-    propertyRow(RowPropertyType::Color3L, cpType, "shallowColor", "Shallow Color", sceneProject, entities);
+    RowSettings shallowSettings;
+    shallowSettings.help = "Color of shallow water. With Refraction, the tint of the scene seen through it.";
+    propertyRow(RowPropertyType::Color3L, cpType, "shallowColor", "Shallow Color", sceneProject, entities, shallowSettings);
     propertyRow(RowPropertyType::Color3L, cpType, "deepColor", "Deep Color", sceneProject, entities);
     propertyRow(RowPropertyType::FloatPositive, cpType, "depthFade", "Depth Fade", sceneProject, entities, depthFadeSettings);
     endTable();
@@ -8468,6 +8470,18 @@ void editor::Properties::drawWaterComponent(ComponentType cpType, SceneProject* 
     propertyRow(RowPropertyType::Bool, cpType, "planarReflection", "Planar Reflection", sceneProject, entities, planarSettings);
     if (water.planarReflection){
         propertyRow(RowPropertyType::FloatPositive, cpType, "reflectionDistortion", "Distortion", sceneProject, entities, distortionSettings);
+    }
+    endTable();
+
+    ImGui::SeparatorText("Refraction");
+    beginTable(cpType, getLabelSize("Refraction"), "water_refraction");
+    RowSettings refractionSettings;
+    refractionSettings.help = "Shows the scene behind the water, bent by the ripples and tinted by the water it crosses. Copies the scene once per frame.";
+    RowSettings refractionDistortionSettings = distortionSettings;
+    refractionDistortionSettings.help = "How much the ripples bend the scene behind the water.";
+    propertyRow(RowPropertyType::Bool, cpType, "refraction", "Refraction", sceneProject, entities, refractionSettings);
+    if (water.refraction){
+        propertyRow(RowPropertyType::FloatPositive, cpType, "refractionDistortion", "Distortion", sceneProject, entities, refractionDistortionSettings);
     }
     endTable();
 

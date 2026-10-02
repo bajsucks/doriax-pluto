@@ -25,6 +25,8 @@ namespace doriax{
         void setClearColor(Vector4 clearColor);
         void setClearDepth(float clearDepth = 1.0f);
         void setLoadActionLoad();
+        void setDepthLoadActionLoad();
+        void setStoreDepth(bool storeDepth);
 
         void startRenderPass(FramebufferRender* framebuffer, size_t face);
         void startRenderPass(int width, int height);

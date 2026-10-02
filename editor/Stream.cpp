@@ -6317,6 +6317,8 @@ YAML::Node editor::Stream::encodeWaterComponent(const WaterComponent& water) {
     node["depthEffects"] = water.depthEffects;
     node["planarReflection"] = water.planarReflection;
     node["reflectionDistortion"] = water.reflectionDistortion;
+    node["refraction"] = water.refraction;
+    node["refractionDistortion"] = water.refractionDistortion;
 
     if (!water.customShader.empty())
         node["customShader"] = water.customShader;
@@ -6357,6 +6359,8 @@ WaterComponent editor::Stream::decodeWaterComponent(const YAML::Node& node, cons
     if (node["depthEffects"]) water.depthEffects = node["depthEffects"].as<bool>();
     if (node["planarReflection"]) water.planarReflection = node["planarReflection"].as<bool>();
     if (node["reflectionDistortion"]) water.reflectionDistortion = node["reflectionDistortion"].as<float>();
+    if (node["refraction"]) water.refraction = node["refraction"].as<bool>();
+    if (node["refractionDistortion"]) water.refractionDistortion = node["refractionDistortion"].as<float>();
 
     if (node["customShader"]) water.customShader = node["customShader"].as<std::string>();
     water.shaderUniforms = decodeShaderUniforms(node["shaderUniforms"]);

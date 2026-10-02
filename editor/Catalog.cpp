@@ -536,6 +536,8 @@ namespace {
         makeFastProperty<WaterComponent, bool, &WaterComponent::depthEffects>("depthEffects", PropertyType::Bool, UpdateFlags_None),
         makeFastProperty<WaterComponent, bool, &WaterComponent::planarReflection>("planarReflection", PropertyType::Bool, UpdateFlags_None),
         makeFastProperty<WaterComponent, float, &WaterComponent::reflectionDistortion>("reflectionDistortion", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<WaterComponent, bool, &WaterComponent::refraction>("refraction", PropertyType::Bool, UpdateFlags_None),
+        makeFastProperty<WaterComponent, float, &WaterComponent::refractionDistortion>("refractionDistortion", PropertyType::Float, UpdateFlags_None),
         makeFastProperty<WaterComponent, std::string, &WaterComponent::customShader>("customShader", PropertyType::String, UpdateFlags_Shader_Reload),
         makeFastProperty<WaterComponent, ShaderUniformValues, &WaterComponent::shaderUniforms>("shaderUniforms", PropertyType::Custom, UpdateFlags_Shader_Uniforms),
     };

@@ -448,6 +448,8 @@ void LuaBinding::registerObjectClasses(lua_State *L){
         .addProperty("depthEffects", &Water::isDepthEffects, &Water::setDepthEffects)
         .addProperty("planarReflection", &Water::isPlanarReflection, &Water::setPlanarReflection)
         .addProperty("reflectionDistortion", &Water::getReflectionDistortion, &Water::setReflectionDistortion)
+        .addProperty("refraction", &Water::isRefraction, &Water::setRefraction)
+        .addProperty("refractionDistortion", &Water::getRefractionDistortion, &Water::setRefractionDistortion)
         .addProperty("customShader", &Water::getCustomShader, &Water::setCustomShader)
         .addFunction("setShaderUniform",
             luabridge::overload<const std::string&, const Vector4&>(&Water::setShaderUniform),

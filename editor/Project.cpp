@@ -3502,7 +3502,8 @@ void editor::Project::collectSceneShaderKeys(const SceneProject* sceneProject, s
                     sceneShadows = sceneShadows || lights->getComponentFromIndex(i).shadows;
                 }
             }
-            insertKeys(ShaderType::WATER, ShaderPool::getWaterProperties(sceneFog, water.depthEffects, water.planarReflection, sceneShadows && water.receiveShadows),
+            insertKeys(ShaderType::WATER, ShaderPool::getWaterProperties(sceneFog, water.depthEffects, water.planarReflection,
+                sceneShadows && water.receiveShadows, water.refraction),
                 ShaderPool::registerCustomShader(water.customShader));
         }
     }

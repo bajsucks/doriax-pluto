@@ -43,6 +43,14 @@ void SokolCamera::setLoadActionLoad(){
     pass.action.colors[0].load_action = SG_LOADACTION_LOAD;
 }
 
+void SokolCamera::setDepthLoadActionLoad(){
+    pass.action.depth.load_action = SG_LOADACTION_LOAD;
+}
+
+void SokolCamera::setStoreDepth(bool storeDepth){
+    pass.action.depth.store_action = storeDepth ? SG_STOREACTION_STORE : SG_STOREACTION_DONTCARE;
+}
+
 void SokolCamera::startRenderPass(FramebufferRender* framebuffer, size_t face){
     pass.swapchain = {};
     pass.attachments = framebuffer->backend.get(face);

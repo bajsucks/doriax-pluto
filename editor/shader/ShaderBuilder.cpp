@@ -513,6 +513,7 @@ void editor::ShaderBuilder::addWaterPropertyDefinitions(std::vector<shadercompil
     if (prop & (1 << 1))  defs.push_back({"USE_SCENE_DEPTH", "1"});          // 'Dep'
     if (prop & (1 << 2))  defs.push_back({"USE_PLANAR_REFLECTION", "1"});    // 'Prf'
     if (prop & (1 << 3))  defs.push_back({"USE_SHADOWS", "1"});              // 'Shw'
+    if (prop & (1 << 4))  defs.push_back({"USE_REFRACTION", "1"});           // 'Rfr'
 }
 
 ShaderBuildResult editor::ShaderBuilder::buildShader(ShaderKey shaderKey, Project* project) {

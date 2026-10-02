@@ -428,7 +428,7 @@ int ShaderPool::getShaderPropertyCount(ShaderType shaderType){
         case ShaderType::COMPOSITE: return 0;
         case ShaderType::SHADOW2D: return 0;
         case ShaderType::BLIT:   return 0;
-        case ShaderType::WATER:  return 4;
+        case ShaderType::WATER:  return 5;
         default:                 return 0;
     }
 }
@@ -515,6 +515,7 @@ std::string ShaderPool::getShaderPropertyName(ShaderType shaderType, int bit, bo
             case 1: return shortName ? "Dep" : "Scene Depth";
             case 2: return shortName ? "Prf" : "Planar Reflection";
             case 3: return shortName ? "Shw" : "Shadows";
+            case 4: return shortName ? "Rfr" : "Refraction";
         }
     }
     return shortName ? "?" : "Unknown";
@@ -803,13 +804,14 @@ uint32_t ShaderPool::getLinesProperties(bool vertexColorVec3, bool vertexColorVe
     return prop;
 }
 
-uint32_t ShaderPool::getWaterProperties(bool fog, bool sceneDepth, bool planarReflection, bool shadows){
+uint32_t ShaderPool::getWaterProperties(bool fog, bool sceneDepth, bool planarReflection, bool shadows, bool refraction){
     uint32_t prop = 0;
 
     prop |= fog              ? (1 <<  0) : 0;
     prop |= sceneDepth       ? (1 <<  1) : 0;
     prop |= planarReflection ? (1 <<  2) : 0;
     prop |= shadows          ? (1 <<  3) : 0;
+    prop |= refraction       ? (1 <<  4) : 0;
 
     return prop;
 }

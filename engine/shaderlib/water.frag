@@ -30,6 +30,8 @@ uniform u_fs_waterParams {
     vec4 envColor;                 // rgb = sky tint (linear), w = sky rotation (radians)
     vec4 eyePos;                   // xyz = eye of this pass, w = time (seconds)
     vec4 flags;                    // x = scene lights on, y = IBL ambient available, z = planar reflection
+    vec4 refraction;               // x = distortion, y = 1 when this pass has the scene copy
+    vec4 refractionRect;           // xy = view origin, zw = view size, in scene copy uv
 } water;
 
 // same layout as fs_lighting_t (RenderSystem.h) and mesh.frag
@@ -66,6 +68,11 @@ uniform sampler u_sky_smp;
 #ifdef USE_SCENE_DEPTH
     uniform texture2D u_depthTexture;
     uniform sampler u_depth_smp;
+#endif
+
+#ifdef USE_REFRACTION
+    uniform texture2D u_refractionTexture;
+    uniform sampler u_refraction_smp;
 #endif
 
 #ifdef USE_SHADOWS
@@ -140,6 +147,41 @@ vec3 skyColor(vec3 direction){
     return sRGBToLinear(texture(samplerCube(u_skyTexture, u_sky_smp), rotateEnv(direction)).rgb) * water.envColor.rgb;
 }
 
+// the horizontal tilt of the surface as it moves this point on screen, in NDC
+// scaled by the distance, so the bend follows the camera and keeps its size
+vec2 getScreenTilt(vec3 n, vec4 clip){
+    vec4 tilt = water.viewProjection * vec4(n.x, 0.0, n.z, 0.0);
+    return tilt.xy - clip.xy / clip.w * tilt.w;
+}
+
+// the scene behind the water in the copy taken before it, bent by the surface tilt;
+// w is the water crossed by the ray that was used
+vec4 getSceneBehind(vec2 screenTilt, vec4 clip, float through){
+#ifdef USE_REFRACTION
+    vec2 ndc = clip.xy / clip.w;
+    // shallow water bends little, which keeps the shore line in place
+    float bend = 2.0 * water.refraction.x * clamp(through / max(water.shallowColor.w, 0.001), 0.0, 1.0);
+    vec2 bent = clamp(ndc + screenTilt * bend, -1.0, 1.0);
+    #ifdef USE_SCENE_DEPTH
+        if (water.deepColor.w > 0.5){
+            float depth = decodeDepth(texture(sampler2D(u_depthTexture, u_depth_smp), vec2(bent.x * 0.5 + 0.5, ndcYToDepthUV(bent.y))));
+            vec4 hit = water.invViewProjection * vec4(bent, depth * 2.0 - 1.0, 1.0);
+            vec3 hitPosition = hit.xyz / hit.w;
+            if (dot(hitPosition - v_position, v_position - water.eyePos.xyz) < 0.0 || hitPosition.y > v_position.y){
+                // landed in front of the water or above its surface, the straight ray is used
+                bent = ndc;
+            }else{
+                through = (depth < 0.9999) ? length(hitPosition - v_position) : 1.0e4;
+            }
+        }
+    #endif
+    vec2 uv = water.refractionRect.xy + vec2(bent.x * 0.5 + 0.5, 0.5 - bent.y * 0.5) * water.refractionRect.zw;
+    return vec4(sRGBToLinear(texture(sampler2D(u_refractionTexture, u_refraction_smp), uv).rgb), through);
+#else
+    return vec4(0.0, 0.0, 0.0, through);
+#endif
+}
+
 #ifdef USE_SHADOWS
 // share of the light the shadow maps let through, as in mesh.frag
 float getShadowVisibility(Light light, vec3 pointToLight, float NdotL){
@@ -169,6 +211,8 @@ void main(){
     vec3 toEye = water.eyePos.xyz - v_position;
     float eyeDistance = length(toEye);
     vec3 v = toEye / max(eyeDistance, 0.0001);
+    // logical, so screen lookups ignore the viewport origin and the target size
+    vec4 clip = water.viewProjection * vec4(v_position, 1.0);
 
     // distant ripples fade, they would only shimmer
     vec3 ripple = getRippleNormal(v_position.xz);
@@ -257,8 +301,6 @@ void main(){
     bool hasDepth = false;
     #ifdef USE_SCENE_DEPTH
         if (water.deepColor.w > 0.5){
-            // projected, so the lookup ignores the viewport origin and the target size
-            vec4 clip = water.viewProjection * vec4(v_position, 1.0);
             vec2 ndc = clip.xy / clip.w;
             float sceneDepth = decodeDepth(texture(sampler2D(u_depthTexture, u_depth_smp), vec2(ndc.x * 0.5 + 0.5, ndcYToDepthUV(ndc.y))));
             if (sceneDepth < 0.9999){
@@ -296,8 +338,12 @@ void main(){
 
     vec3 color;
     float alpha;
+    // the scene seen through the water, and the share of the pixel the water itself fills
+    vec3 transmitted = vec3(0.0);
+    vec3 coverage = vec3(1.0);
 
     if (!underwater){
+        vec2 screenTilt = getScreenTilt(n, clip);
         vec3 r = reflect(-v, n);
         r.y = abs(r.y); // ripples bend some rays under the horizon
         vec3 reflection = skyColor(r);
@@ -306,7 +352,7 @@ void main(){
                 vec4 reflectionClip = water.reflectionViewProjection * vec4(v_position, 1.0);
                 vec2 reflectionUV = vec2(reflectionClip.x / reflectionClip.w * 0.5 + 0.5,
                                          0.5 - reflectionClip.y / reflectionClip.w * 0.5);
-                reflectionUV += n.xz * water.surface.w;
+                reflectionUV += vec2(screenTilt.x, -screenTilt.y) * water.surface.w;
                 reflectionUV = clamp(reflectionUV, vec2(0.001), vec2(0.999));
                 reflection = sRGBToLinear(texture(sampler2D(u_reflectionTexture, u_reflection_smp), reflectionUV).rgb);
             }
@@ -315,18 +361,39 @@ void main(){
         float fresnel = WATER_F0 + (1.0 - WATER_F0) * pow(1.0 - NdotV, 5.0);
         fresnel = clamp(fresnel * water.surface.x, 0.0, 1.0);
 
-        vec3 waterLight = body * bodyLight * opacity * (1.0 - fresnel)
-                        + water.shallowColor.rgb * scatter
-                        + reflection * fresnel
-                        + specular;
-        vec3 emitted = mix(waterLight, water.foamColor.rgb * bodyLight, foam);
+        if (water.refraction.y > 0.5){
+            // the scene behind fades as the water gets deeper: the clearest channel of the shallow
+            // color like the opacity of the non-refracting look, the others faster, which tints it
+            float through = hasDepth ? pathDepth : depthFade * mix(1.0, 3.0, 1.0 - NdotV);
+            vec4 behind = getSceneBehind(screenTilt, clip, through);
+            vec3 tint = clamp(water.shallowColor.rgb, vec3(0.001), vec3(0.999));
+            vec3 extinction = (2.0 / depthFade) * log(tint) / log(max(tint.r, max(tint.g, tint.b)));
+            vec3 transmittance = exp(-extinction * behind.w);
 
-        float transmitted = (1.0 - opacity) * (1.0 - fresnel) * (1.0 - foam);
-        alpha = 1.0 - transmitted;
-        // raise alpha so blending does not clip bright highlights
-        vec3 clampedEmitted = clamp(emitted, 0.0, 1.0);
-        alpha = max(alpha, max(clampedEmitted.r, max(clampedEmitted.g, clampedEmitted.b)));
-        color = (alpha > 0.0001) ? emitted / alpha : vec3(0.0);
+            vec3 transmission = transmittance * (1.0 - fresnel) * (1.0 - foam);
+            transmitted = behind.rgb * transmission;
+            coverage = 1.0 - transmission;
+
+            vec3 waterLight = water.deepColor.rgb * bodyLight * (1.0 - transmittance) * (1.0 - fresnel)
+                            + water.shallowColor.rgb * scatter
+                            + reflection * fresnel
+                            + specular;
+            color = mix(waterLight, water.foamColor.rgb * bodyLight, foam);
+            alpha = 1.0;
+        }else{
+            vec3 waterLight = body * bodyLight * opacity * (1.0 - fresnel)
+                            + water.shallowColor.rgb * scatter
+                            + reflection * fresnel
+                            + specular;
+            vec3 emitted = mix(waterLight, water.foamColor.rgb * bodyLight, foam);
+
+            float seeThrough = (1.0 - opacity) * (1.0 - fresnel) * (1.0 - foam);
+            alpha = 1.0 - seeThrough;
+            // raise alpha so blending does not clip bright highlights
+            vec3 clampedEmitted = clamp(emitted, 0.0, 1.0);
+            alpha = max(alpha, max(clampedEmitted.r, max(clampedEmitted.g, clampedEmitted.b)));
+            color = (alpha > 0.0001) ? emitted / alpha : vec3(0.0);
+        }
     }else{
         // from below the sky shows only through Snell's window, the rest mirrors the depths
         vec3 below = normalize(mix(-v_normal, n, 0.35));
@@ -341,8 +408,9 @@ void main(){
     }
 
     #ifdef HAS_FOG
-        color = getFogColor(color);
+        // the scene seen through was fogged when it was drawn, the water fogs only its own share
+        color = getFogColor(color) - getFogColor(vec3(0.0)) * (1.0 - coverage);
     #endif
 
-    g_finalColor = vec4(linearTosRGB(color), alpha);
+    g_finalColor = vec4(linearTosRGB(color + transmitted), alpha);
 }
