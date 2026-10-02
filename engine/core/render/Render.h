@@ -248,7 +248,8 @@ namespace doriax{
         PIP_DEFAULT_NODEPTH = 1 << 6, // no depth test or write, submission order
         PIP_RTT_NODEPTH = 1 << 7,
         PIP_ZPREPASS    = 1 << 8, // depth only, into the swapchain color pass ahead of its opaque draws
-        PIP_ZPREPASS_RTT = 1 << 9 // same into an offscreen color pass
+        PIP_ZPREPASS_RTT = 1 << 9, // same into an offscreen color pass
+        PIP_RTT_NOBLEND = 1 << 10 // offscreen, replaces the color without blending
     };
 
     //-------Start shader definition--------

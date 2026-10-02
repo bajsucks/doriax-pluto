@@ -4829,10 +4829,11 @@ void RenderSystem::loadBlit(){
 
     // the blit targets either an offscreen framebuffer (PIP_RTT) or the swapchain
     // (PIP_DEFAULT, exported builds); PIP_RTT_NODEPTH copies into a camera pass in progress
+    // and PIP_RTT_NOBLEND into the scene copy
     blitRender.beginLoad(PrimitiveType::TRIANGLES);
     blitRender.setShader(blitShader.get());
     blitSlotParams = blitShader.get()->shaderData.getUniformBlockIndex(UniformBlockType::BLIT_FS_PARAMS);
-    if (!blitRender.endLoad(PIP_RTT | PIP_DEFAULT | PIP_RTT_NODEPTH, false, true, CullingMode::BACK, WindingOrder::CCW))
+    if (!blitRender.endLoad(PIP_RTT | PIP_DEFAULT | PIP_RTT_NODEPTH | PIP_RTT_NOBLEND, false, true, CullingMode::BACK, WindingOrder::CCW))
         return;
 
     blitLoaded = true;
@@ -4941,6 +4942,13 @@ bool RenderSystem::ensureSceneCopyFramebuffer(unsigned int width, unsigned int h
     sceneCopyFramebuffer.create();
 
     return sceneCopyFramebuffer.isCreated();
+}
+
+void RenderSystem::renderSceneCopy(Framebuffer* source){
+    // unblended, the captured alpha was already applied
+    blitPassRender.startRenderPass(&sceneCopyFramebuffer.getRender());
+    drawBlit(&source->getRender().getColorTexture(), PIP_RTT_NOBLEND, false);
+    blitPassRender.endRenderPass();
 }
 
 void RenderSystem::needReloadPostProcess(){
@@ -9482,10 +9490,12 @@ void RenderSystem::draw(){
             if (useSSR){
                 renderSSR(camera, &sceneCopyFramebuffer.getRender());
             }else{
-                renderBlit(&colorTarget->getRender().getColorTexture(), &sceneCopyFramebuffer.getRender());
+                renderSceneCopy(colorTarget);
             }
 
             passRender = &resumePassRender;
+            // kept for another copy between overlapping waters
+            resumePassRender.setStoreDepth(passWaters.size() > 1);
             resumePassRender.startRenderPass(&colorTarget->getRender());
             resumePassRender.applyViewport(colorPassViewport);
             if (useSSR){
@@ -9501,8 +9511,23 @@ void RenderSystem::draw(){
         }
 
         //---------Draw water----------
+        // farther first, so a refracting water sees the ones behind it in a new copy
+        const float eyeY = cameraTransform.worldPosition.y;
+        std::sort(passWaters.begin(), passWaters.end(), [eyeY](const WaterRenderData& a, const WaterRenderData& b){
+            return std::abs(eyeY - a.transform->worldPosition.y) > std::abs(eyeY - b.transform->worldPosition.y);
+        });
+        bool copyOutdated = false;
         for (const WaterRenderData& waterData : passWaters){
-            drawWater(waterData.entity, *waterData.water, *waterData.transform, camera, cameraTransform, colorPip, isMainCamera);
+            if (copyOutdated && waterData.water->refraction){
+                resumePassRender.endRenderPass();
+                renderSceneCopy(colorTarget);
+                resumePassRender.startRenderPass(&colorTarget->getRender());
+                resumePassRender.applyViewport(colorPassViewport);
+                copyOutdated = false;
+            }
+            if (drawWater(waterData.entity, *waterData.water, *waterData.transform, camera, cameraTransform, colorPip, isMainCamera) && currentSceneCopy){
+                copyOutdated = true;
+            }
         }
 
         //---------Draw transparent renderers----------

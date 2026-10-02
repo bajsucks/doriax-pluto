@@ -39,6 +39,7 @@ SokolObject::SokolObject(){
     gbuffer_pip.id = SG_INVALID_ID;
     nodepth_pip.id = SG_INVALID_ID;
     rtt_nodepth_pip.id = SG_INVALID_ID;
+    rtt_noblend_pip.id = SG_INVALID_ID;
     zprepass_pip.id = SG_INVALID_ID;
     zprepass_rtt_pip.id = SG_INVALID_ID;
     bind = {};
@@ -60,6 +61,7 @@ SokolObject::SokolObject(const SokolObject& rhs) {
     gbuffer_pip = rhs.gbuffer_pip;
     nodepth_pip = rhs.nodepth_pip;
     rtt_nodepth_pip = rhs.rtt_nodepth_pip;
+    rtt_noblend_pip = rhs.rtt_noblend_pip;
     zprepass_pip = rhs.zprepass_pip;
     zprepass_rtt_pip = rhs.zprepass_rtt_pip;
     pipeline_desc = rhs.pipeline_desc;
@@ -79,6 +81,7 @@ SokolObject& SokolObject::operator=(const SokolObject& rhs) {
     gbuffer_pip = rhs.gbuffer_pip;
     nodepth_pip = rhs.nodepth_pip;
     rtt_nodepth_pip = rhs.rtt_nodepth_pip;
+    rtt_noblend_pip = rhs.rtt_noblend_pip;
     zprepass_pip = rhs.zprepass_pip;
     zprepass_rtt_pip = rhs.zprepass_rtt_pip;
     pipeline_desc = rhs.pipeline_desc;
@@ -423,10 +426,10 @@ bool SokolObject::endLoad(uint16_t pipelines, bool enableFaceCulling, bool enabl
         }
     }
 
-    // PIP_RTT (offscreen), PIP_RTT_INVERT (planar reflection) and PIP_RTT_NODEPTH share
-    // an identical pipeline except for winding and depth state, so build the desc once.
+    // PIP_RTT (offscreen), PIP_RTT_INVERT (planar reflection), PIP_RTT_NODEPTH and PIP_RTT_NOBLEND
+    // share an identical pipeline except for winding, depth and blend state, so build the desc once.
     if (pipelines & ((int)PipelineType::PIP_RTT | (int)PipelineType::PIP_RTT_INVERT |
-            (int)PipelineType::PIP_RTT_NODEPTH)){
+            (int)PipelineType::PIP_RTT_NODEPTH | (int)PipelineType::PIP_RTT_NOBLEND)){
         sg_pipeline_desc pip_rtt_desc = pipeline_desc;
 
         pip_rtt_desc.sample_count = 1;
@@ -470,6 +473,16 @@ bool SokolObject::endLoad(uint16_t pipelines, bool enableFaceCulling, bool enabl
             }
         }
 
+        if (pipelines & (int)PipelineType::PIP_RTT_NOBLEND){
+            sg_pipeline_desc pip_rtt_noblend_desc = pip_rtt_desc;
+            pip_rtt_noblend_desc.colors[0].blend.enabled = false;
+
+            rtt_noblend_pip = makePipeline(pip_rtt_noblend_desc);
+            if (rtt_noblend_pip.id == SG_INVALID_ID){
+                return false;
+            }
+        }
+
         if (pipelines & (int)PipelineType::PIP_RTT_INVERT){
             // planar reflection mirrors handedness, reversing winding once more
             if (enableFaceCulling){
@@ -506,6 +519,8 @@ bool SokolObject::beginDraw(PipelineType pipType){
         selectedPipeline = nodepth_pip;
     }else if (pipType == PipelineType::PIP_RTT_NODEPTH){
         selectedPipeline = rtt_nodepth_pip;
+    }else if (pipType == PipelineType::PIP_RTT_NOBLEND){
+        selectedPipeline = rtt_noblend_pip;
     }
 
     // Deferred resource creation can leave an allocated handle in FAILED state.
@@ -543,6 +558,7 @@ void SokolObject::destroy(){
         destroyPipeline(gbuffer_pip);
         destroyPipeline(nodepth_pip);
         destroyPipeline(rtt_nodepth_pip);
+        destroyPipeline(rtt_noblend_pip);
         destroyPipeline(zprepass_pip);
         destroyPipeline(zprepass_rtt_pip);
     }
@@ -555,6 +571,7 @@ void SokolObject::destroy(){
     gbuffer_pip.id = SG_INVALID_ID;
     nodepth_pip.id = SG_INVALID_ID;
     rtt_nodepth_pip.id = SG_INVALID_ID;
+    rtt_noblend_pip.id = SG_INVALID_ID;
     zprepass_pip.id = SG_INVALID_ID;
     zprepass_rtt_pip.id = SG_INVALID_ID;
     bind = {};

@@ -51,6 +51,7 @@ namespace doriax{
         sg_pipeline gbuffer_pip;
         sg_pipeline nodepth_pip;
         sg_pipeline rtt_nodepth_pip;
+        sg_pipeline rtt_noblend_pip;
         sg_pipeline zprepass_pip;
         sg_pipeline zprepass_rtt_pip;
 
