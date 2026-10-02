@@ -3505,6 +3505,9 @@ void editor::Project::collectSceneShaderKeys(const SceneProject* sceneProject, s
             insertKeys(ShaderType::WATER, ShaderPool::getWaterProperties(sceneFog, water.depthEffects, water.planarReflection,
                 sceneShadows && water.receiveShadows, water.refraction),
                 ShaderPool::registerCustomShader(water.customShader));
+            if (water.underwater) {
+                keys.insert(ShaderPool::getShaderKey(ShaderType::UNDERWATER, 0));
+            }
         }
     }
 

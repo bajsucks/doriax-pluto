@@ -696,6 +696,9 @@ bool editor::ShaderBuilder::setupShaderArgs(shadercompiler::args_t& args, Shader
         args.vert_file = "water.vert";
         args.frag_file = "water.frag";
         addWaterPropertyDefinitions(args.defines, properties);
+    }else if (shaderType == ShaderType::UNDERWATER){
+        args.vert_file = "fullscreen.vert";
+        args.frag_file = "underwater.frag";
     }else{
         return false;
     }

@@ -169,10 +169,20 @@ namespace doriax{
 		Vector4 surface;       // x = reflectivity, y = specular, z = roughness, w = reflection distortion
 		Vector4 envColor;      // rgb = sky tint (linear), w = sky rotation (radians)
 		Vector4 eyePos;        // xyz = eye of this pass, w = time
-		Vector4 flags;         // x = scene lights on, y = IBL ambient available, z = planar reflection
+		Vector4 flags;         // x = scene lights on, y = IBL ambient available, z = planar reflection, w = eye inside the water
 		Vector4 refraction;    // x = distortion, y = 1 when this pass has the scene copy
 		Vector4 refractionRect; // xy = view origin, zw = view size, in scene copy uv
 	} fs_water_t;
+
+	typedef struct fs_underwater_t {
+		Matrix4 invViewProjection; // logical, unprojects the scene depth
+		Vector4 shallowColor;  // rgb = linear color, w = depth fade
+		Vector4 deepColor;     // rgb = linear color, w = 1 when the scene depth is valid
+		Vector4 light;         // rgb = light reaching the water besides the sky (linear)
+		Vector4 envColor;      // rgb = sky tint (linear)
+		Vector4 eyePos;        // xyz = eye
+		Vector4 sceneRect;     // xy = view origin, zw = view size, in scene copy uv
+	} fs_underwater_t;
 
 	typedef struct vs_points_params_t {
 		Matrix4 mvpMatrix;
@@ -459,6 +469,12 @@ namespace doriax{
 		CameraRender resumePassRender; // continues the camera pass after the copy
 		TextureRender* currentSceneCopy;
 		Vector4 currentSceneCopyRect;
+		// fades the scene copy when the main camera is inside a water
+		bool underwaterLoaded;
+		ObjectRender underwaterRender;
+		std::shared_ptr<ShaderRender> underwaterShader;
+		int underwaterSlotParams;
+		WaterComponent* currentUnderwater;
 
 		// engine-written custom uniforms: seconds since startup, sampled once per draw(),
 		// and the size of the target being drawn (shadow slot, SSAO depth or camera color)
@@ -725,6 +741,11 @@ namespace doriax{
 		bool drawWater(Entity entity, WaterComponent& water, Transform& transform, CameraComponent& camera, Transform& camTransform, PipelineType pipType, bool mainCamera);
 		void destroyWater(Entity entity, WaterComponent& water);
 		static bool isBehindWater(const std::vector<WaterRenderData>& waters, const AABB& box);
+		WaterComponent* findUnderwater(const Vector3& eye);
+		void loadUnderwater();
+		void destroyUnderwater();
+		// the fullscreen fade of the scene copy, in the pass already started
+		void drawUnderwater(WaterComponent& water, CameraComponent& camera, Transform& cameraTransform);
 
 		void destroyLight(LightComponent& light);
 		void destroyCamera(CameraComponent& camera, bool entityDestroyed);

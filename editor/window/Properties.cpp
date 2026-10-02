@@ -8407,7 +8407,7 @@ void editor::Properties::drawWaterComponent(ComponentType cpType, SceneProject* 
     RowSettings depthFadeSettings = floatSettings;
     depthFadeSettings.help = "Depth where the deep color takes over. Shallower water is lighter and clearer.";
     RowSettings shallowSettings;
-    shallowSettings.help = "Color of shallow water. With Refraction, the tint of the scene seen through it.";
+    shallowSettings.help = "Color of shallow water. With Refraction or Underwater, the tint of the scene seen through it.";
     propertyRow(RowPropertyType::Color3L, cpType, "shallowColor", "Shallow Color", sceneProject, entities, shallowSettings);
     propertyRow(RowPropertyType::Color3L, cpType, "deepColor", "Deep Color", sceneProject, entities);
     propertyRow(RowPropertyType::FloatPositive, cpType, "depthFade", "Depth Fade", sceneProject, entities, depthFadeSettings);
@@ -8483,6 +8483,13 @@ void editor::Properties::drawWaterComponent(ComponentType cpType, SceneProject* 
     if (water.refraction){
         propertyRow(RowPropertyType::FloatPositive, cpType, "refractionDistortion", "Distortion", sceneProject, entities, refractionDistortionSettings);
     }
+    endTable();
+
+    ImGui::SeparatorText("Underwater");
+    beginTable(cpType, getLabelSize("Underwater"), "water_underwater");
+    RowSettings underwaterSettings;
+    underwaterSettings.help = "A camera below the surface sees the scene fade into the water with distance. Without Depth Effects the fade is even.";
+    propertyRow(RowPropertyType::Bool, cpType, "underwater", "Underwater", sceneProject, entities, underwaterSettings);
     endTable();
 
     ImGui::SeparatorText("Foam");

@@ -1042,7 +1042,7 @@ void ExportWindow::drawAddShaderDialog() {
             ShaderType::SSAO, ShaderType::SSAO_BLUR,
             ShaderType::SSR, ShaderType::SSR_BLUR, ShaderType::COMPOSITE,
             ShaderType::SHADOW2D, ShaderType::BLIT, ShaderType::POSTPROCESS,
-            ShaderType::WATER
+            ShaderType::WATER, ShaderType::UNDERWATER
         };
         constexpr int typeCount = (int)(sizeof(typeValues) / sizeof(typeValues[0]));
         std::vector<std::string> typeNameStrs;

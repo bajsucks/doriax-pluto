@@ -110,6 +110,10 @@ bool ShaderPool::parseShaderTypeToken(const std::string& typeToken, ShaderType& 
         shaderType = ShaderType::WATER;
         return true;
     }
+    if (typeToken == "underwater") {
+        shaderType = ShaderType::UNDERWATER;
+        return true;
+    }
 
     return false;
 }
@@ -408,6 +412,7 @@ std::string ShaderPool::getShaderTypeName(ShaderType shaderType, bool lowerCase)
         case ShaderType::BLIT:   return lowerCase ? "blit"   : "Blit";
         case ShaderType::POSTPROCESS: return lowerCase ? "postprocess" : "Post-process";
         case ShaderType::WATER:  return lowerCase ? "water"  : "Water";
+        case ShaderType::UNDERWATER: return lowerCase ? "underwater" : "Underwater";
         default:                 return lowerCase ? "unknown": "Unknown";
     }
 }

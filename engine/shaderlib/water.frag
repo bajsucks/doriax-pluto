@@ -29,7 +29,7 @@ uniform u_fs_waterParams {
     vec4 surface;                  // x = reflectivity, y = specular, z = roughness, w = reflection distortion
     vec4 envColor;                 // rgb = sky tint (linear), w = sky rotation (radians)
     vec4 eyePos;                   // xyz = eye of this pass, w = time (seconds)
-    vec4 flags;                    // x = scene lights on, y = IBL ambient available, z = planar reflection
+    vec4 flags;                    // x = scene lights on, y = IBL ambient available, z = planar reflection, w = eye inside the water
     vec4 refraction;               // x = distortion, y = 1 when this pass has the scene copy
     vec4 refractionRect;           // xy = view origin, zw = view size, in scene copy uv
 } water;
@@ -145,6 +145,13 @@ float foamNoise(vec2 p, float time){
 
 vec3 skyColor(vec3 direction){
     return sRGBToLinear(texture(samplerCube(u_skyTexture, u_sky_smp), rotateEnv(direction)).rgb) * water.envColor.rgb;
+}
+
+// per channel: the clearest one of the shallow color fades like the opacity of the
+// non-refracting look, the others faster, which tints what is seen through the water
+vec3 getExtinction(float depthFade){
+    vec3 tint = clamp(water.shallowColor.rgb, vec3(0.001), vec3(0.999));
+    return (2.0 / depthFade) * log(tint) / log(max(tint.r, max(tint.g, tint.b)));
 }
 
 // the horizontal tilt of the surface as it moves this point on screen, in NDC
@@ -362,13 +369,10 @@ void main(){
         fresnel = clamp(fresnel * water.surface.x, 0.0, 1.0);
 
         if (water.refraction.y > 0.5){
-            // the scene behind fades as the water gets deeper: the clearest channel of the shallow
-            // color like the opacity of the non-refracting look, the others faster, which tints it
+            // the scene behind fades as the water gets deeper
             float through = hasDepth ? pathDepth : depthFade * mix(1.0, 3.0, 1.0 - NdotV);
             vec4 behind = getSceneBehind(screenTilt, clip, through);
-            vec3 tint = clamp(water.shallowColor.rgb, vec3(0.001), vec3(0.999));
-            vec3 extinction = (2.0 / depthFade) * log(tint) / log(max(tint.r, max(tint.g, tint.b)));
-            vec3 transmittance = exp(-extinction * behind.w);
+            vec3 transmittance = exp(-getExtinction(depthFade) * behind.w);
 
             vec3 transmission = transmittance * (1.0 - fresnel) * (1.0 - foam);
             transmitted = behind.rgb * transmission;
@@ -405,6 +409,14 @@ void main(){
         color = mix(depths, overhead * mix(vec3(1.0), water.shallowColor.rgb, 0.4), window);
         color = mix(color, water.foamColor.rgb * bodyLight, foam * 0.3);
         alpha = 1.0;
+    }
+
+    if (water.flags.w > 0.5){
+        // the eye is in the water, which fades the surface as underwater.frag fades the scene
+        vec3 transmittance = exp(-getExtinction(depthFade) * eyeDistance);
+        color = (color + transmitted) * transmittance + water.deepColor.rgb * bodyLight * (1.0 - transmittance);
+        transmitted = vec3(0.0);
+        coverage = vec3(1.0);
     }
 
     #ifdef HAS_FOG

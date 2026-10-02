@@ -1643,6 +1643,7 @@ std::string editor::Factory::createWaterComponent(int indentSpaces, EntityRegist
     code << ind << "water.reflectionDistortion = " << formatFloat(water.reflectionDistortion) << ";\n";
     code << ind << "water.refraction = " << formatBool(water.refraction) << ";\n";
     code << ind << "water.refractionDistortion = " << formatFloat(water.refractionDistortion) << ";\n";
+    code << ind << "water.underwater = " << formatBool(water.underwater) << ";\n";
     if (!water.customShader.empty())
         code << ind << "water.customShader = " << formatString(water.customShader) << ";\n";
     if (!water.shaderUniforms.empty())

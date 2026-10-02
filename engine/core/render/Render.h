@@ -55,7 +55,8 @@ namespace doriax{
         BLIT,       // fullscreen upscale of the fixed-resolution scene color
         // keep appending: the ShaderKey stores this enum and validates cached .sdat
         POSTPROCESS, // fullscreen user post-process pass
-        WATER       // water surface displaced by Gerstner waves
+        WATER,      // water surface displaced by Gerstner waves
+        UNDERWATER  // fullscreen fade of the scene seen from inside a water
     };
 
     enum class AttributeType{
@@ -147,7 +148,8 @@ namespace doriax{
         SHADOW2D_VS_PARAMS,
         BLIT_FS_PARAMS,
         WATER_VS_PARAMS,
-        WATER_FS_PARAMS
+        WATER_FS_PARAMS,
+        UNDERWATER_FS_PARAMS
     };
 
     enum class StorageBufferType{

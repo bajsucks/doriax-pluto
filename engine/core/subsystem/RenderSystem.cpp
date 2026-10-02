@@ -260,6 +260,9 @@ RenderSystem::RenderSystem(Scene* scene): SubSystem(scene){
     currentSceneCopyRect = Vector4(0.0f, 0.0f, 0.0f, 0.0f);
     resumePassRender.setLoadActionLoad();
     resumePassRender.setDepthLoadActionLoad();
+    underwaterLoaded = false;
+    underwaterSlotParams = -1;
+    currentUnderwater = NULL;
     hasWaterDepth = false;
     frameTime = 0.0f;
     passResolution = Vector2(0.0f, 0.0f);
@@ -356,6 +359,7 @@ void RenderSystem::destroy(){
     destroySSR();
     destroyBlit();
     destroyPostProcess();
+    destroyUnderwater();
     for (InstanceView& view : instanceViews){
         view.buffer.getRender()->destroyBuffer();
         view.data.clear();
@@ -4652,7 +4656,7 @@ void RenderSystem::destroySSR(){
     ssrLoaded = false;
 }
 
-// the redirected color pass target, of SSR or of a refracting water
+// the redirected color pass target, of SSR or of a water copying the scene
 bool RenderSystem::ensureSceneColorFramebuffer(unsigned int width, unsigned int height){
     if (width == 0 || height == 0)
         return false;
@@ -6472,8 +6476,10 @@ bool RenderSystem::drawWater(Entity entity, WaterComponent& water, Transform& tr
     fsParams.surface = Vector4(water.reflectivity, water.specularIntensity, std::clamp(water.roughness, 0.0f, 1.0f), water.reflectionDistortion);
     fsParams.envColor = envColor;
     fsParams.eyePos = Vector4(camTransform.worldPosition.x, camTransform.worldPosition.y, camTransform.worldPosition.z, water.time);
-    // the planar reflection is rendered for the main camera, other views reflect the sky
-    fsParams.flags = Vector4(hasLights ? 1.0f : 0.0f, iblAmbient ? 1.0f : 0.0f, (mainCamera && water.planarReflection) ? 1.0f : 0.0f, 0.0f);
+    // the planar reflection is rendered for the main camera, other views reflect the sky,
+    // and a pass that faded its scene for an eye inside the water fades the surface too
+    fsParams.flags = Vector4(hasLights ? 1.0f : 0.0f, iblAmbient ? 1.0f : 0.0f, (mainCamera && water.planarReflection) ? 1.0f : 0.0f,
+            (currentSceneCopy && &water == currentUnderwater) ? 1.0f : 0.0f);
     // only a pass that copied its scene refracts, the others blend over it
     fsParams.refraction = Vector4(water.refractionDistortion, (water.refraction && currentSceneCopy) ? 1.0f : 0.0f, 0.0f, 0.0f);
     fsParams.refractionRect = currentSceneCopyRect;
@@ -6561,6 +6567,104 @@ bool RenderSystem::isBehindWater(const std::vector<WaterRenderData>& waters, con
     }
 
     return false;
+}
+
+// the water with the eye below its surface and within its area, if it shows the view from inside
+WaterComponent* RenderSystem::findUnderwater(const Vector3& eye){
+    auto waters = scene->getComponentArray<WaterComponent>();
+    for (int i = 0; i < waters->size(); i++){
+        WaterComponent& water = waters->getComponentFromIndex(i);
+        Transform* transform = scene->findComponent<Transform>(waters->getEntity(i));
+        if (!water.underwater || !water.loaded || water.needReload || !transform || !transform->visible)
+            continue;
+
+        const AABB& area = water.worldAABB;
+        if (eye.x < area.getMinimum().x || eye.x > area.getMaximum().x ||
+                eye.z < area.getMinimum().z || eye.z > area.getMaximum().z)
+            continue;
+
+        if (eye.y < transform->worldPosition.y + getWaterSurfaceOffset(water, eye.x, eye.z).y)
+            return &water;
+    }
+
+    return NULL;
+}
+
+void RenderSystem::loadUnderwater(){
+    if (underwaterLoaded)
+        return;
+
+    // the fullscreen shader may still be building (async in the editor)
+    underwaterShader = ShaderPool::get(ShaderType::UNDERWATER, 0);
+    if (!underwaterShader || !underwaterShader->isCreated())
+        return;
+
+    underwaterRender.beginLoad(PrimitiveType::TRIANGLES);
+    underwaterRender.setShader(underwaterShader.get());
+    underwaterSlotParams = underwaterShader.get()->shaderData.getUniformBlockIndex(UniformBlockType::UNDERWATER_FS_PARAMS);
+    if (!underwaterRender.endLoad(PIP_RTT_NODEPTH, false, true, CullingMode::BACK, WindingOrder::CCW))
+        return;
+
+    underwaterLoaded = true;
+}
+
+void RenderSystem::destroyUnderwater(){
+    if (underwaterLoaded){
+        underwaterRender.destroy();
+    }
+    if (underwaterShader){
+        underwaterShader.reset();
+        ShaderPool::remove(ShaderType::UNDERWATER, 0);
+    }
+
+    underwaterSlotParams = -1;
+    underwaterLoaded = false;
+}
+
+void RenderSystem::drawUnderwater(WaterComponent& water, CameraComponent& camera, Transform& cameraTransform){
+    if (!underwaterRender.beginDraw(PIP_RTT_NODEPTH))
+        return;
+
+    // the body light of water.frag, with only the directional lights
+    TextureRender* irradiance = &emptyCubeBlack;
+    Vector3 skyColor(1.0f, 1.0f, 1.0f);
+    Vector3 light(1.0f, 1.0f, 1.0f);
+    if (hasLights){
+        auto skys = scene->getComponentArray<SkyComponent>();
+        if (hasIBL && skys->size() > 0 && skys->getComponentFromIndex(0).irradianceMap){
+            SkyComponent& sky = skys->getComponentFromIndex(0);
+            irradiance = sky.irradianceMap.get();
+            skyColor = Color::sRGBToLinear(Vector3(sky.color.x, sky.color.y, sky.color.z));
+            light = Vector3(0.0f, 0.0f, 0.0f);
+        }else{
+            light = scene->getGlobalIlluminationColorLinear() * scene->getGlobalIlluminationIntensity();
+        }
+
+        auto lights = scene->getComponentArray<LightComponent>();
+        for (int i = 0; i < std::min((int)lights->size(), MAX_LIGHTS); i++){
+            const LightComponent& sceneLight = lights->getComponentFromIndex(i);
+            if (sceneLight.type == LightType::DIRECTIONAL){
+                const float fromAbove = std::max(-sceneLight.worldDirection.normalized().y, 0.0f);
+                light += sceneLight.color * (sceneLight.intensity * fromAbove * 2.0f / WATER_TWO_PI);
+            }
+        }
+    }
+
+    fs_underwater_t params;
+    params.invViewProjection = camera.viewProjectionMatrix.inverse();
+    params.shallowColor = Vector4(water.shallowColor.x, water.shallowColor.y, water.shallowColor.z, water.depthFade);
+    params.deepColor = Vector4(water.deepColor.x, water.deepColor.y, water.deepColor.z, currentSceneDepthTexture ? 1.0f : 0.0f);
+    params.light = Vector4(light.x, light.y, light.z, 0.0f);
+    params.envColor = Vector4(skyColor.x, skyColor.y, skyColor.z, 0.0f);
+    params.eyePos = Vector4(cameraTransform.worldPosition.x, cameraTransform.worldPosition.y, cameraTransform.worldPosition.z, 0.0f);
+    params.sceneRect = currentSceneCopyRect;
+
+    ShaderData& shaderData = underwaterShader.get()->shaderData;
+    underwaterRender.addTexture(shaderData.getTextureIndex(TextureShaderType::SCENECOLORTEXTURE), ShaderStageType::FRAGMENT, currentSceneCopy);
+    underwaterRender.addTexture(shaderData.getTextureIndex(TextureShaderType::DEPTHTEXTURE), ShaderStageType::FRAGMENT, currentSceneDepthTexture ? currentSceneDepthTexture : &emptyWhite);
+    underwaterRender.addTexture(shaderData.getTextureIndex(TextureShaderType::IRRADIANCEMAP), ShaderStageType::FRAGMENT, irradiance);
+    underwaterRender.applyUniformBlock(underwaterSlotParams, sizeof(fs_underwater_t), &params);
+    underwaterRender.draw(0, 3, 1);
 }
 
 void RenderSystem::destroyLight(LightComponent& light){
@@ -7905,8 +8009,8 @@ bool RenderSystem::isFixedResolutionActive() const{
 }
 
 void RenderSystem::updateSwapchainRedirect(){
-    // SSR, the post-process chain and refracting water need the scene in an offscreen color
-    // buffer. Without a framebuffer destination (exported builds) the color pass is redirected
+    // SSR, the post-process chain and the scene copy of a water need the scene in an offscreen
+    // color buffer. Without a framebuffer destination (exported builds) the color pass is redirected
     // into it and the last pass targets the swapchain. Main scene only: a layer scene
     // composites over the scene below, and its own pass would clear it.
     bool redirect = false;
@@ -7929,12 +8033,13 @@ void RenderSystem::updateSwapchainRedirect(){
                     && ensurePostProcessFramebuffers(w, h);
         }
 
-        bool refractingWater = false;
+        bool copyingWater = false;
         auto waters = scene->getComponentArray<WaterComponent>();
         for (int i = 0; i < waters->size(); i++){
-            refractingWater = refractingWater || waters->getComponentFromIndex(i).refraction;
+            const WaterComponent& water = waters->getComponentFromIndex(i);
+            copyingWater = copyingWater || water.refraction || water.underwater;
         }
-        if (!redirect && refractingWater){
+        if (!redirect && copyingWater){
             loadBlit();
             redirect = blitLoaded && ensureSceneColorFramebuffer(w, h);
         }
@@ -9119,7 +9224,14 @@ void RenderSystem::draw(){
             refractingWater = refractingWater || water.refraction;
         }
 
-        // the swapchain redirect of a refracting water, when no other effect took it
+        // the water the main camera is inside of, even with its surface out of view
+        WaterComponent* underwater = isMainCamera ? findUnderwater(cameraTransform.worldPosition) : NULL;
+        if (underwater){
+            loadUnderwater();
+        }
+        currentUnderwater = underwaterLoaded ? underwater : NULL;
+
+        // the swapchain redirect of a water copying the scene, when no other effect took it
         const bool useSceneTarget = isMainCamera && swapchainRedirect && !useSSR && !usePostProcess
                 && !camera.renderToTexture && sceneColorFramebuffer.isCreated();
 
@@ -9129,9 +9241,9 @@ void RenderSystem::draw(){
         PipelineType colorPip = colorPipeline(camera, offscreenTarget);
         bool distanceSort = sortsByDistance(camera);
 
-        // the main camera copies its scene before the water: refraction samples the copy, and
-        // SSR composites into it first so the reflections stay under the water
-        bool copyScene = isMainCamera && offscreenTarget && (refractingWater || (useSSR && !passWaters.empty()));
+        // the main camera copies its scene before the water: refraction and the underwater fade
+        // sample the copy, and SSR composites into it first so the reflections stay under the water
+        bool copyScene = isMainCamera && offscreenTarget && (refractingWater || currentUnderwater || (useSSR && !passWaters.empty()));
         if (copyScene){
             loadBlit();
             copyScene = blitLoaded;
@@ -9483,7 +9595,8 @@ void RenderSystem::draw(){
             behindWaterRenders.pop();
         }
 
-        // the scene copy: an SSR composite replaces the pass content too, a plain copy keeps it
+        // the scene copy: an SSR composite or the underwater fade replace the pass content,
+        // a plain copy keeps it
         CameraRender* passRender = &camera.render;
         if (copyScene && ensureSceneCopyFramebuffer(colorTarget->getWidth(), colorTarget->getHeight())){
             camera.render.endRenderPass();
@@ -9493,21 +9606,23 @@ void RenderSystem::draw(){
                 renderSceneCopy(colorTarget);
             }
 
-            passRender = &resumePassRender;
-            // kept for another copy between overlapping waters
-            resumePassRender.setStoreDepth(passWaters.size() > 1);
-            resumePassRender.startRenderPass(&colorTarget->getRender());
-            resumePassRender.applyViewport(colorPassViewport);
-            if (useSSR){
-                drawBlit(&sceneCopyFramebuffer.getRender().getColorTexture(), PIP_RTT_NODEPTH, false);
-            }
-
             // view rects are centered, so the gap above the view matches the one below
             const float copyWidth = (float)colorTarget->getWidth();
             const float copyHeight = (float)colorTarget->getHeight();
             currentSceneCopy = &sceneCopyFramebuffer.getRender().getColorTexture();
             currentSceneCopyRect = Vector4(colorPassViewport.getX() / copyWidth, colorPassViewport.getY() / copyHeight,
                     colorPassViewport.getWidth() / copyWidth, colorPassViewport.getHeight() / copyHeight);
+
+            passRender = &resumePassRender;
+            // kept for another copy between overlapping waters
+            resumePassRender.setStoreDepth(passWaters.size() > 1);
+            resumePassRender.startRenderPass(&colorTarget->getRender());
+            resumePassRender.applyViewport(colorPassViewport);
+            if (currentUnderwater){
+                drawUnderwater(*currentUnderwater, camera, cameraTransform);
+            }else if (useSSR){
+                drawBlit(&sceneCopyFramebuffer.getRender().getColorTexture(), PIP_RTT_NODEPTH, false);
+            }
         }
 
         //---------Draw water----------

@@ -92,6 +92,7 @@ namespace doriax{
         float reflectionDistortion = 0.04f;
         bool refraction = true; // the scene behind is seen through, bent and absorbed
         float refractionDistortion = 0.03f;
+        bool underwater = true; // a camera inside sees the scene fade into the water
 
         // advanced by RenderSystem after each draw
         float wavePhase[WATER_WAVE_COUNT] = {0.0f, 0.0f, 0.0f, 0.0f};

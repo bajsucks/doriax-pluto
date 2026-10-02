@@ -100,6 +100,9 @@ namespace doriax{
         void setRefractionDistortion(float refractionDistortion);
         float getRefractionDistortion() const;
 
+        void setUnderwater(bool underwater);
+        bool isUnderwater() const;
+
         void setCustomShader(const std::string& path);
         std::string getCustomShader() const;
 

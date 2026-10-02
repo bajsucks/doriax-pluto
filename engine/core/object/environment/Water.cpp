@@ -356,6 +356,18 @@ float Water::getRefractionDistortion() const{
     return water.refractionDistortion;
 }
 
+void Water::setUnderwater(bool underwater){
+    WaterComponent& water = getComponent<WaterComponent>();
+
+    water.underwater = underwater;
+}
+
+bool Water::isUnderwater() const{
+    WaterComponent& water = getComponent<WaterComponent>();
+
+    return water.underwater;
+}
+
 void Water::setCustomShader(const std::string& path){
     WaterComponent& water = getComponent<WaterComponent>();
 

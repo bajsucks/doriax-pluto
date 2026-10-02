@@ -225,6 +225,8 @@ int ShaderData::getUniformBlockIndex(UniformBlockType type){
         ustr = "u_vs_waterParams";
     }else if (type == UniformBlockType::WATER_FS_PARAMS){
         ustr = "u_fs_waterParams";
+    }else if (type == UniformBlockType::UNDERWATER_FS_PARAMS){
+        ustr = "u_fs_underwaterParams";
     }
 
     if (ustr.empty()){
