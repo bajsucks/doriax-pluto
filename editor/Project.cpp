@@ -3494,7 +3494,15 @@ void editor::Project::collectSceneShaderKeys(const SceneProject* sceneProject, s
         if (signature.test(scene->getComponentId<WaterComponent>())) {
             const WaterComponent& water = scene->getComponent<WaterComponent>(entity);
             const bool sceneFog = scene->getComponentArray<FogComponent>()->size() > 0;
-            insertKeys(ShaderType::WATER, ShaderPool::getWaterProperties(sceneFog, water.depthEffects, water.planarReflection),
+            // shadow lights counted as RenderSystem::checkLightsAndShadow does
+            bool sceneShadows = false;
+            if (scene->getLightState() != LightState::OFF){
+                auto lights = scene->getComponentArray<LightComponent>();
+                for (int i = 0; i < std::min((int)lights->size(), MAX_LIGHTS); i++){
+                    sceneShadows = sceneShadows || lights->getComponentFromIndex(i).shadows;
+                }
+            }
+            insertKeys(ShaderType::WATER, ShaderPool::getWaterProperties(sceneFog, water.depthEffects, water.planarReflection, sceneShadows && water.receiveShadows),
                 ShaderPool::registerCustomShader(water.customShader));
         }
     }

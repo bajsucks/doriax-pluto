@@ -444,6 +444,7 @@ void LuaBinding::registerObjectClasses(lua_State *L){
         .addFunction("setFoamColor", (void(Water::*)(const float, const float, const float))&Water::setFoamColor)
         .addProperty("shoreFoam", &Water::getShoreFoam, &Water::setShoreFoam)
         .addProperty("crestFoam", &Water::getCrestFoam, &Water::setCrestFoam)
+        .addProperty("receiveShadows", &Water::isReceiveShadows, &Water::setReceiveShadows)
         .addProperty("depthEffects", &Water::isDepthEffects, &Water::setDepthEffects)
         .addProperty("planarReflection", &Water::isPlanarReflection, &Water::setPlanarReflection)
         .addProperty("reflectionDistortion", &Water::getReflectionDistortion, &Water::setReflectionDistortion)

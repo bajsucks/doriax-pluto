@@ -50,6 +50,9 @@ namespace doriax{
         int slotFSParams = -1;
         int slotFSLighting = -1;
         int slotFSFog = -1;
+        int slotVSShadows = -1;
+        int slotFSShadows = -1;
+        int slotFSPointShadows = -1;
         // values of the fork's custom uniform blocks, by member name
         ShaderUniformValues shaderUniforms;
         bool needUpdateShaderUniforms = false;
@@ -82,6 +85,7 @@ namespace doriax{
         float shoreFoam = 0.4f; // depth covered by shore foam
         float crestFoam = 0.15f;
 
+        bool receiveShadows = true;
         bool depthEffects = true; // shore foam and depth tint from the scene depth
         bool planarReflection = false;
         float reflectionDistortion = 0.04f;

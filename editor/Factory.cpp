@@ -1637,6 +1637,7 @@ std::string editor::Factory::createWaterComponent(int indentSpaces, EntityRegist
     code << ind << "water.foamColor = " << formatVector3(water.foamColor) << ";\n";
     code << ind << "water.shoreFoam = " << formatFloat(water.shoreFoam) << ";\n";
     code << ind << "water.crestFoam = " << formatFloat(water.crestFoam) << ";\n";
+    code << ind << "water.receiveShadows = " << formatBool(water.receiveShadows) << ";\n";
     code << ind << "water.depthEffects = " << formatBool(water.depthEffects) << ";\n";
     code << ind << "water.planarReflection = " << formatBool(water.planarReflection) << ";\n";
     code << ind << "water.reflectionDistortion = " << formatFloat(water.reflectionDistortion) << ";\n";

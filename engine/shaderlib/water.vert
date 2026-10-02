@@ -23,9 +23,19 @@ uniform u_vs_waterParams {
 
 in vec3 a_position;
 
+// in the same order as water.frag, which matches them by location
 out vec3 v_position;
 out vec3 v_normal;
 out float v_waveHeight;
+
+#ifdef USE_SHADOWS
+    uniform u_vs_shadows {
+        mat4 lightVPMatrix[MAX_SHADOW_ATLAS_SLOTS];
+        vec4 shadowParams[MAX_SHADOW_ATLAS_SLOTS]; // normalBias in .x
+    };
+
+    out vec4 v_lightProjPos[MAX_SHADOW_ATLAS_SLOTS];
+#endif
 
 const float TWO_PI = 6.283185307179586;
 
@@ -64,6 +74,12 @@ void main(){
     v_position = worldPos.xyz;
     v_normal = normalize(cross(binormal, tangent));
     v_waveHeight = offset.y;
+
+    #ifdef USE_SHADOWS
+    for (int i = 0; i < MAX_SHADOW_ATLAS_SLOTS; ++i){
+        v_lightProjPos[i] = lightVPMatrix[i] * (worldPos + vec4(v_normal * shadowParams[i].x, 0.0));
+    }
+    #endif
 
     gl_Position = waterParams.viewProjectionMatrix * worldPos;
     #ifdef IS_VULKAN

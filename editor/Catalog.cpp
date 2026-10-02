@@ -532,6 +532,7 @@ namespace {
         makeFastProperty<WaterComponent, Vector3, &WaterComponent::foamColor>("foamColor", PropertyType::Vector3, UpdateFlags_None),
         makeFastProperty<WaterComponent, float, &WaterComponent::shoreFoam>("shoreFoam", PropertyType::Float, UpdateFlags_None),
         makeFastProperty<WaterComponent, float, &WaterComponent::crestFoam>("crestFoam", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<WaterComponent, bool, &WaterComponent::receiveShadows>("receiveShadows", PropertyType::Bool, UpdateFlags_None),
         makeFastProperty<WaterComponent, bool, &WaterComponent::depthEffects>("depthEffects", PropertyType::Bool, UpdateFlags_None),
         makeFastProperty<WaterComponent, bool, &WaterComponent::planarReflection>("planarReflection", PropertyType::Bool, UpdateFlags_None),
         makeFastProperty<WaterComponent, float, &WaterComponent::reflectionDistortion>("reflectionDistortion", PropertyType::Float, UpdateFlags_None),

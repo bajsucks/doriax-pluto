@@ -6313,6 +6313,7 @@ YAML::Node editor::Stream::encodeWaterComponent(const WaterComponent& water) {
     node["foamColor"] = encodeVector3(water.foamColor);
     node["shoreFoam"] = water.shoreFoam;
     node["crestFoam"] = water.crestFoam;
+    node["receiveShadows"] = water.receiveShadows;
     node["depthEffects"] = water.depthEffects;
     node["planarReflection"] = water.planarReflection;
     node["reflectionDistortion"] = water.reflectionDistortion;
@@ -6352,6 +6353,7 @@ WaterComponent editor::Stream::decodeWaterComponent(const YAML::Node& node, cons
     if (node["foamColor"]) water.foamColor = decodeVector3(node["foamColor"]);
     if (node["shoreFoam"]) water.shoreFoam = node["shoreFoam"].as<float>();
     if (node["crestFoam"]) water.crestFoam = node["crestFoam"].as<float>();
+    if (node["receiveShadows"]) water.receiveShadows = node["receiveShadows"].as<bool>();
     if (node["depthEffects"]) water.depthEffects = node["depthEffects"].as<bool>();
     if (node["planarReflection"]) water.planarReflection = node["planarReflection"].as<bool>();
     if (node["reflectionDistortion"]) water.reflectionDistortion = node["reflectionDistortion"].as<float>();

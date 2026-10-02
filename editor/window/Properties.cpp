@@ -8453,6 +8453,8 @@ void editor::Properties::drawWaterComponent(ComponentType cpType, SceneProject* 
     unitSettings.stepSize = 0.01f;
     RowSettings roughnessSettings = unitSettings;
     roughnessSettings.help = "Spread of the sun highlight. Low values give sharp glints.";
+    RowSettings shadowSettings;
+    shadowSettings.help = "Shadows of the scene lights darken the sun glints and the light under the surface.";
     RowSettings planarSettings;
     planarSettings.help = "Reflects the scene, not only the sky. Draws the scene a second time at half resolution.";
     RowSettings distortionSettings = floatSettings;
@@ -8462,6 +8464,7 @@ void editor::Properties::drawWaterComponent(ComponentType cpType, SceneProject* 
     propertyRow(RowPropertyType::FloatPositive, cpType, "reflectivity", "Reflectivity", sceneProject, entities, unitSettings);
     propertyRow(RowPropertyType::FloatPositive, cpType, "specularIntensity", "Specular", sceneProject, entities, unitSettings);
     propertyRow(RowPropertyType::Float_0_1, cpType, "roughness", "Roughness", sceneProject, entities, roughnessSettings);
+    propertyRow(RowPropertyType::Bool, cpType, "receiveShadows", "Receive Shadows", sceneProject, entities, shadowSettings);
     propertyRow(RowPropertyType::Bool, cpType, "planarReflection", "Planar Reflection", sceneProject, entities, planarSettings);
     if (water.planarReflection){
         propertyRow(RowPropertyType::FloatPositive, cpType, "reflectionDistortion", "Distortion", sceneProject, entities, distortionSettings);

@@ -68,6 +68,25 @@ uniform sampler u_sky_smp;
     uniform sampler u_depth_smp;
 #endif
 
+#ifdef USE_SHADOWS
+    uniform u_fs_shadows {
+        vec4 bias_texSize_nearFar[MAX_SHADOW_ATLAS_SLOTS];
+        vec4 atlasRect[MAX_SHADOW_ATLAS_SLOTS];
+    } uShadows;
+
+    uniform u_fs_point_shadows {
+        vec4 bias_texSize_nearFar[MAX_POINT_SHADOW_ATLAS_SLOTS];
+        vec4 atlasRect[MAX_POINT_SHADOW_ATLAS_SLOTS];
+    } uPointShadows;
+
+    in vec4 v_lightProjPos[MAX_SHADOW_ATLAS_SLOTS];
+
+    uniform texture2D u_shadowAtlas;
+    uniform samplerShadow u_shadowAtlas_smp;
+    uniform texture2D u_shadowPointAtlas;
+    uniform sampler u_shadowPointAtlas_smp;
+#endif
+
 const float M_PI = 3.141592653589793;
 const float WATER_F0 = 0.02;
 
@@ -78,8 +97,11 @@ float clampedDot(vec3 x, vec3 y){
 #include "includes/srgb.glsl"
 #include "includes/brdf.glsl"
 #include "includes/punctual.glsl"
-#ifdef USE_SCENE_DEPTH
+#if defined(USE_SCENE_DEPTH) || defined(USE_SHADOWS)
     #include "includes/depth_util.glsl"
+#endif
+#ifdef USE_SHADOWS
+    #include "includes/shadows.glsl"
 #endif
 #ifdef HAS_FOG
     #include "includes/fog.glsl"
@@ -117,6 +139,22 @@ float foamNoise(vec2 p, float time){
 vec3 skyColor(vec3 direction){
     return sRGBToLinear(texture(samplerCube(u_skyTexture, u_sky_smp), rotateEnv(direction)).rgb) * water.envColor.rgb;
 }
+
+#ifdef USE_SHADOWS
+// share of the light the shadow maps let through, as in mesh.frag
+float getShadowVisibility(Light light, vec3 pointToLight, float NdotL){
+    if (!light.shadows)
+        return 1.0;
+    if (light.type == LightType_Spot)
+        return 1.0 - shadowCalculationPCF(light.shadowMapIndex, NdotL);
+    if (light.type == LightType_Directional){
+        // cascades are fitted to the main camera
+        float viewDepth = dot(lighting.cameraDir.xyz, lighting.eyePos.xyz - v_position);
+        return 1.0 - shadowCascadedCalculationPCF(light.shadowMapIndex, light.numShadowCascades, viewDepth, NdotL);
+    }
+    return 1.0 - shadowCubeCalculationPCF(light.shadowMapIndex, -pointToLight, NdotL);
+}
+#endif
 
 // two drifting ripple layers, blended in tangent space (z up)
 vec3 getRippleNormal(vec2 worldXZ){
@@ -172,9 +210,9 @@ void main(){
                 lighting.inCone_ouCone_shadows_cascades[i].y,
                 lighting.spotUp_maskAspect[i].xyz,
                 lighting.spotUp_maskAspect[i].w,
-                false,
-                -1,
-                0
+                (lighting.inCone_ouCone_shadows_cascades[i].z < 0.0) ? false : true,
+                int(lighting.inCone_ouCone_shadows_cascades[i].z),
+                int(lighting.inCone_ouCone_shadows_cascades[i].w)
             );
 
             if (light.intensity <= 0.0){
@@ -190,6 +228,10 @@ void main(){
 
             vec3 l = normalize(pointToLight);
             vec3 intensity = getLighIntensity(light, pointToLight, i);
+            #ifdef USE_SHADOWS
+                // biased by the wave normal, the ripples would speckle the shadow edge
+                intensity *= getShadowVisibility(light, pointToLight, clampedDot(normalize(v_normal), l));
+            #endif
 
             bodyLight += intensity * max(l.y, 0.0) / M_PI;
 

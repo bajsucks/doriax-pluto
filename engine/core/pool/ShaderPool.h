@@ -118,7 +118,7 @@ namespace doriax{
         static uint32_t getUIProperties(bool texture, bool fontAtlasTexture, bool vertexColorVec3, bool vertexColorVec4);
         static uint32_t getPointsProperties(bool texture, bool vertexColorVec3, bool vertexColorVec4, bool textureRect);
         static uint32_t getLinesProperties(bool vertexColorVec3, bool vertexColorVec4);
-        static uint32_t getWaterProperties(bool fog, bool sceneDepth, bool planarReflection);
+        static uint32_t getWaterProperties(bool fog, bool sceneDepth, bool planarReflection, bool shadows);
 
 		// necessary for engine shutdown
 		static void clear();

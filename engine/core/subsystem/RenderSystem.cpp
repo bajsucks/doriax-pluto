@@ -6147,7 +6147,8 @@ bool RenderSystem::loadWater(Entity entity, WaterComponent& water, uint16_t pipe
 
     render.beginLoad(PrimitiveType::TRIANGLES);
 
-    water.shaderProperties = ShaderPool::getWaterProperties(hasFog, water.depthEffects, water.planarReflection);
+    const bool receiveShadows = hasLights && hasShadows && water.receiveShadows;
+    water.shaderProperties = ShaderPool::getWaterProperties(hasFog, water.depthEffects, water.planarReflection, receiveShadows);
     water.customShaderId = ShaderPool::registerCustomShader(water.customShader);
     water.shader = ShaderPool::get(ShaderType::WATER, water.shaderProperties, water.customShaderId);
     if (!water.shader->isCreated()){
@@ -6178,6 +6179,11 @@ bool RenderSystem::loadWater(Entity entity, WaterComponent& water, uint16_t pipe
     water.slotFSParams = shaderData.getUniformBlockIndex(UniformBlockType::WATER_FS_PARAMS);
     water.slotFSLighting = shaderData.getUniformBlockIndex(UniformBlockType::FS_LIGHTING);
     water.slotFSFog = hasFog ? shaderData.getUniformBlockIndex(UniformBlockType::FS_FOG) : -1;
+    if (receiveShadows){
+        water.slotVSShadows = shaderData.getUniformBlockIndex(UniformBlockType::VS_SHADOWS);
+        water.slotFSShadows = shaderData.getUniformBlockIndex(UniformBlockType::FS_SHADOWS);
+        water.slotFSPointShadows = shaderData.getUniformBlockIndex(UniformBlockType::FS_POINT_SHADOWS);
+    }
     water.customVSParams.resolve(shaderData, "u_vs_customParams");
     water.customFSParams.resolve(shaderData, "u_fs_customParams");
     water.customVSParams.writeValues(water.shaderUniforms);
@@ -6283,9 +6289,9 @@ void RenderSystem::updateWater(Entity entity, WaterComponent& water, Transform& 
     // applied by draw()
     water.pendingTime += (float)dt;
 
-    // the variant follows the scene fog and the water switches
+    // the variant follows the scene fog and shadows, and the water switches
     if (water.loaded && !water.needReload &&
-            water.shaderProperties != ShaderPool::getWaterProperties(hasFog, water.depthEffects, water.planarReflection)){
+            water.shaderProperties != ShaderPool::getWaterProperties(hasFog, water.depthEffects, water.planarReflection, hasLights && hasShadows && water.receiveShadows)){
         water.needReload = true;
     }
 
@@ -6361,6 +6367,9 @@ bool RenderSystem::drawWater(Entity entity, WaterComponent& water, Transform& tr
     render.addTexture(shaderData.getTextureIndex(TextureShaderType::SKYCUBE), ShaderStageType::FRAGMENT, skyTexture);
     render.addTexture(shaderData.getTextureIndex(TextureShaderType::IRRADIANCEMAP), ShaderStageType::FRAGMENT, irradiance);
     loadSpotMaskTexture(shaderData, render);
+    if (water.shaderProperties & (1u << 3)){ // 'Shw'
+        loadShadowTextures(shaderData, render, true, true);
+    }
 
     render.addTexture(shaderData.getTextureIndex(TextureShaderType::DEPTHTEXTURE), ShaderStageType::FRAGMENT, currentSceneDepthTexture ? currentSceneDepthTexture : &emptyWhite);
 
@@ -6409,6 +6418,9 @@ bool RenderSystem::drawWater(Entity entity, WaterComponent& water, Transform& tr
     if (water.slotFSFog != -1){
         render.applyUniformBlock(water.slotFSFog, sizeof(float) * 8, &fs_fog);
     }
+    render.applyUniformBlock(water.slotVSShadows, sizeof(vs_shadows_t), &vs_shadows);
+    render.applyUniformBlock(water.slotFSShadows, sizeof(fs_shadows_t), &fs_shadows);
+    render.applyUniformBlock(water.slotFSPointShadows, sizeof(fs_point_shadows_t), &fs_point_shadows);
     applyCustomUniforms(render, water.customVSParams, water.customFSParams, water.shaderUniforms, water.needUpdateShaderUniforms, frameTime, passResolution);
 
     render.draw(0, water.indexCount, 1);
@@ -6454,6 +6466,9 @@ void RenderSystem::destroyWater(Entity entity, WaterComponent& water){
     water.slotFSParams = -1;
     water.slotFSLighting = -1;
     water.slotFSFog = -1;
+    water.slotVSShadows = -1;
+    water.slotFSShadows = -1;
+    water.slotFSPointShadows = -1;
     water.customVSParams.clear();
     water.customFSParams.clear();
 

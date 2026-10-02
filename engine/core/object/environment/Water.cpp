@@ -284,6 +284,18 @@ float Water::getCrestFoam() const{
     return water.crestFoam;
 }
 
+void Water::setReceiveShadows(bool receiveShadows){
+    WaterComponent& water = getComponent<WaterComponent>();
+
+    water.receiveShadows = receiveShadows;
+}
+
+bool Water::isReceiveShadows() const{
+    WaterComponent& water = getComponent<WaterComponent>();
+
+    return water.receiveShadows;
+}
+
 void Water::setDepthEffects(bool depthEffects){
     WaterComponent& water = getComponent<WaterComponent>();
 

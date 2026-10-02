@@ -512,6 +512,7 @@ void editor::ShaderBuilder::addWaterPropertyDefinitions(std::vector<shadercompil
     if (prop & (1 << 0))  defs.push_back({"HAS_FOG", "1"});                  // 'Fog'
     if (prop & (1 << 1))  defs.push_back({"USE_SCENE_DEPTH", "1"});          // 'Dep'
     if (prop & (1 << 2))  defs.push_back({"USE_PLANAR_REFLECTION", "1"});    // 'Prf'
+    if (prop & (1 << 3))  defs.push_back({"USE_SHADOWS", "1"});              // 'Shw'
 }
 
 ShaderBuildResult editor::ShaderBuilder::buildShader(ShaderKey shaderKey, Project* project) {
@@ -703,12 +704,12 @@ bool editor::ShaderBuilder::setupShaderArgs(shadercompiler::args_t& args, Shader
     }
     if (shaderType == ShaderType::MESH || shaderType == ShaderType::WATER){
         args.defines.push_back({"MAX_LIGHTS", "6"});
-    }
-    if (shaderType == ShaderType::MESH){
-        args.defines.push_back({"MAX_LIGHTS_2D", std::to_string(MAX_LIGHTS_2D)});
         args.defines.push_back({"MAX_SHADOW_ATLAS_SLOTS", std::to_string(MAX_SHADOW_ATLAS_SLOTS)});
         args.defines.push_back({"MAX_POINT_SHADOW_ATLAS_SLOTS", std::to_string(MAX_POINT_SHADOW_ATLAS_SLOTS)});
         args.defines.push_back({"MAX_SHADOWCASCADES", std::to_string(MAX_SHADOWCASCADES)});
+    }
+    if (shaderType == ShaderType::MESH){
+        args.defines.push_back({"MAX_LIGHTS_2D", std::to_string(MAX_LIGHTS_2D)});
     }
     if (shaderType == ShaderType::GBUFFER){
         // suppresses the terrain texture-coordinate varyings in the shared includes

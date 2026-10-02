@@ -82,6 +82,9 @@ namespace doriax{
         void setCrestFoam(float crestFoam);
         float getCrestFoam() const;
 
+        void setReceiveShadows(bool receiveShadows);
+        bool isReceiveShadows() const;
+
         void setDepthEffects(bool depthEffects);
         bool isDepthEffects() const;
 
