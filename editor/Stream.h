@@ -338,6 +338,9 @@ namespace doriax::editor {
         static YAML::Node encodeSkyComponent(const SkyComponent& sky);
         static SkyComponent decodeSkyComponent(const YAML::Node& node, const SkyComponent* oldSky = nullptr);
 
+        static YAML::Node encodeWaterComponent(const WaterComponent& water);
+        static WaterComponent decodeWaterComponent(const YAML::Node& node, const WaterComponent* oldWater = nullptr);
+
         static YAML::Node encodeModelComponent(const ModelComponent& model);
         static ModelComponent decodeModelComponent(const YAML::Node& node, const ModelComponent* oldModel = nullptr);
 

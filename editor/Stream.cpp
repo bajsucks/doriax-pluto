@@ -3787,6 +3787,10 @@ YAML::Node editor::Stream::encodeComponents(const Entity entity, const EntityReg
         compNode[Catalog::getComponentName(ComponentType::SkyComponent, true)] = encodeSkyComponent(sky);
     }
 
+    if (signature.test(registry->getComponentId<WaterComponent>())) {
+        compNode[Catalog::getComponentName(ComponentType::WaterComponent, true)] = encodeWaterComponent(registry->getComponent<WaterComponent>(entity));
+    }
+
     if (signature.test(registry->getComponentId<ModelComponent>())) {
         ModelComponent model = registry->getComponent<ModelComponent>(entity);
         compNode[Catalog::getComponentName(ComponentType::ModelComponent, true)] = encodeModelComponent(model);
@@ -4259,6 +4263,19 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         }else{
             uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::SkyComponent, existing, &sky);
             registry->getComponent<SkyComponent>(entity) = sky;
+            Catalog::updateEntity(registry, entity, flags);
+        }
+    }
+
+    compName = Catalog::getComponentName(ComponentType::WaterComponent, true);
+    if (compNode[compName]) {
+        WaterComponent* existing = registry->findComponent<WaterComponent>(entity);
+        WaterComponent water = decodeWaterComponent(compNode[compName], existing);
+        if (!signature.test(registry->getComponentId<WaterComponent>())){
+            registry->addComponent<WaterComponent>(entity, water);
+        }else{
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::WaterComponent, existing, &water);
+            registry->getComponent<WaterComponent>(entity) = water;
             Catalog::updateEntity(registry, entity, flags);
         }
     }
@@ -6271,6 +6288,80 @@ SkyComponent editor::Stream::decodeSkyComponent(const YAML::Node& node, const Sk
     sky.needUpdateShaderUniforms = true;
 
     return sky;
+}
+
+YAML::Node editor::Stream::encodeWaterComponent(const WaterComponent& water) {
+    YAML::Node node;
+
+    node["size"] = encodeVector2(water.size);
+    node["subdivisions"] = water.subdivisions;
+    node["shallowColor"] = encodeVector3(water.shallowColor);
+    node["deepColor"] = encodeVector3(water.deepColor);
+    node["depthFade"] = water.depthFade;
+    node["waveHeight"] = water.waveHeight;
+    node["waveLength"] = water.waveLength;
+    node["waveSpeed"] = water.waveSpeed;
+    node["waveDirection"] = water.waveDirection;
+    node["waveSteepness"] = water.waveSteepness;
+    node["normalTexture"] = encodeTexture(water.normalTexture);
+    node["normalScale"] = water.normalScale;
+    node["normalStrength"] = water.normalStrength;
+    node["rippleSpeed"] = water.rippleSpeed;
+    node["reflectivity"] = water.reflectivity;
+    node["specularIntensity"] = water.specularIntensity;
+    node["roughness"] = water.roughness;
+    node["foamColor"] = encodeVector3(water.foamColor);
+    node["shoreFoam"] = water.shoreFoam;
+    node["crestFoam"] = water.crestFoam;
+    node["depthEffects"] = water.depthEffects;
+    node["planarReflection"] = water.planarReflection;
+    node["reflectionDistortion"] = water.reflectionDistortion;
+
+    if (!water.customShader.empty())
+        node["customShader"] = water.customShader;
+    if (!water.shaderUniforms.empty())
+        node["shaderUniforms"] = encodeShaderUniforms(water.shaderUniforms);
+
+    return node;
+}
+
+WaterComponent editor::Stream::decodeWaterComponent(const YAML::Node& node, const WaterComponent* oldWater) {
+    WaterComponent water;
+
+    if (oldWater) {
+        water = *oldWater;
+    }
+
+    if (node["size"]) water.size = decodeVector2(node["size"]);
+    if (node["subdivisions"]) water.subdivisions = node["subdivisions"].as<unsigned int>();
+    if (node["shallowColor"]) water.shallowColor = decodeVector3(node["shallowColor"]);
+    if (node["deepColor"]) water.deepColor = decodeVector3(node["deepColor"]);
+    if (node["depthFade"]) water.depthFade = node["depthFade"].as<float>();
+    if (node["waveHeight"]) water.waveHeight = node["waveHeight"].as<float>();
+    if (node["waveLength"]) water.waveLength = node["waveLength"].as<float>();
+    if (node["waveSpeed"]) water.waveSpeed = node["waveSpeed"].as<float>();
+    if (node["waveDirection"]) water.waveDirection = node["waveDirection"].as<float>();
+    if (node["waveSteepness"]) water.waveSteepness = node["waveSteepness"].as<float>();
+    if (node["normalTexture"]) water.normalTexture = decodeTexture(node["normalTexture"]);
+    if (node["normalScale"]) water.normalScale = node["normalScale"].as<float>();
+    if (node["normalStrength"]) water.normalStrength = node["normalStrength"].as<float>();
+    if (node["rippleSpeed"]) water.rippleSpeed = node["rippleSpeed"].as<float>();
+    if (node["reflectivity"]) water.reflectivity = node["reflectivity"].as<float>();
+    if (node["specularIntensity"]) water.specularIntensity = node["specularIntensity"].as<float>();
+    if (node["roughness"]) water.roughness = node["roughness"].as<float>();
+    if (node["foamColor"]) water.foamColor = decodeVector3(node["foamColor"]);
+    if (node["shoreFoam"]) water.shoreFoam = node["shoreFoam"].as<float>();
+    if (node["crestFoam"]) water.crestFoam = node["crestFoam"].as<float>();
+    if (node["depthEffects"]) water.depthEffects = node["depthEffects"].as<bool>();
+    if (node["planarReflection"]) water.planarReflection = node["planarReflection"].as<bool>();
+    if (node["reflectionDistortion"]) water.reflectionDistortion = node["reflectionDistortion"].as<float>();
+
+    if (node["customShader"]) water.customShader = node["customShader"].as<std::string>();
+    water.shaderUniforms = decodeShaderUniforms(node["shaderUniforms"]);
+    water.needUpdateShaderUniforms = true;
+    water.needUpdateTexture = true;
+
+    return water;
 }
 
 // ==============================

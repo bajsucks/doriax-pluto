@@ -254,6 +254,9 @@ RenderSystem::RenderSystem(Scene* scene): SubSystem(scene){
     ssaoSlotParams = -1;
     ssaoBlurSlotParams = -1;
     currentSSAOTexture = NULL;
+    currentSceneDepthTexture = NULL;
+    depthPrePassRendered = false;
+    hasWaterDepth = false;
     frameTime = 0.0f;
     passResolution = Vector2(0.0f, 0.0f);
 
@@ -312,6 +315,7 @@ void RenderSystem::load(){
     hasFog = false;
     hasIBL = false;
     hasReflectionProbes = false;
+    hasWaterDepth = false;
     hasMultipleCameras = false;
     lastMultiCameraDraw = false;
     capturingReflectionProbe = false;
@@ -385,6 +389,15 @@ void RenderSystem::destroy(){
                 sky.needUpdateEnvironment = true;
             }
             destroySky(entity, sky);
+        }
+    }
+
+    auto waters = scene->getComponentArray<WaterComponent>();
+    for (int i = 0; i < waters->size(); i++){
+        WaterComponent& water = waters->getComponentFromIndex(i);
+        if (water.loaded){
+            if (reloadView) water.needReload = true;
+            destroyWater(waters->getEntity(i), water);
         }
     }
 
@@ -2605,7 +2618,7 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint16_t pipelin
 
         if (!bufferRender->isCreated()) {
             if (!bufferRender->createBuffer(buf.second->getSize(), buf.second->getData(), buf.second->getType(), buf.second->getUsage())) {
-                Log::error("Cannot create GPU buffer '%s' (%zu bytes) for mesh entity %lu; resource pool may be exhausted",
+                Log::error("Cannot create GPU buffer '%s' (%zu bytes) for mesh entity %u; resource pool may be exhausted",
                            buf.first.c_str(), buf.second->getSize(), entity);
                 for (BufferRender* created : buffersCreatedThisLoad) {
                     created->destroyBuffer();
@@ -2839,7 +2852,7 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint16_t pipelin
         // (SSR uses its own G-buffer shader, built below). A depth fork is built even
         // without a pass, so its uniforms and build errors show up in the editor.
         const bool needPrepass = scene->isDepthPrepassEnabled();
-        bool needDepthPass = (hasShadows && mesh.castShadows) || scene->isSSAOEnabled() || needPrepass;
+        bool needDepthPass = (hasShadows && mesh.castShadows) || scene->isSSAOEnabled() || needPrepass || hasWaterDepth;
         if (needDepthPass || !mesh.customDepthShader.empty()){
             mesh.submeshes[i].depthShaderProperties = ShaderPool::getDepthMeshProperties(
                 p_depthTexture, mesh.submeshes[i].hasSkinning, mesh.submeshes[i].hasMorphTarget,
@@ -4239,16 +4252,15 @@ void RenderSystem::destroySSAO(){
     currentSSAOTexture = NULL;
 }
 
-bool RenderSystem::ensureSSAOFramebuffers(unsigned int width, unsigned int height){
+// only the depth pre-pass target, for water and post-process depth without SSAO
+bool RenderSystem::ensureDepthPrePassFramebuffer(unsigned int width, unsigned int height){
     if (width == 0 || height == 0)
         return false;
 
-    if (ssaoDepthFramebuffer.isCreated() && ssaoWidth == width && ssaoHeight == height)
+    if (ssaoDepthFramebuffer.isCreated() && ssaoDepthFramebuffer.getWidth() == width && ssaoDepthFramebuffer.getHeight() == height)
         return true;
 
     ssaoDepthFramebuffer.destroy();
-    ssaoFramebuffer.destroy();
-    ssaoBlurFramebuffer.destroy();
 
     // depth pre-pass target: packed depth in color, sampled point-exact
     ssaoDepthFramebuffer.setWidth(width);
@@ -4258,6 +4270,19 @@ bool RenderSystem::ensureSSAOFramebuffers(unsigned int width, unsigned int heigh
     ssaoDepthFramebuffer.setWrapU(TextureWrap::CLAMP_TO_EDGE);
     ssaoDepthFramebuffer.setWrapV(TextureWrap::CLAMP_TO_EDGE);
     ssaoDepthFramebuffer.create();
+
+    return ssaoDepthFramebuffer.isCreated();
+}
+
+bool RenderSystem::ensureSSAOFramebuffers(unsigned int width, unsigned int height){
+    if (!ensureDepthPrePassFramebuffer(width, height))
+        return false;
+
+    if (ssaoFramebuffer.isCreated() && ssaoBlurFramebuffer.isCreated() && ssaoWidth == width && ssaoHeight == height)
+        return true;
+
+    ssaoFramebuffer.destroy();
+    ssaoBlurFramebuffer.destroy();
 
     ssaoFramebuffer.setWidth(width);
     ssaoFramebuffer.setHeight(height);
@@ -4279,7 +4304,7 @@ bool RenderSystem::ensureSSAOFramebuffers(unsigned int width, unsigned int heigh
     ssaoWidth = width;
     ssaoHeight = height;
 
-    return ssaoDepthFramebuffer.isCreated() && ssaoFramebuffer.isCreated() && ssaoBlurFramebuffer.isCreated();
+    return ssaoFramebuffer.isCreated() && ssaoBlurFramebuffer.isCreated();
 }
 
 void RenderSystem::renderSSAO(CameraComponent& camera, TextureRender* sharedDepth){
@@ -4357,7 +4382,7 @@ void RenderSystem::renderDepthPrePass(CameraComponent& camera){
 
     ssaoPassRender.setClearColor(Vector4(1.0, 1.0, 1.0, 1.0)); // background -> depth ~1.0
     ssaoPassRender.startRenderPass(&ssaoDepthFramebuffer.getRender());
-    passResolution = Vector2((float)ssaoWidth, (float)ssaoHeight);
+    passResolution = Vector2((float)ssaoDepthFramebuffer.getWidth(), (float)ssaoDepthFramebuffer.getHeight());
 
     auto transforms = scene->getComponentArray<Transform>();
     for (int i = 0; i < transforms->size(); i++){
@@ -4380,6 +4405,8 @@ void RenderSystem::renderDepthPrePass(CameraComponent& camera){
         drawMeshDepth(mesh, transform, camera.farClip, camera.frustumPlanes, params, instmesh, terrain, tilemap, true, PIP_DEPTH, 0, &mainLodView);
     }
     ssaoPassRender.endRenderPass();
+
+    depthPrePassRendered = true;
 }
 
 bool RenderSystem::ensureGBufferFramebuffer(unsigned int width, unsigned int height){
@@ -5932,6 +5959,528 @@ void RenderSystem::destroySky(Entity entity, SkyComponent& sky){
     SystemRender::addQueueCommand(&changeDestroy, new check_load_t{scene, entity});
 }
 
+namespace {
+    constexpr float WATER_TWO_PI = 6.2831853f;
+
+    struct WaterWave{
+        Vector2 direction; // on world XZ
+        float amplitude;
+        float wavelength;
+    };
+
+    // the waves water.vert sums, from the authored wave settings
+    void getWaterWaves(const WaterComponent& water, WaterWave (&waves)[WATER_WAVE_COUNT]){
+        static const float lengthScale[WATER_WAVE_COUNT] = {1.0f, 0.61f, 0.38f, 0.24f};
+        static const float angleOffset[WATER_WAVE_COUNT] = {0.0f, 0.47f, -0.39f, 0.83f}; // radians
+
+        float scaleSum = 0.0f;
+        for (int i = 0; i < WATER_WAVE_COUNT; i++){
+            scaleSum += lengthScale[i];
+        }
+
+        const float baseAngle = Angle::defaultToRad(water.waveDirection);
+        const float length = std::max(water.waveLength, 0.01f);
+        const float height = std::max(water.waveHeight, 0.0f);
+
+        for (int i = 0; i < WATER_WAVE_COUNT; i++){
+            const float angle = baseAngle + angleOffset[i];
+            waves[i].direction = Vector2(std::cos(angle), -std::sin(angle)); // +X rotated around Y
+            waves[i].wavelength = length * lengthScale[i];
+            waves[i].amplitude = height * lengthScale[i] / scaleSum; // crests in phase reach waveHeight
+        }
+    }
+
+    // crest pinch, capped before the waves fold over
+    float getWaterSteepness(const WaterComponent& water, const WaterWave (&waves)[WATER_WAVE_COUNT]){
+        float slope = 0.0f;
+        for (int i = 0; i < WATER_WAVE_COUNT; i++){
+            slope += (WATER_TWO_PI / waves[i].wavelength) * waves[i].amplitude;
+        }
+
+        const float steepness = std::clamp(water.waveSteepness, 0.0f, 1.0f);
+        return (slope > 0.0f) ? std::min(steepness, 1.0f / slope) : steepness;
+    }
+
+    // deep water dispersion: longer waves travel faster
+    float getWaterWaveFrequency(const WaterComponent& water, const WaterWave& wave){
+        const float k = WATER_TWO_PI / wave.wavelength;
+        return std::sqrt(9.81f * k) * water.waveSpeed;
+    }
+
+    // the wave sum of water.vert at the world point p: the surface offset, and its slopes along x and z
+    Vector3 sumWaterWaves(const WaterComponent& water, const WaterWave (&waves)[WATER_WAVE_COUNT], float steepness, const Vector2& p, Vector3& tangent, Vector3& binormal){
+        Vector3 offset(0.0f, 0.0f, 0.0f);
+        tangent = Vector3(1.0f, 0.0f, 0.0f);
+        binormal = Vector3(0.0f, 0.0f, 1.0f);
+
+        for (int i = 0; i < WATER_WAVE_COUNT; i++){
+            const Vector2& d = waves[i].direction;
+            const float a = waves[i].amplitude;
+            const float k = WATER_TWO_PI / waves[i].wavelength;
+            const float f = k * (d.x * p.x + d.y * p.y) - water.wavePhase[i];
+            const float s = std::sin(f);
+            const float c = std::cos(f);
+            const float qa = steepness * a;
+
+            offset += Vector3(qa * d.x * c, a * s, qa * d.y * c);
+            tangent += Vector3(-qa * k * d.x * d.x * s, a * k * d.x * c, -qa * k * d.x * d.y * s);
+            binormal += Vector3(-qa * k * d.x * d.y * s, a * k * d.y * c, -qa * k * d.y * d.y * s);
+        }
+
+        return offset;
+    }
+}
+
+// the surface offset over the world point (x, z), from the grid point the waves move onto it
+Vector3 RenderSystem::getWaterSurfaceOffset(const WaterComponent& water, float x, float z, Vector3* normal){
+    WaterWave waves[WATER_WAVE_COUNT];
+    getWaterWaves(water, waves);
+    const float steepness = getWaterSteepness(water, waves);
+
+    // Newton steps on p + offset(p) = (x, z), a map the steepness cap keeps from folding
+    Vector2 p(x, z);
+    Vector3 tangent, binormal;
+    Vector3 offset = sumWaterWaves(water, waves, steepness, p, tangent, binormal);
+    for (int i = 0; i < 8; i++){
+        const Vector2 residual(p.x + offset.x - x, p.y + offset.z - z);
+        if (residual.squaredLength() < 1.0e-8f)
+            break;
+
+        const float det = tangent.x * binormal.z - binormal.x * tangent.z;
+        if (det > 1.0e-4f){
+            p.x -= (binormal.z * residual.x - binormal.x * residual.y) / det;
+            p.y -= (tangent.x * residual.y - tangent.z * residual.x) / det;
+        }else{
+            p -= residual;
+        }
+        offset = sumWaterWaves(water, waves, steepness, p, tangent, binormal);
+    }
+
+    if (normal){
+        *normal = binormal.crossProduct(tangent).normalized();
+    }
+
+    return offset;
+}
+
+// Built-in ripples: a sum of sines on whole wave numbers, so the map tiles seamlessly
+std::shared_ptr<TextureRender> RenderSystem::getDefaultWaterNormalMap(){
+    static const std::string id = "water|normal|default";
+
+    if (std::shared_ptr<TextureRender> cached = TexturePool::get(id)){
+        return cached;
+    }
+
+    struct Ripple{
+        int kx;
+        int ky;
+        float slope;
+        float phase;
+    };
+
+    // fixed seed: the same ripples on every run and platform
+    uint32_t seed = 1337u;
+    auto random01 = [&seed](){
+        seed = seed * 1664525u + 1013904223u;
+        return (float)(seed >> 8) * (1.0f / 16777216.0f);
+    };
+
+    std::vector<Ripple> ripples;
+    float meanSquare = 0.0f;
+    while (ripples.size() < 40){
+        const float angle = random01() * WATER_TWO_PI;
+        const float cycles = 3.0f + random01() * 15.0f;
+        const int kx = (int)std::lround(std::cos(angle) * cycles);
+        const int ky = (int)std::lround(std::sin(angle) * cycles);
+        if (kx == 0 && ky == 0)
+            continue;
+        const float k2 = (float)(kx * kx + ky * ky);
+        const float slope = WATER_TWO_PI / std::pow(k2, 0.7f);
+        ripples.push_back({kx, ky, slope, random01() * WATER_TWO_PI});
+        meanSquare += 0.5f * slope * slope * k2;
+    }
+
+    // slopes scaled to a fixed root mean square, calm on average and steep in places
+    const float scale = 0.45f / std::sqrt(meanSquare);
+
+    const int size = 256;
+    std::vector<uint32_t> pixels((size_t)size * size);
+    for (int y = 0; y < size; y++){
+        for (int x = 0; x < size; x++){
+            float dx = 0.0f;
+            float dy = 0.0f;
+            for (const Ripple& ripple : ripples){
+                const float c = ripple.slope * std::cos(WATER_TWO_PI * (ripple.kx * x + ripple.ky * y) / size + ripple.phase);
+                dx += c * ripple.kx;
+                dy += c * ripple.ky;
+            }
+            Vector3 normal(-dx * scale, -dy * scale, 1.0f);
+            normal.normalize();
+            const uint32_t r = (uint32_t)std::lround((normal.x * 0.5f + 0.5f) * 255.0f);
+            const uint32_t g = (uint32_t)std::lround((normal.y * 0.5f + 0.5f) * 255.0f);
+            const uint32_t b = (uint32_t)std::lround((normal.z * 0.5f + 0.5f) * 255.0f);
+            pixels[y * size + x] = (0xFFu << 24) | (b << 16) | (g << 8) | r;
+        }
+    }
+
+    void* data[1] = {pixels.data()};
+    size_t dataSize[1] = {pixels.size() * sizeof(uint32_t)};
+
+    std::shared_ptr<TextureRender> render = std::make_shared<TextureRender>();
+    // mipmapped, so distant ripples average out instead of shimmering
+    if (!render->createTexture(id, size, size, ColorFormat::RGBA, TextureType::TEXTURE_2D, 1, data, dataSize,
+            TextureFilter::LINEAR_MIPMAP_LINEAR, TextureFilter::LINEAR, TextureWrap::REPEAT, TextureWrap::REPEAT)){
+        render->destroyTexture();
+        return NULL;
+    }
+
+    TexturePool::add(id, render);
+    return render;
+}
+
+bool RenderSystem::loadWater(Entity entity, WaterComponent& water, uint16_t pipelines){
+
+    if (!Engine::isViewLoaded())
+        return false;
+
+    ObjectRender& render = water.render;
+
+    render.beginLoad(PrimitiveType::TRIANGLES);
+
+    water.shaderProperties = ShaderPool::getWaterProperties(hasFog, water.depthEffects, water.planarReflection);
+    water.customShaderId = ShaderPool::registerCustomShader(water.customShader);
+    water.shader = ShaderPool::get(ShaderType::WATER, water.shaderProperties, water.customShaderId);
+    if (!water.shader->isCreated()){
+        // A custom shader that failed to compile falls back to the built-in shader (so the
+        // object stays visible and loading finishes); retried after its source changes.
+        if (water.customShaderId != 0 && ShaderPool::isShaderBuildFailed(ShaderType::WATER, water.shaderProperties, water.customShaderId)){
+            Log::error("Custom shader '%s' failed to compile; using the built-in shader", water.customShader.c_str());
+            water.customShaderId = 0;
+            water.shader = ShaderPool::get(ShaderType::WATER, water.shaderProperties, 0);
+        }
+        if (!water.shader->isCreated())
+            return false;
+    }
+    render.setShader(water.shader.get());
+    ShaderData& shaderData = water.shader.get()->shaderData;
+
+    // built-in ripples as fallback, recreated after a view loss clears the pools
+    if (!water.defaultNormalMap || !water.defaultNormalMap->isCreated()){
+        water.defaultNormalMap = getDefaultWaterNormalMap();
+    }
+    TextureRender* normalRender = water.normalTexture.getRender(water.defaultNormalMap.get());
+    if (!normalRender || !normalRender->isCreated())
+        return false;
+    render.addTexture(shaderData.getTextureIndex(TextureShaderType::WATERNORMAL), ShaderStageType::FRAGMENT, normalRender);
+    water.needUpdateTexture = false;
+
+    water.slotVSParams = shaderData.getUniformBlockIndex(UniformBlockType::WATER_VS_PARAMS);
+    water.slotFSParams = shaderData.getUniformBlockIndex(UniformBlockType::WATER_FS_PARAMS);
+    water.slotFSLighting = shaderData.getUniformBlockIndex(UniformBlockType::FS_LIGHTING);
+    water.slotFSFog = hasFog ? shaderData.getUniformBlockIndex(UniformBlockType::FS_FOG) : -1;
+    water.customVSParams.resolve(shaderData, "u_vs_customParams");
+    water.customFSParams.resolve(shaderData, "u_fs_customParams");
+    water.customVSParams.writeValues(water.shaderUniforms);
+    water.customFSParams.writeValues(water.shaderUniforms);
+    water.needUpdateShaderUniforms = false;
+
+    // grid on local XZ, kept by reloads that only change the shader
+    const unsigned int cells = std::clamp(water.subdivisions, 1u, (unsigned int)MAX_WATER_SUBDIVISIONS);
+    if (water.indexCount == 0 || water.gridCells != cells || water.gridSize != water.size){
+        const unsigned int row = cells + 1;
+        const float width = water.size.x;
+        const float depth = water.size.y;
+
+        water.buffer.clearAll();
+        water.buffer.addAttribute(AttributeType::POSITION, 3);
+        Attribute* positions = water.buffer.getAttribute(AttributeType::POSITION);
+        for (unsigned int z = 0; z < row; z++){
+            for (unsigned int x = 0; x < row; x++){
+                water.buffer.addVector3(positions, Vector3(
+                    width * ((float)x / (float)cells - 0.5f),
+                    0.0f,
+                    depth * ((float)z / (float)cells - 0.5f)));
+            }
+        }
+
+        // finer grids pass the 16-bit index limit
+        water.indices.clearAll();
+        water.indices.addAttribute(AttributeType::INDEX, AttributeDataType::UNSIGNED_INT, 1, 0);
+        water.indices.setStride(sizeof(uint32_t));
+        Attribute* attIndex = water.indices.getAttribute(AttributeType::INDEX);
+        for (unsigned int z = 0; z < cells; z++){
+            for (unsigned int x = 0; x < cells; x++){
+                const uint32_t i0 = z * row + x;
+                const uint32_t i1 = i0 + 1;
+                const uint32_t i2 = i0 + row;
+                const uint32_t i3 = i2 + 1;
+                // counter-clockwise seen from above
+                water.indices.addUInt32(attIndex, i0);
+                water.indices.addUInt32(attIndex, i2);
+                water.indices.addUInt32(attIndex, i1);
+                water.indices.addUInt32(attIndex, i1);
+                water.indices.addUInt32(attIndex, i2);
+                water.indices.addUInt32(attIndex, i3);
+            }
+        }
+
+        water.indexCount = cells * cells * 6;
+        water.gridCells = cells;
+        water.gridSize = water.size;
+    }
+    Attribute* attVertex = water.buffer.getAttribute(AttributeType::POSITION);
+
+    // a retried load may already hold them
+    water.buffer.getRender()->destroyBuffer();
+    water.indices.getRender()->destroyBuffer();
+    if (!water.buffer.getRender()->createBuffer(water.buffer.getSize(), water.buffer.getData(), water.buffer.getType(), water.buffer.getUsage()) ||
+        !water.indices.getRender()->createBuffer(water.indices.getSize(), water.indices.getData(), water.indices.getType(), water.indices.getUsage())){
+        Log::error("Cannot create the water grid buffers of entity %u", entity);
+        water.buffer.getRender()->destroyBuffer();
+        water.indices.getRender()->destroyBuffer();
+        return false;
+    }
+
+    render.addAttribute(shaderData.getAttrIndex(AttributeType::POSITION), water.buffer.getRender(), attVertex->getElements(), attVertex->getDataType(), water.buffer.getStride(), attVertex->getOffset(), attVertex->getNormalized(), attVertex->getPerInstance());
+    render.setIndex(water.indices.getRender(), AttributeDataType::UNSIGNED_INT, 0);
+
+    // no culling to show it from below, depth written for the transparencies drawn after it
+    if (!render.endLoad(pipelines, false, true, CullingMode::BACK, WindingOrder::CCW)){
+        return false;
+    }
+
+    water.needReload = false;
+    water.loadCalled = true;
+    SystemRender::addQueueCommand(&changeWaterLoaded, new check_load_t{scene, entity});
+
+    return true;
+}
+
+void RenderSystem::advanceWater(WaterComponent& water, float seconds){
+    WaterWave waves[WATER_WAVE_COUNT];
+    getWaterWaves(water, waves);
+
+    // integrated so speed changes do not jump, wrapped to keep precision
+    for (int i = 0; i < WATER_WAVE_COUNT; i++){
+        water.wavePhase[i] = std::fmod(water.wavePhase[i] + getWaterWaveFrequency(water, waves[i]) * seconds, WATER_TWO_PI);
+    }
+
+    // the two ripple layers drift apart, in normal map tiles
+    const float travel = water.rippleSpeed * seconds / std::max(water.normalScale, 0.01f);
+    const Vector2 direction = waves[0].direction;
+    const Vector2 across(direction.x * 0.6f - direction.y * 0.8f, direction.x * 0.8f + direction.y * 0.6f);
+    water.rippleOffset[0] += direction * travel;
+    water.rippleOffset[1] += across * (travel * 0.75f);
+    for (int i = 0; i < 2; i++){
+        water.rippleOffset[i].x -= std::floor(water.rippleOffset[i].x);
+        water.rippleOffset[i].y -= std::floor(water.rippleOffset[i].y);
+    }
+
+    water.time = std::fmod(water.time + seconds, 10000.0f);
+}
+
+void RenderSystem::updateWater(Entity entity, WaterComponent& water, Transform& transform, uint16_t pipelines, double dt){
+    // applied by draw()
+    water.pendingTime += (float)dt;
+
+    // the variant follows the scene fog and the water switches
+    if (water.loaded && !water.needReload &&
+            water.shaderProperties != ShaderPool::getWaterProperties(hasFog, water.depthEffects, water.planarReflection)){
+        water.needReload = true;
+    }
+
+    if (water.loaded && water.needReload){
+        destroyWater(entity, water);
+    }
+    if (!water.loadCalled){
+        loadWater(entity, water, pipelines);
+    }
+
+    // bounds grow by the wave height up, down and sideways
+    const float height = std::max(water.waveHeight, 0.0f);
+    const float halfWidth = std::abs(water.size.x) * 0.5f;
+    const float halfDepth = std::abs(water.size.y) * 0.5f;
+    water.aabb = AABB(-halfWidth, -height, -halfDepth, halfWidth, height, halfDepth);
+
+    AABB flat(-halfWidth, 0.0f, -halfDepth, halfWidth, 0.0f, halfDepth);
+    water.worldAABB = transform.modelMatrix * flat;
+    water.worldAABB.setExtents(
+        water.worldAABB.getMinimum() - Vector3(height, height, height),
+        water.worldAABB.getMaximum() + Vector3(height, height, height));
+}
+
+bool RenderSystem::drawWater(Entity entity, WaterComponent& water, Transform& transform, CameraComponent& camera, Transform& camTransform, PipelineType pipType, bool mainCamera){
+    if (!water.loaded || water.needReload || water.indexCount == 0)
+        return false;
+
+    if (!isInsideCamera(camera, water.worldAABB))
+        return false;
+
+    ObjectRender& render = water.render;
+    ShaderData& shaderData = water.shader.get()->shaderData;
+
+    if (water.needUpdateTexture || water.normalTexture.isFramebufferOutdated()){
+        TextureRender* normalRender = water.normalTexture.getRender(water.defaultNormalMap.get());
+        if (normalRender && normalRender->isCreated()){
+            render.addTexture(shaderData.getTextureIndex(TextureShaderType::WATERNORMAL), ShaderStageType::FRAGMENT, normalRender);
+            water.needUpdateTexture = false;
+        }
+    }
+
+    if (!render.beginDraw(pipType)){
+        water.needReload = true;
+        return false;
+    }
+
+    // textures owned elsewhere can be recreated any frame, so they are bound on every draw
+    TextureRender* skyTexture = &emptyCubeWhite;
+    TextureRender* irradiance = &emptyCubeBlack;
+    Vector4 envColor;
+    bool iblAmbient = false;
+    auto skys = scene->getComponentArray<SkyComponent>();
+    if (skys->size() > 0){
+        SkyComponent& sky = skys->getComponentFromIndex(0);
+        if (sky.loaded){
+            TextureRender* texture = sky.texture.getRender(&emptyCubeWhite);
+            if (texture && texture->isCreated()){
+                skyTexture = texture;
+            }
+        }
+        if (hasIBL && sky.irradianceMap){
+            irradiance = sky.irradianceMap.get();
+            iblAmbient = true;
+        }
+        Vector3 linColor = Color::sRGBToLinear(Vector3(sky.color.x, sky.color.y, sky.color.z));
+        envColor = Vector4(linColor.x, linColor.y, linColor.z, Angle::defaultToRad(sky.rotation));
+    }else{
+        // no sky, reflects the background color
+        Vector4 background = scene->getBackgroundColor();
+        Vector3 linColor = Color::sRGBToLinear(Vector3(background.x, background.y, background.z));
+        envColor = Vector4(linColor.x, linColor.y, linColor.z, 0.0f);
+    }
+    render.addTexture(shaderData.getTextureIndex(TextureShaderType::SKYCUBE), ShaderStageType::FRAGMENT, skyTexture);
+    render.addTexture(shaderData.getTextureIndex(TextureShaderType::IRRADIANCEMAP), ShaderStageType::FRAGMENT, irradiance);
+    loadSpotMaskTexture(shaderData, render);
+
+    render.addTexture(shaderData.getTextureIndex(TextureShaderType::DEPTHTEXTURE), ShaderStageType::FRAGMENT, currentSceneDepthTexture ? currentSceneDepthTexture : &emptyWhite);
+
+    if (water.planarReflection){
+        TextureRender* reflection = &emptyBlack;
+        CameraComponent* refCam = scene->findComponent<CameraComponent>(getMirrorCamera(entity));
+        if (refCam && refCam->framebuffer && refCam->framebuffer->isCreated()){
+            reflection = &refCam->framebuffer->getRender().getColorTexture();
+        }
+        render.addTexture(shaderData.getTextureIndex(TextureShaderType::WATERREFLECTION), ShaderStageType::FRAGMENT, reflection);
+    }
+
+    WaterWave waves[WATER_WAVE_COUNT];
+    getWaterWaves(water, waves);
+
+    vs_water_t vsParams;
+    vsParams.modelMatrix = transform.modelMatrix;
+    vsParams.viewProjectionMatrix = camera.viewProjectionMatrix;
+    if (isRenderingFlipped(camera)){
+        vsParams.viewProjectionMatrix = Matrix4::scaleMatrix(Vector3(1, -1, 1)) * vsParams.viewProjectionMatrix;
+    }
+    for (int i = 0; i < WATER_WAVE_COUNT; i++){
+        vsParams.waves[i] = Vector4(waves[i].direction.x, waves[i].direction.y, waves[i].amplitude, waves[i].wavelength);
+    }
+    vsParams.phases = Vector4(water.wavePhase[0], water.wavePhase[1], water.wavePhase[2], water.wavePhase[3]);
+    vsParams.params = Vector4(getWaterSteepness(water, waves), 0.0f, 0.0f, 0.0f);
+
+    fs_water_t fsParams;
+    fsParams.viewProjection = camera.viewProjectionMatrix;
+    fsParams.invViewProjection = camera.viewProjectionMatrix.inverse();
+    fsParams.reflectionViewProjection = water.reflectionViewProjection;
+    fsParams.shallowColor = Vector4(water.shallowColor.x, water.shallowColor.y, water.shallowColor.z, water.depthFade);
+    fsParams.deepColor = Vector4(water.deepColor.x, water.deepColor.y, water.deepColor.z, currentSceneDepthTexture ? 1.0f : 0.0f);
+    fsParams.foamColor = Vector4(water.foamColor.x, water.foamColor.y, water.foamColor.z, water.shoreFoam);
+    fsParams.ripples = Vector4(1.0f / std::max(water.normalScale, 0.01f), water.normalStrength, water.waveHeight, std::clamp(water.crestFoam, 0.0f, 1.0f));
+    fsParams.rippleOffsets = Vector4(water.rippleOffset[0].x, water.rippleOffset[0].y, water.rippleOffset[1].x, water.rippleOffset[1].y);
+    fsParams.surface = Vector4(water.reflectivity, water.specularIntensity, std::clamp(water.roughness, 0.0f, 1.0f), water.reflectionDistortion);
+    fsParams.envColor = envColor;
+    fsParams.eyePos = Vector4(camTransform.worldPosition.x, camTransform.worldPosition.y, camTransform.worldPosition.z, water.time);
+    // the planar reflection is rendered for the main camera, other views reflect the sky
+    fsParams.flags = Vector4(hasLights ? 1.0f : 0.0f, iblAmbient ? 1.0f : 0.0f, (mainCamera && water.planarReflection) ? 1.0f : 0.0f, 0.0f);
+
+    render.applyUniformBlock(water.slotVSParams, sizeof(vs_water_t), &vsParams);
+    render.applyUniformBlock(water.slotFSParams, sizeof(fs_water_t), &fsParams);
+    render.applyUniformBlock(water.slotFSLighting, sizeof(fs_lighting_t), &fs_lighting);
+    if (water.slotFSFog != -1){
+        render.applyUniformBlock(water.slotFSFog, sizeof(float) * 8, &fs_fog);
+    }
+    applyCustomUniforms(render, water.customVSParams, water.customFSParams, water.shaderUniforms, water.needUpdateShaderUniforms, frameTime, passResolution);
+
+    render.draw(0, water.indexCount, 1);
+
+    return true;
+}
+
+void RenderSystem::destroyWater(Entity entity, WaterComponent& water){
+    if (!water.loaded)
+        return;
+
+    if (!water.needReload){
+        //Destroy shader
+        if (water.shader){
+            water.shader.reset();
+            ShaderPool::remove(ShaderType::WATER, water.shaderProperties, water.customShaderId);
+        }
+
+        //Destroy texture
+        water.normalTexture.destroy();
+
+        // the pool keeps the built-in ripples while another water still uses them
+        if (water.defaultNormalMap){
+            water.defaultNormalMap.reset();
+            TexturePool::remove("water|normal|default");
+        }
+    }
+
+    //Destroy render
+    water.render.destroy();
+
+    //Destroy buffers
+    if (!water.needReload){
+        water.buffer.clearAll();
+        water.indices.clearAll();
+        water.indexCount = 0;
+    }
+    water.buffer.getRender()->destroyBuffer();
+    water.indices.getRender()->destroyBuffer();
+
+    //Shaders uniforms
+    water.slotVSParams = -1;
+    water.slotFSParams = -1;
+    water.slotFSLighting = -1;
+    water.slotFSFog = -1;
+    water.customVSParams.clear();
+    water.customFSParams.clear();
+
+    SystemRender::addQueueCommand(&changeWaterDestroy, new check_load_t{scene, entity});
+}
+
+// A box across a water surface from the eye, and within its area, is covered by the water
+bool RenderSystem::isBehindWater(const std::vector<WaterRenderData>& waters, const AABB& box){
+    if (box.isNull() || !box.isFinite())
+        return false;
+
+    for (const WaterRenderData& waterData : waters){
+        const AABB& area = waterData.water->worldAABB;
+        if (box.getMaximum().x < area.getMinimum().x || box.getMinimum().x > area.getMaximum().x ||
+                box.getMaximum().z < area.getMinimum().z || box.getMinimum().z > area.getMaximum().z)
+            continue;
+
+        // the surface this pass draws under the box center
+        const Vector3 center = box.getCenter();
+        const float surface = waterData.transform->worldPosition.y + getWaterSurfaceOffset(*waterData.water, center.x, center.z).y;
+        if (waterData.eyeAbove ? (box.getMaximum().y < surface) : (box.getMinimum().y > surface))
+            return true;
+    }
+
+    return false;
+}
+
 void RenderSystem::destroyLight(LightComponent& light){
     // shadow maps live in the RenderSystem-owned atlases, so a light owns no GPU
     // resources of its own to release here
@@ -6125,11 +6674,12 @@ void RenderSystem::updateCamera(CameraComponent& camera, Transform& transform){
     updateCameraFrustumPlanes(camera.viewProjectionMatrix, camera.frustumPlanes);
 }
 
-// Creates the internal render-to-texture camera a mirror drives: a hidden system
-// entity (not serialized, not shown in the editor) whose framebuffer feeds the
-// mirror mesh base texture. Returns the camera entity.
+// Creates the internal render-to-texture camera a mirror (or a reflecting water)
+// drives: a hidden system entity (not serialized, not shown in the editor) whose
+// framebuffer feeds the mirror mesh base texture. Returns the camera entity.
 Entity RenderSystem::createMirrorCamera(Entity mirrorEntity){
-    if (!scene->findComponent<MirrorComponent>(mirrorEntity))
+    const bool mirror = scene->findComponent<MirrorComponent>(mirrorEntity) != NULL;
+    if (!mirror && !scene->findComponent<WaterComponent>(mirrorEntity))
         return NULL_ENTITY;
 
     const Entity existing = getMirrorCamera(mirrorEntity);
@@ -6144,8 +6694,10 @@ Entity RenderSystem::createMirrorCamera(Entity mirrorEntity){
     cam.type = CameraType::CAMERA_PERSPECTIVE;
     cam.renderToTexture = true;
     cam.autoResize = false; // driven entirely by updateMirrors
-    int w = (Engine::getCanvasWidth() > 0) ? Engine::getCanvasWidth() : 1024;
-    int h = (Engine::getCanvasHeight() > 0) ? Engine::getCanvasHeight() : 1024;
+    // ripples distort a water reflection, so half the canvas is enough there
+    const int divisor = mirror ? 1 : 2;
+    int w = (Engine::getCanvasWidth() > 0) ? std::max(Engine::getCanvasWidth() / divisor, 1) : 1024;
+    int h = (Engine::getCanvasHeight() > 0) ? std::max(Engine::getCanvasHeight() / divisor, 1) : 1024;
     cam.framebuffer->setWidth(w);
     cam.framebuffer->setHeight(h);
     // keep authored fields in sync so RenderSystem::update doesn't resize it back
@@ -6189,9 +6741,23 @@ void RenderSystem::destroyMirrorCamera(Entity entity){
 // so the reflected scene is rendered into that camera's framebuffer. Runs after
 // the main camera is updated and before the draw pass. The handedness flip from
 // the reflection is compensated by invertCulling on the reflection camera.
+// Reflecting waters get the same camera, mirrored across their water level.
 void RenderSystem::updateMirrors(Entity mainCameraEntity){
     auto mirrors = scene->getComponentArray<MirrorComponent>();
-    if (mirrors->size() == 0)
+    auto waters = scene->getComponentArray<WaterComponent>();
+
+    // a water that stopped reflecting the scene gives its camera back
+    bool reflectingWater = false;
+    for (size_t i = 0; i < waters->size(); i++){
+        Entity entity = waters->getEntity(i);
+        if (waters->getComponentFromIndex(i).planarReflection){
+            reflectingWater = true;
+        }else if (getMirrorCamera(entity) != NULL_ENTITY && !scene->findComponent<MirrorComponent>(entity)){
+            destroyMirrorCamera(entity);
+        }
+    }
+
+    if (mirrors->size() == 0 && !reflectingWater)
         return;
 
     CameraComponent* mainCameraPtr = scene->findComponent<CameraComponent>(mainCameraEntity);
@@ -6212,14 +6778,12 @@ void RenderSystem::updateMirrors(Entity mainCameraEntity){
     // mainCameraPtr must not be used past here (may dangle after camera creation)
 
     // Creating a reflection camera appends to the camera/transform arrays but never
-    // the mirror array, so indexed iteration over mirrors stays valid in one pass;
-    // transforms/cameras are (re)fetched after creation since their arrays may move.
-    for (size_t i = 0; i < mirrors->size(); i++){
-        Entity entity = mirrors->getEntity(i);
-
-        Entity camEntity = getMirrorCamera(entity);
+    // the mirror or water arrays, so indexed iteration over them stays valid. The plane
+    // is copied, as the owner's transform may move.
+    auto driveReflectionCamera = [&](Entity owner, Vector3 worldNormal, Vector3 worldPoint) -> CameraComponent* {
+        Entity camEntity = getMirrorCamera(owner);
         if (camEntity == NULL_ENTITY || !scene->isEntityCreated(camEntity)){
-            camEntity = createMirrorCamera(entity);
+            camEntity = createMirrorCamera(owner);
             // the loop counting render-to-texture cameras has run, but draw() still
             // renders this one in the same frame
             hasMultipleCameras = true;
@@ -6227,13 +6791,10 @@ void RenderSystem::updateMirrors(Entity mainCameraEntity){
 
         CameraComponent* refCam = scene->findComponent<CameraComponent>(camEntity);
         Transform* refCamTransform = scene->findComponent<Transform>(camEntity);
-        Transform* mirrorTransform = scene->findComponent<Transform>(entity);
-        if (!refCam || !refCamTransform || !mirrorTransform)
-            continue;
+        if (!refCam || !refCamTransform)
+            return NULL;
 
-        // mirror plane in world space (entity position, world-rotated normal)
-        Vector3 worldNormal = (mirrorTransform->worldRotation * mirrors->getComponentFromIndex(i).normal).normalize();
-        Plane plane(worldNormal, mirrorTransform->worldPosition);
+        Plane plane(worldNormal, worldPoint);
 
         // reflection view keeps the handedness flip (true mirror); winding is
         // restored by invertCulling so reflected geometry shows front faces
@@ -6277,6 +6838,23 @@ void RenderSystem::updateMirrors(Entity mainCameraEntity){
         refCam->viewProjectionMatrix = obliqueProjection * refCam->viewMatrix;
         updateCameraFrustumPlanes(refCam->viewProjectionMatrix, refCam->frustumPlanes);
 
+        return refCam;
+    };
+
+    for (size_t i = 0; i < mirrors->size(); i++){
+        Entity entity = mirrors->getEntity(i);
+
+        Transform* mirrorTransform = scene->findComponent<Transform>(entity);
+        if (!mirrorTransform)
+            continue;
+
+        // mirror plane in world space (entity position, world-rotated normal)
+        Vector3 worldNormal = (mirrorTransform->worldRotation * mirrors->getComponentFromIndex(i).normal).normalize();
+
+        CameraComponent* refCam = driveReflectionCamera(entity, worldNormal, mirrorTransform->worldPosition);
+        if (!refCam)
+            continue;
+
         MeshComponent* mesh = scene->findComponent<MeshComponent>(entity);
         if (mesh && mesh->numSubmeshes > 0){
             // (re)bind the reflection framebuffer to the mesh base texture every frame.
@@ -6293,6 +6871,24 @@ void RenderSystem::updateMirrors(Entity mainCameraEntity){
             // (USE_MIRROR shader); logical matrix, the shader handles the texture origin
             mesh->mirrorViewProjection = refCam->viewProjectionMatrix;
         }
+    }
+
+    for (size_t i = 0; i < waters->size(); i++){
+        if (!waters->getComponentFromIndex(i).planarReflection)
+            continue;
+
+        Entity entity = waters->getEntity(i);
+        Transform* waterTransform = scene->findComponent<Transform>(entity);
+        if (!waterTransform)
+            continue;
+
+        // mirrored across the water level
+        CameraComponent* refCam = driveReflectionCamera(entity, Vector3(0.0f, 1.0f, 0.0f), waterTransform->worldPosition);
+        if (!refCam)
+            continue;
+
+        // logical matrix for the projective lookup in water.frag
+        waters->getComponentFromIndex(i).reflectionViewProjection = refCam->viewProjectionMatrix;
     }
 }
 
@@ -6323,6 +6919,7 @@ void RenderSystem::updatePoints(PointsComponent& points, Transform& transform, C
     float worldScale = std::max(transform.worldScale.x, std::max(transform.worldScale.y, transform.worldScale.z));
 
     points.numVisible = 0;
+    points.aabb.setNull();
     size_t pointsSize = (points.points.size() < points.maxPoints)? points.points.size() : points.maxPoints;
     if (points.renderPoints.size() < pointsSize){
         points.renderPoints.resize(pointsSize);
@@ -6336,6 +6933,7 @@ void RenderSystem::updatePoints(PointsComponent& points, Transform& transform, C
             renderPoint.size = points.points[i].size * worldScale;
             renderPoint.rotation = points.points[i].rotation;
             renderPoint.textureRect = points.points[i].textureRect;
+            points.aabb.merge(renderPoint.position);
             points.numVisible++;
         }
     }
@@ -6618,6 +7216,14 @@ void RenderSystem::needReloadSky() {
     }
 }
 
+void RenderSystem::needReloadWater() {
+    auto waters = scene->getComponentArray<WaterComponent>();
+    for (int i = 0; i < waters->size(); i++) {
+        WaterComponent& water = waters->getComponentFromIndex(i);
+        water.needReload = true;
+    }
+}
+
 bool RenderSystem::isAllLoaded() const{
     size_t loaded;
     size_t total;
@@ -6675,6 +7281,13 @@ void RenderSystem::getLoadCount(size_t& loaded, size_t& total) const{
     for (int i = 0; i < skyArray->size(); i++) {
         const SkyComponent& sky = skyArray->getComponentFromIndex(i);
         count(sky.loaded);
+    }
+
+    // Check WaterComponents, one without a Transform never loads
+    auto waters = scene->getComponentArray<WaterComponent>();
+    for (int i = 0; i < waters->size(); i++) {
+        if (scene->findComponent<Transform>(waters->getEntity(i)))
+            count(waters->getComponentFromIndex(i).loaded);
     }
 }
 
@@ -7134,6 +7747,29 @@ void RenderSystem::changeDestroy(void* data){
     delete (check_load_t*)data;
 }
 
+void RenderSystem::changeWaterLoaded(void* data){
+    check_load_t* loadObj = (check_load_t*)data;
+
+    if (Engine::isViewLoaded()){
+        if (WaterComponent* water = loadObj->scene->findComponent<WaterComponent>(loadObj->entity)){
+            water->loaded = true;
+        }
+    }
+
+    delete loadObj;
+}
+
+void RenderSystem::changeWaterDestroy(void* data){
+    check_load_t* loadObj = (check_load_t*)data;
+
+    if (WaterComponent* water = loadObj->scene->findComponent<WaterComponent>(loadObj->entity)){
+        water->loaded = false;
+        water->loadCalled = false;
+    }
+
+    delete loadObj;
+}
+
 bool RenderSystem::usesAlphaMask(const Material& material, bool textureShadow){
     return material.alphaMode == MaterialAlphaMode::MASK ||
         (material.alphaMode == MaterialAlphaMode::AUTO && textureShadow);
@@ -7339,6 +7975,15 @@ uint16_t RenderSystem::getScenePipelines() const{
         pipelines |= PIP_RTT_INVERT;
     }
 
+    // and so does the mirrored camera of a reflecting water
+    auto waters = scene->getComponentArray<WaterComponent>();
+    for (int i = 0; i < waters->size(); i++){
+        if (waters->getComponentFromIndex(i).planarReflection){
+            pipelines |= PIP_RTT_INVERT;
+            break;
+        }
+    }
+
     return pipelines;
 }
 
@@ -7529,6 +8174,7 @@ void RenderSystem::update(double dt){
         needReloadPoints();
         needReloadLines();
         needReloadSky();
+        needReloadWater();
     }
 
     loadLights(numLights);
@@ -7572,6 +8218,27 @@ void RenderSystem::update(double dt){
 
     if (hasIBL != newHasIBL){
         hasIBL = newHasIBL;
+        needReloadMeshes();
+    }
+
+    // before the meshes, so they reload with depth shaders in this same frame
+    bool newHasWaterDepth = false;
+    auto waters = scene->getComponentArray<WaterComponent>();
+    for (int i = 0; i < waters->size(); i++){
+        WaterComponent& water = waters->getComponentFromIndex(i);
+        Entity entity = waters->getEntity(i);
+        Transform* transform = scene->findComponent<Transform>(entity);
+        if (!transform)
+            continue;
+
+        if (water.depthEffects){
+            newHasWaterDepth = true;
+        }
+        updateWater(entity, water, *transform, pipelines, dt);
+    }
+
+    if (hasWaterDepth != newHasWaterDepth){
+        hasWaterDepth = newHasWaterDepth;
         needReloadMeshes();
     }
 
@@ -7962,6 +8629,8 @@ void RenderSystem::update(double dt){
 
 void RenderSystem::draw(){
     std::priority_queue<TransparentRenderData, std::vector<TransparentRenderData>, TransparentRenderComparison> transparentRenders;
+    // drawn before the water, which covers them
+    decltype(transparentRenders) behindWaterRenders;
 
     auto transforms = scene->getComponentArray<Transform>();
     auto cameras = scene->getComponentArray<CameraComponent>();
@@ -8197,7 +8866,18 @@ void RenderSystem::draw(){
     // render-to-texture camera = 1..N-1; cameras past the cap reuse the main view
     int terrainViewCounter = 0;
 
+    // render-to-texture cameras first, so the main camera samples this frame's reflections
+    std::vector<int> cameraOrder;
     for (int i = 0; i < cameras->size(); i++){
+        if (cameras->getEntity(i) != mainCameraEntity){
+            cameraOrder.push_back(i);
+        }
+    }
+    if (cameras->hasEntity(mainCameraEntity)){
+        cameraOrder.push_back((int)cameras->getIndex(mainCameraEntity));
+    }
+
+    for (int i : cameraOrder){
         Entity cameraEntity = cameras->getEntity(i);
         CameraComponent& camera = cameras->getComponentFromIndex(i);
         Transform* cameraTransformPtr = scene->findComponent<Transform>(cameraEntity);
@@ -8216,6 +8896,9 @@ void RenderSystem::draw(){
             terrainViewCounter++;
             terrainView = (terrainViewCounter < MAX_TERRAIN_VIEWS) ? terrainViewCounter : 0;
         }
+
+        depthPrePassRendered = false;
+        currentSceneDepthTexture = NULL;
 
         // Screen-space reflections (main camera only). The G-buffer geometry pass runs
         // FIRST so SSAO can share its depth (a single geometry pre-pass feeds both
@@ -8282,7 +8965,7 @@ void RenderSystem::draw(){
 
                 // a pass sampling depth needs the pre-pass when neither SSR nor SSAO ran
                 if (postProcessNeedsDepth && !useSSR && !scene->isSSAOEnabled()
-                        && ensureSSAOFramebuffers(pw, ph)){
+                        && ensureDepthPrePassFramebuffer(pw, ph)){
                     renderDepthPrePass(camera);
                 }
             }
@@ -8296,6 +8979,31 @@ void RenderSystem::draw(){
         if (isMainCamera && scene->isSSAOEnabled()){
             TextureRender* sharedDepth = useSSR ? &gbufferFramebuffer.getRender().getColorAttachmentTexture(0) : nullptr;
             renderSSAO(camera, sharedDepth);
+        }
+
+        // water depth from the SSR G-buffer, a pre-pass already drawn or its own pre-pass
+        if (isMainCamera && hasWaterDepth){
+            if (useSSR){
+                currentSceneDepthTexture = &gbufferFramebuffer.getRender().getColorAttachmentTexture(0);
+            }else{
+                if (!depthPrePassRendered){
+                    unsigned int dw = (unsigned int)Engine::getViewRect().getWidth();
+                    unsigned int dh = (unsigned int)Engine::getViewRect().getHeight();
+                    if (useFixedRes){
+                        dw = fixedResWidth;
+                        dh = fixedResHeight;
+                    }else if (camera.renderToTexture){
+                        dw = camera.framebuffer->getWidth();
+                        dh = camera.framebuffer->getHeight();
+                    }
+                    if (ensureDepthPrePassFramebuffer(dw, dh)){
+                        renderDepthPrePass(camera);
+                    }
+                }
+                if (depthPrePassRendered){
+                    currentSceneDepthTexture = &ssaoDepthFramebuffer.getRender().getColorTexture();
+                }
+            }
         }
 
         // whether this camera's color pass targets an offscreen framebuffer
@@ -8377,6 +9085,24 @@ void RenderSystem::draw(){
 
         passResolution = Vector2(colorPassViewport.getWidth(), colorPassViewport.getHeight());
 
+        // the waters this pass draws: transparencies across them go before them, the rest after
+        std::vector<WaterRenderData> passWaters;
+        std::vector<TransparentRenderData> afterWaterRenders; // in submission order
+        auto waters = scene->getComponentArray<WaterComponent>();
+        for (int w = 0; w < waters->size(); w++){
+            Entity waterEntity = waters->getEntity(w);
+            WaterComponent& water = waters->getComponentFromIndex(w);
+            Transform* waterTransform = scene->findComponent<Transform>(waterEntity);
+            // a water cannot sample its own reflection while rendering it
+            if (!water.loaded || water.needReload || !waterTransform || !waterTransform->visible ||
+                    getMirrorCamera(waterEntity) == cameraEntity || !isInsideCamera(camera, water.worldAABB))
+                continue;
+
+            const Vector3& eye = cameraTransform.worldPosition;
+            const bool eyeAbove = eye.y > waterTransform->worldPosition.y + getWaterSurfaceOffset(water, eye.x, eye.z).y;
+            passWaters.push_back({waterEntity, &water, waterTransform, eyeAbove});
+        }
+
         //---------Draw opaque meshes and UI----------
         bool hasActiveScissor = false;
 
@@ -8420,7 +9146,8 @@ void RenderSystem::draw(){
                     const float distance = mesh.worldAABB.isNull() ? 0.0f : mesh.worldAABB.squaredDistance(cameraTransform.worldPosition);
                     opaqueRenders.push_back({entity, &mesh, instmesh, terrain, tilemap, &transform, distance});
                 }else if (distanceSort){
-                    transparentRenders.push({TransparentRenderType::MESH, entity, &mesh, nullptr, instmesh, terrain, tilemap, &transform, transform.distanceToCamera});
+                    auto& renders = isBehindWater(passWaters, mesh.worldAABB) ? behindWaterRenders : transparentRenders;
+                    renders.push({TransparentRenderType::MESH, entity, &mesh, nullptr, instmesh, terrain, tilemap, &transform, transform.distanceToCamera});
                 }
             }
 
@@ -8565,7 +9292,12 @@ void RenderSystem::draw(){
                     // ones refreshed in update()
                     TilemapComponent* tilemap = scene->findComponent<TilemapComponent>(entity);
 
-                    drawMesh(entity, mesh, transform, camera, cameraTransform, colorPip, instmesh, terrain, tilemap, terrainView, instanceView, lodView);
+                    // a transparency on the eye's side of a water waits for it
+                    if (mesh.transparent && !passWaters.empty() && !isBehindWater(passWaters, mesh.worldAABB)){
+                        afterWaterRenders.push_back({TransparentRenderType::MESH, entity, &mesh, nullptr, instmesh, terrain, tilemap, &transform, transform.distanceToCamera});
+                    }else{
+                        drawMesh(entity, mesh, transform, camera, cameraTransform, colorPip, instmesh, terrain, tilemap, terrainView, instanceView, lodView);
+                    }
                 }
 
             }else if (signature.test(scene->getComponentId<UIComponent>())){
@@ -8586,10 +9318,19 @@ void RenderSystem::draw(){
                 // buffer per frame (VALIDATE_UPDATEBUF_ONCE). Every camera reuses the main
                 // camera's ordering computed in update().
                 if (transform.visible && !samplesCameraTarget(camera, points.texture)){
-                    if (!points.transparent || !distanceSort){
+                    if (!points.transparent){
                         drawPoints(points, transform, camera, cameraTransform, colorPip);
                     }else{
-                        transparentRenders.push({TransparentRenderType::POINTS, entity, nullptr, &points, nullptr, nullptr, nullptr, &transform, transform.distanceToCamera});
+                        const bool behindWater = !passWaters.empty() && isBehindWater(passWaters, transform.modelMatrix * points.aabb);
+                        const TransparentRenderData renderData = {TransparentRenderType::POINTS, entity, nullptr, &points, nullptr, nullptr, nullptr, &transform, transform.distanceToCamera};
+                        if (distanceSort){
+                            auto& renders = behindWater ? behindWaterRenders : transparentRenders;
+                            renders.push(renderData);
+                        }else if (!behindWater && !passWaters.empty()){
+                            afterWaterRenders.push_back(renderData);
+                        }else{
+                            drawPoints(points, transform, camera, cameraTransform, colorPip);
+                        }
                     }
                 }
 
@@ -8608,16 +9349,31 @@ void RenderSystem::draw(){
             }
         }
 
-        //---------Draw transparent renderers----------
-        while (!transparentRenders.empty()){
-            TransparentRenderData renderData = transparentRenders.top();
-
+        auto drawTransparent = [&](const TransparentRenderData& renderData){
             if (renderData.type == TransparentRenderType::MESH){
                 drawMesh(renderData.entity, *renderData.mesh, *renderData.transform, camera, cameraTransform, colorPip, renderData.instmesh, renderData.terrain, renderData.tilemap, terrainView, instanceView, lodView);
             }else if (renderData.type == TransparentRenderType::POINTS){
                 drawPoints(*renderData.points, *renderData.transform, camera, cameraTransform, colorPip);
             }
+        };
 
+        // the water writes depth, so the transparencies it covers go first
+        while (!behindWaterRenders.empty()){
+            drawTransparent(behindWaterRenders.top());
+            behindWaterRenders.pop();
+        }
+
+        //---------Draw water----------
+        for (const WaterRenderData& waterData : passWaters){
+            drawWater(waterData.entity, *waterData.water, *waterData.transform, camera, cameraTransform, colorPip, isMainCamera);
+        }
+
+        //---------Draw transparent renderers----------
+        for (const TransparentRenderData& renderData : afterWaterRenders){
+            drawTransparent(renderData);
+        }
+        while (!transparentRenders.empty()){
+            drawTransparent(transparentRenders.top());
             transparentRenders.pop();
         }
 
@@ -8641,6 +9397,16 @@ void RenderSystem::draw(){
             renderFixedResolutionBlit();
         }
 
+    }
+
+    // waves move after drawing, so Water::getHeight in the next update matches the next draw
+    auto waters = scene->getComponentArray<WaterComponent>();
+    for (int i = 0; i < waters->size(); i++){
+        WaterComponent& water = waters->getComponentFromIndex(i);
+        if (water.pendingTime > 0.0f){
+            advanceWater(water, water.pendingTime);
+            water.pendingTime = 0.0f;
+        }
     }
 
     //---------Missing some shaders----------
@@ -8728,5 +9494,10 @@ void RenderSystem::onComponentRemoved(Entity entity, ComponentId componentId) {
         destroyReflectionProbe(entity, probe);
         hasReflectionProbes = scene->getComponentArray<ReflectionProbeComponent>()->size() > 1;
         needReloadMeshes();
+    } else if (componentId == scene->getComponentId<WaterComponent>()) {
+        WaterComponent& water = scene->getComponent<WaterComponent>(entity);
+        destroyWater(entity, water);
+        // a mirror on the same entity recreates its camera next frame
+        destroyMirrorCamera(entity);
     }
 }

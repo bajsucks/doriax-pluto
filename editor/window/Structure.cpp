@@ -713,6 +713,11 @@ void editor::Structure::showNewEntityMenu(bool isScene, Entity parent, bool addT
         openParent = parent;
     }
 
+    if (ImGui::MenuItem(ICON_FA_WATER"  Water")){
+        CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Water", EntityCreationType::WATER, parent, addToBundle));
+        openParent = parent;
+    }
+
     ImGui::EndMenu();
 }
 
@@ -777,6 +782,8 @@ std::string editor::Structure::getObjectIcon(Signature signature, Scene* scene){
         return ICON_FA_VECTOR_SQUARE;
     }else if (signature.test(scene->getComponentId<MirrorComponent>())){
         return ICON_FA_CLONE;
+    }else if (signature.test(scene->getComponentId<WaterComponent>())){
+        return ICON_FA_WATER;
     }else if (signature.test(scene->getComponentId<MeshComponent>())){
         return ICON_FA_DICE_D20;
     }else if (signature.test(scene->getComponentId<SkyComponent>())){

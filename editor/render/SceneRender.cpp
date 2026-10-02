@@ -79,6 +79,9 @@ AABB editor::SceneRender::getAABB(Entity entity, bool local){
         }else{
             return mesh.worldAABB;
         }
+    }else if (signature.test(scene->getComponentId<WaterComponent>())){
+        WaterComponent& water = scene->getComponent<WaterComponent>(entity);
+        return local ? water.aabb : water.worldAABB;
     }else if (signature.test(scene->getComponentId<UIComponent>())){
         if (!signature.test(scene->getComponentId<PolygonComponent>()) && signature.test(scene->getComponentId<UILayoutComponent>())){
             UILayoutComponent& layout = scene->getComponent<UILayoutComponent>(entity);

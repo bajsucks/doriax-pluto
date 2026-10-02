@@ -9,6 +9,7 @@
 #include "component/InstancedMeshComponent.h"
 #include "component/ModelComponent.h"
 #include "component/SkyComponent.h"
+#include "component/WaterComponent.h"
 #include "component/ReflectionProbeComponent.h"
 #include "component/UILayoutComponent.h"
 #include "component/UIComponent.h"
@@ -35,6 +36,7 @@
 #include <unordered_map>
 
 namespace doriax{
+	// mirrored by the u_fs_lighting block of mesh.frag and water.frag
 	typedef struct fs_lighting_t {
 	    Vector4 direction_range[MAX_LIGHTS];
 	    Vector4 color_intensity[MAX_LIGHTS];
@@ -147,6 +149,29 @@ namespace doriax{
 		Vector4 params; // x = flip source Y on sample (GL swapchain destination), yzw unused
 	} fs_blit_t;
 
+	typedef struct vs_water_t {
+		Matrix4 modelMatrix;
+		Matrix4 viewProjectionMatrix; // render matrix, Y-flipped for offscreen GL passes
+		Vector4 waves[WATER_WAVE_COUNT]; // xy = direction, z = amplitude, w = wavelength
+		Vector4 phases;
+		Vector4 params; // x = crest steepness
+	} vs_water_t;
+
+	typedef struct fs_water_t {
+		Matrix4 viewProjection;           // logical, finds the scene depth under the fragment
+		Matrix4 invViewProjection;        // logical, unprojects the scene depth
+		Matrix4 reflectionViewProjection; // logical, of the planar reflection camera
+		Vector4 shallowColor;  // rgb = linear color, w = depth fade
+		Vector4 deepColor;     // rgb = linear color, w = 1 when the scene depth is valid
+		Vector4 foamColor;     // rgb = linear color, w = shore foam depth
+		Vector4 ripples;       // x = 1 / tile size, y = strength, z = wave height, w = crest foam
+		Vector4 rippleOffsets; // xy = first layer, zw = second layer (tiles)
+		Vector4 surface;       // x = reflectivity, y = specular, z = roughness, w = reflection distortion
+		Vector4 envColor;      // rgb = sky tint (linear), w = sky rotation (radians)
+		Vector4 eyePos;        // xyz = eye of this pass, w = time
+		Vector4 flags;         // x = scene lights on, y = IBL ambient available, z = planar reflection
+	} fs_water_t;
+
 	typedef struct vs_points_params_t {
 		Matrix4 mvpMatrix;
 		float pointScale;
@@ -187,6 +212,14 @@ namespace doriax{
 			TilemapComponent* tilemap;
 			Transform* transform;
 			float distanceToCamera;
+		};
+
+		// water a camera pass draws
+		struct WaterRenderData{
+			Entity entity;
+			WaterComponent* water;
+			Transform* transform;
+			bool eyeAbove;
 		};
 
 		// One merged run of tilemap indices to draw, in elements relative to the
@@ -261,6 +294,8 @@ namespace doriax{
 		bool hasFog;
 		bool hasIBL;
 		bool hasReflectionProbes;
+		// a water samples the scene depth, so meshes need their depth shaders
+		bool hasWaterDepth;
 		bool hasMultipleCameras;
 		// extra cameras the last frame drew, to catch the switch back to main only
 		bool lastMultiCameraDraw;
@@ -414,6 +449,9 @@ namespace doriax{
 		int ssaoSlotParams;
 		int ssaoBlurSlotParams;
 		TextureRender* currentSSAOTexture; // AO bound to meshes this camera (or empty white)
+		// packed opaque depth of this camera pass, or null
+		TextureRender* currentSceneDepthTexture;
+		bool depthPrePassRendered;
 
 		// engine-written custom uniforms: seconds since startup, sampled once per draw(),
 		// and the size of the target being drawn (shadow slot, SSAO depth or camera color)
@@ -487,6 +525,9 @@ namespace doriax{
 
 		static void changeLoaded(void* data);
 		static void changeDestroy(void* data);
+		// water can share its entity with a mesh, so it has its own callbacks
+		static void changeWaterLoaded(void* data);
+		static void changeWaterDestroy(void* data);
 
 		static bool samplesCameraTarget(const CameraComponent& camera, const MeshComponent& mesh);
 		static bool samplesCameraTarget(const CameraComponent& camera, const Texture& texture);
@@ -617,6 +658,7 @@ namespace doriax{
 		// SSAO
 		void loadSSAO();
 		void destroySSAO();
+		bool ensureDepthPrePassFramebuffer(unsigned int width, unsigned int height);
 		bool ensureSSAOFramebuffers(unsigned int width, unsigned int height);
 		// sharedDepth != null reuses an existing packed-depth texture (the SSR G-buffer),
 		// skipping the SSAO depth pre-pass; null runs the pre-pass
@@ -666,6 +708,13 @@ namespace doriax{
 		bool drawSky(SkyComponent& sky, PipelineType pipType);
 		void destroySky(Entity entity, SkyComponent& sky);
 
+		std::shared_ptr<TextureRender> getDefaultWaterNormalMap();
+		void updateWater(Entity entity, WaterComponent& water, Transform& transform, uint16_t pipelines, double dt);
+		void advanceWater(WaterComponent& water, float seconds);
+		bool drawWater(Entity entity, WaterComponent& water, Transform& transform, CameraComponent& camera, Transform& camTransform, PipelineType pipType, bool mainCamera);
+		void destroyWater(Entity entity, WaterComponent& water);
+		static bool isBehindWater(const std::vector<WaterRenderData>& waters, const AABB& box);
+
 		void destroyLight(LightComponent& light);
 		void destroyCamera(CameraComponent& camera, bool entityDestroyed);
 		
@@ -699,6 +748,9 @@ namespace doriax{
 		// the editor derives export keys from it, so the rule lives in one place
 		static bool usesAlphaMask(const Material& material, bool textureShadow);
 
+		// water surface offset over the world point (x, z) as drawn, for Water::getHeight
+		static Vector3 getWaterSurfaceOffset(const WaterComponent& water, float x, float z, Vector3* normal = nullptr);
+
 		// copies the stacked scene composite to the swapchain (Engine::endCompositeFramebuffer)
 		void presentFramebufferToSwapchain(Framebuffer* source);
 
@@ -710,6 +762,7 @@ namespace doriax{
 		bool loadLines(Entity entity, LinesComponent& lines, uint16_t pipelines);
 		bool loadUI(Entity entity, UIComponent& ui, uint16_t pipelines, bool isText);
 		bool loadSky(Entity entity, SkyComponent& sky, uint16_t pipelines);
+		bool loadWater(Entity entity, WaterComponent& water, uint16_t pipelines);
 
 		void updateFramebuffer(CameraComponent& camera);
 		void updateTransform(Transform& transform, Entity entity);
@@ -734,6 +787,7 @@ namespace doriax{
 		void needUpdatePostProcessUniforms();
 		void needReloadUIs();
 		void needReloadSky();
+		void needReloadWater();
 		void prepareMeshForDataReload(Entity entity, MeshComponent& mesh);
 
 		bool isAllLoaded() const;

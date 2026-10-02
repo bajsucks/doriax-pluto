@@ -648,6 +648,11 @@ bool editor::CreateEntityCmd::execute(){
         scene->addComponent<MeshComponent>(entity, {});
         scene->addComponent<TerrainComponent>(entity, {});
 
+    }else if (type == EntityCreationType::WATER){
+
+        scene->addComponent<Transform>(entity, {});
+        scene->addComponent<WaterComponent>(entity, {});
+
     }
 
     scene->setEntityName(entity, entityName);

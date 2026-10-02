@@ -54,8 +54,11 @@ namespace doriax::editor{
         // for changes outside the probe itself, like a mesh leaving the capture pass
         UpdateFlags_Reflection_Probe_Recapture_All = (uint64_t)1 << 34,
         UpdateFlags_Terrain_Foliage     = (uint64_t)1 << 35,
-        // shaderUniforms of Mesh/UI/Points/Lines/Sky (no shader reload)
+        // shaderUniforms of Mesh/UI/Points/Lines/Sky/Water (no shader reload)
         UpdateFlags_Shader_Uniforms     = (uint64_t)1 << 36,
+        // water grid size or subdivisions
+        UpdateFlags_Water               = (uint64_t)1 << 37,
+        UpdateFlags_Water_Texture       = (uint64_t)1 << 38,
         // handlers that touch the whole scene, must be masked out when applying all flags
         UpdateFlags_SceneWide = UpdateFlags_Scene_Mesh_Reload | UpdateFlags_Reflection_Probe_Recapture_All
     };
@@ -115,7 +118,8 @@ namespace doriax::editor{
         Occluder2DComponent,
         // Keep new component types at the end: their ordinal is used as the bit
         // position in EntityBundle's in-memory component override mask.
-        ReflectionProbeComponent
+        ReflectionProbeComponent,
+        WaterComponent
     };
 
     enum class PropertyType{
@@ -189,7 +193,7 @@ namespace doriax::editor{
         // writing the value, and puts the whole mask back on undo.
         static uint32_t* getSubmeshOverrideMask(EntityRegistry* registry, Entity entity, ComponentType component, const std::string& propertyName, uint32_t& propertyFields);
 
-        // custom uniform blocks of a Mesh/UI/Points/Lines/Sky component's loaded shader, vertex first
+        // custom uniform blocks of a Mesh/UI/Points/Lines/Sky/Water component's loaded shader, vertex first
         static std::vector<const CustomUniformBlock*> getShaderUniformBlocks(EntityRegistry* registry, Entity entity, ComponentType component);
         // declarations the engine cannot upload right: mixed int/float blocks, one name with two types
         static std::vector<std::string> getShaderUniformWarnings(const std::vector<const CustomUniformBlock*>& blocks);

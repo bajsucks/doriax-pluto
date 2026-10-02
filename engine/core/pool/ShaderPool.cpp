@@ -106,6 +106,10 @@ bool ShaderPool::parseShaderTypeToken(const std::string& typeToken, ShaderType& 
         shaderType = ShaderType::POSTPROCESS;
         return true;
     }
+    if (typeToken == "water") {
+        shaderType = ShaderType::WATER;
+        return true;
+    }
 
     return false;
 }
@@ -403,6 +407,7 @@ std::string ShaderPool::getShaderTypeName(ShaderType shaderType, bool lowerCase)
         case ShaderType::SHADOW2D: return lowerCase ? "shadow2d" : "Shadow 2D";
         case ShaderType::BLIT:   return lowerCase ? "blit"   : "Blit";
         case ShaderType::POSTPROCESS: return lowerCase ? "postprocess" : "Post-process";
+        case ShaderType::WATER:  return lowerCase ? "water"  : "Water";
         default:                 return lowerCase ? "unknown": "Unknown";
     }
 }
@@ -423,6 +428,7 @@ int ShaderPool::getShaderPropertyCount(ShaderType shaderType){
         case ShaderType::COMPOSITE: return 0;
         case ShaderType::SHADOW2D: return 0;
         case ShaderType::BLIT:   return 0;
+        case ShaderType::WATER:  return 3;
         default:                 return 0;
     }
 }
@@ -502,6 +508,12 @@ std::string ShaderPool::getShaderPropertyName(ShaderType shaderType, int bit, bo
         switch (bit) {
             case 0: return shortName ? "Vc3" : "Vertex Color 3";
             case 1: return shortName ? "Vc4" : "Vertex Color 4";
+        }
+    } else if (shaderType == ShaderType::WATER) {
+        switch (bit) {
+            case 0: return shortName ? "Fog" : "Fog";
+            case 1: return shortName ? "Dep" : "Scene Depth";
+            case 2: return shortName ? "Prf" : "Planar Reflection";
         }
     }
     return shortName ? "?" : "Unknown";
@@ -786,6 +798,16 @@ uint32_t ShaderPool::getLinesProperties(bool vertexColorVec3, bool vertexColorVe
 
     prop |= vertexColorVec3	 ? (1 <<  0) : 0;
     prop |= vertexColorVec4  ? (1 <<  1) : 0;
+
+    return prop;
+}
+
+uint32_t ShaderPool::getWaterProperties(bool fog, bool sceneDepth, bool planarReflection){
+    uint32_t prop = 0;
+
+    prop |= fog              ? (1 <<  0) : 0;
+    prop |= sceneDepth       ? (1 <<  1) : 0;
+    prop |= planarReflection ? (1 <<  2) : 0;
 
     return prop;
 }

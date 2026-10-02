@@ -221,6 +221,10 @@ int ShaderData::getUniformBlockIndex(UniformBlockType type){
         ustr = "u_vs_shadow2dParams";
     }else if (type == UniformBlockType::BLIT_FS_PARAMS){
         ustr = "u_fs_blitParams";
+    }else if (type == UniformBlockType::WATER_VS_PARAMS){
+        ustr = "u_vs_waterParams";
+    }else if (type == UniformBlockType::WATER_FS_PARAMS){
+        ustr = "u_fs_waterParams";
     }
 
     if (ustr.empty()){
@@ -346,6 +350,10 @@ std::pair<int, int> ShaderData::getTextureIndex(TextureShaderType type){
         texstr = "u_shadow2DAtlas";
     }else if (type == TextureShaderType::SPOTMASKATLAS){
         texstr = "u_spotMaskAtlas";
+    }else if (type == TextureShaderType::WATERNORMAL){
+        texstr = "u_waterNormalTexture";
+    }else if (type == TextureShaderType::WATERREFLECTION){
+        texstr = "u_reflectionTexture";
     }
 
     if (texstr.empty()){

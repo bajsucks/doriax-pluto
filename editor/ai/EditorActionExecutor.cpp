@@ -813,7 +813,8 @@ bool parseEntityType(const std::string& typeName, EntityCreationType& type) {
         {"lines", EntityCreationType::LINES},
         {"mesh_polygon", EntityCreationType::MESH_POLYGON},
         {"terrain", EntityCreationType::TERRAIN},
-        {"reflection_probe", EntityCreationType::REFLECTION_PROBE}
+        {"reflection_probe", EntityCreationType::REFLECTION_PROBE},
+        {"water", EntityCreationType::WATER}
     };
     auto it = map.find(lower(typeName));
     if (it == map.end()) return false;
@@ -835,6 +836,7 @@ bool shaderTypeForComponent(ComponentType component, ShaderType& out) {
         case ComponentType::PointsComponent: out = ShaderType::POINTS; return true;
         case ComponentType::LinesComponent:  out = ShaderType::LINES;  return true;
         case ComponentType::SkyComponent:    out = ShaderType::SKYBOX; return true;
+        case ComponentType::WaterComponent:  out = ShaderType::WATER;  return true;
         default: return false;
     }
 }
@@ -869,7 +871,7 @@ const char* scenePropertyNameForShaderType(ShaderType type) {
 bool detectForkableComponent(EntityRegistry* registry, Entity entity, ComponentType& component, ShaderType& shaderType) {
     for (ComponentType candidate : {ComponentType::MeshComponent, ComponentType::UIComponent,
                                     ComponentType::PointsComponent, ComponentType::LinesComponent,
-                                    ComponentType::SkyComponent}) {
+                                    ComponentType::SkyComponent, ComponentType::WaterComponent}) {
         if (hasComponent(registry, entity, candidate)) {
             component = candidate;
             shaderTypeForComponent(candidate, shaderType);
@@ -889,7 +891,7 @@ bool resolveShaderComponent(SceneProject* sceneProject, const Json& args, Entity
     if (!componentArg.empty()) {
         if (!parseComponentType(componentArg, component)) { error = "Unknown component type."; return false; }
         if (!shaderTypeForComponent(component, shaderType)) {
-            error = "Component does not support custom shaders. Use Mesh/UI/Points/Lines/Sky.";
+            error = "Component does not support custom shaders. Use Mesh/UI/Points/Lines/Sky/Water.";
             return false;
         }
         if (!hasComponent(sceneProject->scene, entity, component)) {
@@ -897,7 +899,7 @@ bool resolveShaderComponent(SceneProject* sceneProject, const Json& args, Entity
             return false;
         }
     } else if (!detectForkableComponent(sceneProject->scene, entity, component, shaderType)) {
-        error = "Entity has no shader-capable component (Mesh/UI/Points/Lines/Sky).";
+        error = "Entity has no shader-capable component (Mesh/UI/Points/Lines/Sky/Water).";
         return false;
     }
     return true;
@@ -2435,7 +2437,7 @@ ActionResult EditorActionExecutor::inspectComponent(const Json& arguments) {
 
 ActionResult EditorActionExecutor::listComponentTypes() {
     Json components = Json::array();
-    for (int i = static_cast<int>(ComponentType::Transform); i <= static_cast<int>(ComponentType::ReflectionProbeComponent); ++i) {
+    for (int i = static_cast<int>(ComponentType::Transform); i <= static_cast<int>(ComponentType::WaterComponent); ++i) {
         ComponentType type = static_cast<ComponentType>(i);
         std::string name = Catalog::getComponentName(type);
         if (!name.empty()) {

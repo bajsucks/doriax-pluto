@@ -12,6 +12,7 @@
 #include "Fog.h"
 #include "ReflectionProbe.h"
 #include "SkyBox.h"
+#include "Water.h"
 #include "Object.h"
 #include "Camera.h"
 #include "Polygon.h"
@@ -413,6 +414,49 @@ void LuaBinding::registerObjectClasses(lua_State *L){
         .addFunction("setTextures", &ReflectionProbe::setTextures)
         .addFunction("setTexture", &ReflectionProbe::setTexture)
         .addFunction("refresh", &ReflectionProbe::refresh)
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
+        .deriveClass<Water, Object>("Water")
+        .addConstructor <void (*) (Scene*), void (*) (Scene*, Entity)> ()
+        .addFunction("load", &Water::load)
+        .addProperty("size", &Water::getSize, (void(Water::*)(Vector2))&Water::setSize)
+        .addFunction("setSize", (void(Water::*)(const float, const float))&Water::setSize)
+        .addProperty("subdivisions", &Water::getSubdivisions, &Water::setSubdivisions)
+        .addProperty("shallowColor", &Water::getShallowColor, (void(Water::*)(Vector3))&Water::setShallowColor)
+        .addFunction("setShallowColor", (void(Water::*)(const float, const float, const float))&Water::setShallowColor)
+        .addProperty("deepColor", &Water::getDeepColor, (void(Water::*)(Vector3))&Water::setDeepColor)
+        .addFunction("setDeepColor", (void(Water::*)(const float, const float, const float))&Water::setDeepColor)
+        .addProperty("depthFade", &Water::getDepthFade, &Water::setDepthFade)
+        .addProperty("waveHeight", &Water::getWaveHeight, &Water::setWaveHeight)
+        .addProperty("waveLength", &Water::getWaveLength, &Water::setWaveLength)
+        .addProperty("waveSpeed", &Water::getWaveSpeed, &Water::setWaveSpeed)
+        .addProperty("waveDirection", &Water::getWaveDirection, &Water::setWaveDirection)
+        .addProperty("waveSteepness", &Water::getWaveSteepness, &Water::setWaveSteepness)
+        .addFunction("setNormalTexture", &Water::setNormalTexture)
+        .addProperty("normalScale", &Water::getNormalScale, &Water::setNormalScale)
+        .addProperty("normalStrength", &Water::getNormalStrength, &Water::setNormalStrength)
+        .addProperty("rippleSpeed", &Water::getRippleSpeed, &Water::setRippleSpeed)
+        .addProperty("reflectivity", &Water::getReflectivity, &Water::setReflectivity)
+        .addProperty("specularIntensity", &Water::getSpecularIntensity, &Water::setSpecularIntensity)
+        .addProperty("roughness", &Water::getRoughness, &Water::setRoughness)
+        .addProperty("foamColor", &Water::getFoamColor, (void(Water::*)(Vector3))&Water::setFoamColor)
+        .addFunction("setFoamColor", (void(Water::*)(const float, const float, const float))&Water::setFoamColor)
+        .addProperty("shoreFoam", &Water::getShoreFoam, &Water::setShoreFoam)
+        .addProperty("crestFoam", &Water::getCrestFoam, &Water::setCrestFoam)
+        .addProperty("depthEffects", &Water::isDepthEffects, &Water::setDepthEffects)
+        .addProperty("planarReflection", &Water::isPlanarReflection, &Water::setPlanarReflection)
+        .addProperty("reflectionDistortion", &Water::getReflectionDistortion, &Water::setReflectionDistortion)
+        .addProperty("customShader", &Water::getCustomShader, &Water::setCustomShader)
+        .addFunction("setShaderUniform",
+            luabridge::overload<const std::string&, const Vector4&>(&Water::setShaderUniform),
+            luabridge::overload<const std::string&, const Vector3&>(&Water::setShaderUniform),
+            luabridge::overload<const std::string&, const Vector2&>(&Water::setShaderUniform),
+            luabridge::overload<const std::string&, float>(&Water::setShaderUniform))
+        .addFunction("getShaderUniform", &Water::getShaderUniform)
+        .addFunction("removeShaderUniform", &Water::removeShaderUniform)
+        .addFunction("getHeight", &Water::getHeight)
+        .addFunction("getNormal", &Water::getNormal)
         .endClass();
 
     luabridge::getGlobalNamespace(L)

@@ -1611,6 +1611,44 @@ std::string editor::Factory::createSkyComponent(int indentSpaces, EntityRegistry
     return code.str();
 }
 
+std::string editor::Factory::createWaterComponent(int indentSpaces, EntityRegistry* scene, Entity entity, const fs::path& projectPath, std::string sceneName, std::string entityName, bool assignExisting, const std::unordered_map<Entity, std::string>* entityVarNames) {
+    if (!scene->findComponent<WaterComponent>(entity)) return "";
+    WaterComponent& water = scene->getComponent<WaterComponent>(entity);
+    std::ostringstream code;
+    const std::string ind = indentation(indentSpaces);
+    code << ind << "WaterComponent water;\n";
+    code << ind << "water.size = " << formatVector2(water.size) << ";\n";
+    code << ind << "water.subdivisions = " << formatUInt(water.subdivisions) << ";\n";
+    code << ind << "water.shallowColor = " << formatVector3(water.shallowColor) << ";\n";
+    code << ind << "water.deepColor = " << formatVector3(water.deepColor) << ";\n";
+    code << ind << "water.depthFade = " << formatFloat(water.depthFade) << ";\n";
+    code << ind << "water.waveHeight = " << formatFloat(water.waveHeight) << ";\n";
+    code << ind << "water.waveLength = " << formatFloat(water.waveLength) << ";\n";
+    code << ind << "water.waveSpeed = " << formatFloat(water.waveSpeed) << ";\n";
+    code << ind << "water.waveDirection = " << formatFloat(water.waveDirection) << ";\n";
+    code << ind << "water.waveSteepness = " << formatFloat(water.waveSteepness) << ";\n";
+    code << formatTexture(indentSpaces, water.normalTexture, "water.normalTexture", projectPath);
+    code << ind << "water.normalScale = " << formatFloat(water.normalScale) << ";\n";
+    code << ind << "water.normalStrength = " << formatFloat(water.normalStrength) << ";\n";
+    code << ind << "water.rippleSpeed = " << formatFloat(water.rippleSpeed) << ";\n";
+    code << ind << "water.reflectivity = " << formatFloat(water.reflectivity) << ";\n";
+    code << ind << "water.specularIntensity = " << formatFloat(water.specularIntensity) << ";\n";
+    code << ind << "water.roughness = " << formatFloat(water.roughness) << ";\n";
+    code << ind << "water.foamColor = " << formatVector3(water.foamColor) << ";\n";
+    code << ind << "water.shoreFoam = " << formatFloat(water.shoreFoam) << ";\n";
+    code << ind << "water.crestFoam = " << formatFloat(water.crestFoam) << ";\n";
+    code << ind << "water.depthEffects = " << formatBool(water.depthEffects) << ";\n";
+    code << ind << "water.planarReflection = " << formatBool(water.planarReflection) << ";\n";
+    code << ind << "water.reflectionDistortion = " << formatFloat(water.reflectionDistortion) << ";\n";
+    if (!water.customShader.empty())
+        code << ind << "water.customShader = " << formatString(water.customShader) << ";\n";
+    if (!water.shaderUniforms.empty())
+        code << ind << "water.shaderUniforms = " << formatShaderUniforms(water.shaderUniforms) << ";\n";
+
+    addComponentCode(code, ind, sceneName, entityName, entity, "WaterComponent", "water", assignExisting);
+    return code.str();
+}
+
 std::string editor::Factory::formatBodyType(BodyType type) {
     switch (type) {
         case BodyType::STATIC: return "BodyType::STATIC";
@@ -2217,6 +2255,7 @@ std::string editor::Factory::createComponent(int indentSpaces, EntityRegistry* s
         case ComponentType::SoundComponent: return createSoundComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::ScriptComponent: return createScriptComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::SkyComponent: return createSkyComponent(indentSpaces, scene, entity, projectPath, sceneName, entityName, assignExisting, entityVarNames);
+        case ComponentType::WaterComponent: return createWaterComponent(indentSpaces, scene, entity, projectPath, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::Body2DComponent: return guardPhysicsCode(createBody2DComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames), "DORIAX_PHYSICS_2D");
         case ComponentType::Body3DComponent: return guardPhysicsCode(createBody3DComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames), "DORIAX_PHYSICS_3D");
         case ComponentType::Joint2DComponent: return guardPhysicsCode(createJoint2DComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames), "DORIAX_PHYSICS_2D");

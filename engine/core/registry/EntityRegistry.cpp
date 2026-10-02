@@ -62,6 +62,7 @@ EntityRegistry::EntityRegistry() {
     registerComponent<InstancedMeshComponent>();
     registerComponent<BundleComponent>();
     registerComponent<ReflectionProbeComponent>();
+    registerComponent<WaterComponent>();
 }
 
 EntityRegistry::EntityRegistry(EntityPool defaultPool) : EntityRegistry() {

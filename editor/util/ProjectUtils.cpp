@@ -142,6 +142,7 @@ std::string shaderTypeFileName(ShaderType shaderType) {
         case ShaderType::LINES:  return "lines";
         case ShaderType::SKYBOX: return "sky";
         case ShaderType::POSTPROCESS: return "postprocess";
+        case ShaderType::WATER:  return "water";
         default:                 return "";
     }
 }
@@ -975,6 +976,13 @@ void editor::ProjectUtils::addEntityComponent(EntityRegistry* registry, Entity e
                 registry->addComponent<ReflectionProbeComponent>(entity, Stream::decodeReflectionProbeComponent(componentNode));
             }
             break;
+        case ComponentType::WaterComponent:
+            if (!componentNode.IsDefined() || componentNode.IsNull()){
+                registry->addComponent<WaterComponent>(entity, {});
+            }else{
+                registry->addComponent<WaterComponent>(entity, Stream::decodeWaterComponent(componentNode));
+            }
+            break;
         case ComponentType::Light2DComponent:
             if (!componentNode.IsDefined() || componentNode.IsNull()){
                 registry->addComponent<Light2DComponent>(entity, {});
@@ -1424,6 +1432,12 @@ YAML::Node editor::ProjectUtils::removeEntityComponent(EntityRegistry* registry,
                 oldComponent = Stream::encodeReflectionProbeComponent(registry->getComponent<ReflectionProbeComponent>(entity));
             }
             registry->removeComponent<ReflectionProbeComponent>(entity);
+            break;
+        case ComponentType::WaterComponent:
+            if (encodeComponent){
+                oldComponent = Stream::encodeWaterComponent(registry->getComponent<WaterComponent>(entity));
+            }
+            registry->removeComponent<WaterComponent>(entity);
             break;
         case ComponentType::Light2DComponent:
             if (encodeComponent){
@@ -2010,6 +2024,7 @@ editor::ProjectUtils::EntityClassInfo editor::ProjectUtils::getEntityClassInfo(S
     if (signature.test(scene->getComponentId<PolygonComponent>()))     return objectClass("Polygon");
     if (signature.test(scene->getComponentId<MeshPolygonComponent>())) return meshClass("MeshPolygon");
     if (signature.test(scene->getComponentId<MirrorComponent>()))      return meshClass("Mirror");
+    if (signature.test(scene->getComponentId<WaterComponent>()))       return objectClass("Water");
     if (signature.test(scene->getComponentId<MeshComponent>()))        return meshClass("Mesh");
     if (signature.test(scene->getComponentId<SkyComponent>()))         return handleClass("SkyBox");
     if (signature.test(scene->getComponentId<FogComponent>()))         return handleClass("Fog");

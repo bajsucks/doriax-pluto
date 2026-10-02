@@ -669,6 +669,13 @@ bool editor::Project::visitAssetPathsInRegistry(EntityRegistry* registry, const 
         }
     });
 
+    visitComponents(registry->getComponentArray<WaterComponent>(), [&](WaterComponent& water) {
+        if (visitTexturePaths(water.normalTexture, transform)) {
+            water.needUpdateTexture = true;
+            changed = true;
+        }
+    });
+
     visitComponents(registry->getComponentArray<TerrainComponent>(), [&](TerrainComponent& terrain) {
         bool heightMapChanged = visitTexturePaths(terrain.heightMap, transform);
         bool terrainChanged = heightMapChanged;
@@ -817,6 +824,10 @@ SceneResources editor::Project::collectResourcesInRegistry(EntityRegistry* regis
 
     visitComponents(registry->getComponentArray<SkyComponent>(), [&](SkyComponent& sky) {
         addTexture(sky.texture, false);
+    });
+
+    visitComponents(registry->getComponentArray<WaterComponent>(), [&](WaterComponent& water) {
+        addTexture(water.normalTexture, false);
     });
 
     visitComponents(registry->getComponentArray<TerrainComponent>(), [&](TerrainComponent& terrain) {
@@ -1561,6 +1572,7 @@ void editor::Project::applyCustomShaderPathChange(const std::function<bool(std::
         applyToArray(registry->getComponentArray<PointsComponent>(), &PointsComponent::customShader);
         applyToArray(registry->getComponentArray<LinesComponent>(), &LinesComponent::customShader);
         applyToArray(registry->getComponentArray<SkyComponent>(), &SkyComponent::customShader);
+        applyToArray(registry->getComponentArray<WaterComponent>(), &WaterComponent::customShader);
         return changed;
     };
 
@@ -3477,6 +3489,14 @@ void editor::Project::collectSceneShaderKeys(const SceneProject* sceneProject, s
                 insertKeys(ShaderType::SKYBOX, 0, effectiveShaderId(sky.customShader, ShaderType::SKYBOX));
             }
         }
+
+        // from the authored fields, as the cached variant lacks fog while the editor hides it
+        if (signature.test(scene->getComponentId<WaterComponent>())) {
+            const WaterComponent& water = scene->getComponent<WaterComponent>(entity);
+            const bool sceneFog = scene->getComponentArray<FogComponent>()->size() > 0;
+            insertKeys(ShaderType::WATER, ShaderPool::getWaterProperties(sceneFog, water.depthEffects, water.planarReflection),
+                ShaderPool::registerCustomShader(water.customShader));
+        }
     }
 
     if (scene->isSSAOEnabled()) {
@@ -3564,6 +3584,8 @@ void editor::Project::invalidateCustomShaders() {
                 flagReload(ln->needReload, sceneLines || !ln->customShader.empty());
             if (SkyComponent* sky = scene->findComponent<SkyComponent>(entity))
                 flagReload(sky->needReload, sceneSky || !sky->customShader.empty());
+            if (WaterComponent* water = scene->findComponent<WaterComponent>(entity))
+                flagReload(water->needReload, !water->customShader.empty());
         }
 
         // post-process passes hold their shader directly, so the chain is rebuilt whole
@@ -5630,6 +5652,8 @@ AABB editor::Project::getEntityWorldAABB(Scene* scene, Entity entity, Scene* mai
 
     if (signature.test(scene->getComponentId<MeshComponent>())){
         aabb = scene->getComponent<MeshComponent>(entity).worldAABB;
+    }else if (signature.test(scene->getComponentId<WaterComponent>())){
+        aabb = scene->getComponent<WaterComponent>(entity).worldAABB;
     }else if (signature.test(scene->getComponentId<UIComponent>())){
         aabb = scene->getComponent<UIComponent>(entity).worldAABB;
         if (!signature.test(scene->getComponentId<PolygonComponent>()) && signature.test(scene->getComponentId<UILayoutComponent>())){
@@ -5733,6 +5757,8 @@ AABB editor::Project::getEntityLocalAABB(Scene* scene, Entity entity) const{
 
     if (signature.test(scene->getComponentId<MeshComponent>())){
         aabb = SceneRender::getMeshLocalAABB(scene->getComponent<MeshComponent>(entity));
+    }else if (signature.test(scene->getComponentId<WaterComponent>())){
+        aabb = scene->getComponent<WaterComponent>(entity).aabb;
     }else if (signature.test(scene->getComponentId<UIComponent>())){
         aabb = scene->getComponent<UIComponent>(entity).aabb;
         if (!signature.test(scene->getComponentId<PolygonComponent>()) && signature.test(scene->getComponentId<UILayoutComponent>())){

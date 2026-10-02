@@ -11,6 +11,7 @@
 #include "render/ShaderRender.h"
 #include "texture/Texture.h"
 #include "shader/ShaderUniforms.h"
+#include "math/AABB.h"
 #include "Engine.h"
 #include <string>
 
@@ -47,6 +48,7 @@ namespace doriax{
 
         unsigned int maxPoints = 100;
         unsigned int numVisible = 0;
+        AABB aabb; // local bounds of the visible points
 
         ObjectRender render;
         std::shared_ptr<ShaderRender> shader;

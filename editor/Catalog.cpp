@@ -511,6 +511,34 @@ namespace {
         makeFastPropertyNoDefault<SoundComponent, double, &SoundComponent::playingTime>("playingTime", PropertyType::Double, UpdateFlags_None),
     };
 
+    static const FastPropertyDescriptor kWaterProperties[] = {
+        makeFastProperty<WaterComponent, Vector2, &WaterComponent::size>("size", PropertyType::Vector2, UpdateFlags_Water),
+        makeFastProperty<WaterComponent, unsigned int, &WaterComponent::subdivisions>("subdivisions", PropertyType::UInt, UpdateFlags_Water),
+        makeFastProperty<WaterComponent, Vector3, &WaterComponent::shallowColor>("shallowColor", PropertyType::Vector3, UpdateFlags_None),
+        makeFastProperty<WaterComponent, Vector3, &WaterComponent::deepColor>("deepColor", PropertyType::Vector3, UpdateFlags_None),
+        makeFastProperty<WaterComponent, float, &WaterComponent::depthFade>("depthFade", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<WaterComponent, float, &WaterComponent::waveHeight>("waveHeight", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<WaterComponent, float, &WaterComponent::waveLength>("waveLength", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<WaterComponent, float, &WaterComponent::waveSpeed>("waveSpeed", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<WaterComponent, float, &WaterComponent::waveDirection>("waveDirection", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<WaterComponent, float, &WaterComponent::waveSteepness>("waveSteepness", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<WaterComponent, Texture, &WaterComponent::normalTexture>("normalTexture", PropertyType::Texture, UpdateFlags_Water_Texture),
+        makeFastProperty<WaterComponent, float, &WaterComponent::normalScale>("normalScale", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<WaterComponent, float, &WaterComponent::normalStrength>("normalStrength", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<WaterComponent, float, &WaterComponent::rippleSpeed>("rippleSpeed", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<WaterComponent, float, &WaterComponent::reflectivity>("reflectivity", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<WaterComponent, float, &WaterComponent::specularIntensity>("specularIntensity", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<WaterComponent, float, &WaterComponent::roughness>("roughness", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<WaterComponent, Vector3, &WaterComponent::foamColor>("foamColor", PropertyType::Vector3, UpdateFlags_None),
+        makeFastProperty<WaterComponent, float, &WaterComponent::shoreFoam>("shoreFoam", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<WaterComponent, float, &WaterComponent::crestFoam>("crestFoam", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<WaterComponent, bool, &WaterComponent::depthEffects>("depthEffects", PropertyType::Bool, UpdateFlags_None),
+        makeFastProperty<WaterComponent, bool, &WaterComponent::planarReflection>("planarReflection", PropertyType::Bool, UpdateFlags_None),
+        makeFastProperty<WaterComponent, float, &WaterComponent::reflectionDistortion>("reflectionDistortion", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<WaterComponent, std::string, &WaterComponent::customShader>("customShader", PropertyType::String, UpdateFlags_Shader_Reload),
+        makeFastProperty<WaterComponent, ShaderUniformValues, &WaterComponent::shaderUniforms>("shaderUniforms", PropertyType::Custom, UpdateFlags_Shader_Uniforms),
+    };
+
     static const FastPropertyDescriptor kSkyProperties[] = {
         makeFastProperty<SkyComponent, Texture, &SkyComponent::texture>("texture", PropertyType::Texture, UpdateFlags_Sky_Texture),
         makeFastProperty<SkyComponent, Vector4, &SkyComponent::color>("color", PropertyType::Vector4, UpdateFlags_None),
@@ -1430,6 +1458,10 @@ namespace {
 
     PropertyData resolveAudioPropertyFast(void* comp, const std::string& propertyName) {
         return resolveDirectProperties(static_cast<SoundComponent*>(comp), propertyName, kSoundProperties);
+    }
+
+    PropertyData resolveWaterPropertyFast(void* comp, const std::string& propertyName) {
+        return resolveDirectProperties(static_cast<WaterComponent*>(comp), propertyName, kWaterProperties);
     }
 
     PropertyData resolveSkyPropertyFast(void* comp, const std::string& propertyName) {
@@ -2408,6 +2440,10 @@ namespace {
         enumerateFromDescriptors(comp, ps, kSoundProperties);
     }
 
+    void enumerateWaterProperties(void* comp, std::map<std::string, PropertyData>& ps) {
+        enumerateFromDescriptors(comp, ps, kWaterProperties);
+    }
+
     void enumerateSkyProperties(void* comp, std::map<std::string, PropertyData>& ps) {
         enumerateFromDescriptors(comp, ps, kSkyProperties);
     }
@@ -3067,6 +3103,7 @@ namespace {
         {ComponentType::CameraComponent, &findComponentPtr<CameraComponent>, &resolveCameraPropertyFast, &enumerateCameraProperties},
         {ComponentType::SoundComponent, &findComponentPtr<SoundComponent>, &resolveAudioPropertyFast, &enumerateAudioProperties},
         {ComponentType::SkyComponent, &findComponentPtr<SkyComponent>, &resolveSkyPropertyFast, &enumerateSkyProperties},
+        {ComponentType::WaterComponent, &findComponentPtr<WaterComponent>, &resolveWaterPropertyFast, &enumerateWaterProperties},
         {ComponentType::TextComponent, &findComponentPtr<TextComponent>, &resolveTextPropertyFast, &enumerateTextProperties},
         {ComponentType::ScriptComponent, &findComponentPtr<ScriptComponent>, &resolveScriptPropertyFast, &enumerateScriptProperties},
         {ComponentType::Joint2DComponent, &findComponentPtr<Joint2DComponent>, &resolveJoint2DPropertyFast, &enumerateJoint2DProperties},
@@ -3188,6 +3225,8 @@ std::string editor::Catalog::getComponentName(ComponentType component, bool remo
         name = "MirrorComponent";
     }else if(component == ComponentType::ReflectionProbeComponent){
         name = "ReflectionProbeComponent";
+    }else if(component == ComponentType::WaterComponent){
+        name = "WaterComponent";
     }else if(component == ComponentType::Light2DComponent){
         name = "Light2DComponent";
     }else if(component == ComponentType::Occluder2DComponent){
@@ -3315,6 +3354,8 @@ ComponentId editor::Catalog::getComponentId(const EntityRegistry* registry, Comp
             return registry->getComponentId<MirrorComponent>();
         case ComponentType::ReflectionProbeComponent:
             return registry->getComponentId<ReflectionProbeComponent>();
+        case ComponentType::WaterComponent:
+            return registry->getComponentId<WaterComponent>();
         case ComponentType::Light2DComponent:
             return registry->getComponentId<Light2DComponent>();
         case ComponentType::Occluder2DComponent:
@@ -3419,6 +3460,8 @@ editor::ComponentType editor::Catalog::getComponentType(const std::string& compo
         return ComponentType::MirrorComponent;
     }else if(normalizedName == "reflectionprobe"){
         return ComponentType::ReflectionProbeComponent;
+    }else if(normalizedName == "water"){
+        return ComponentType::WaterComponent;
     }else if(normalizedName == "light2d"){
         return ComponentType::Light2DComponent;
     }else if(normalizedName == "occluder2d"){
@@ -3585,6 +3628,9 @@ std::vector<editor::ComponentType> editor::Catalog::findComponents(EntityRegistr
     }
     if (registry->findComponent<ReflectionProbeComponent>(entity)){
         ret.push_back(ComponentType::ReflectionProbeComponent);
+    }
+    if (registry->findComponent<WaterComponent>(entity)){
+        ret.push_back(ComponentType::WaterComponent);
     }
     if (registry->findComponent<Light2DComponent>(entity)){
         ret.push_back(ComponentType::Light2DComponent);
@@ -3874,6 +3920,12 @@ std::vector<const CustomUniformBlock*> editor::Catalog::getShaderUniformBlocks(E
                 blocks.push_back(&sky->customFSParams);
             }
             break;
+        case ComponentType::WaterComponent:
+            if (WaterComponent* water = registry->findComponent<WaterComponent>(entity)) {
+                blocks.push_back(&water->customVSParams);
+                blocks.push_back(&water->customFSParams);
+            }
+            break;
         default:
             break;
     }
@@ -3931,6 +3983,10 @@ bool editor::Catalog::isCustomShaderBuildFailed(Scene* scene, Entity entity, Com
         case ComponentType::SkyComponent:
             if (SkyComponent* sky = scene->findComponent<SkyComponent>(entity))
                 return failed(sky->customShader, ShaderType::SKYBOX, sky->loaded, sky->needReload, sky->customShaderId);
+            break;
+        case ComponentType::WaterComponent:
+            if (WaterComponent* water = scene->findComponent<WaterComponent>(entity))
+                return failed(water->customShader, ShaderType::WATER, water->loaded, water->needReload, water->customShaderId);
             break;
         default:
             break;
@@ -4043,6 +4099,7 @@ void editor::Catalog::updateEntity(EntityRegistry* registry, Entity entity, uint
         if (PointsComponent* p = registry->findComponent<PointsComponent>(entity)) p->needReload = true;
         if (LinesComponent* l = registry->findComponent<LinesComponent>(entity)) l->needReload = true;
         if (SkyComponent* s = registry->findComponent<SkyComponent>(entity)) s->needReload = true;
+        if (WaterComponent* w = registry->findComponent<WaterComponent>(entity)) w->needReload = true;
     }
     if (updateFlags & UpdateFlags_Shader_Uniforms){
         if (MeshComponent* m = registry->findComponent<MeshComponent>(entity)) m->needUpdateShaderUniforms = true;
@@ -4050,6 +4107,15 @@ void editor::Catalog::updateEntity(EntityRegistry* registry, Entity entity, uint
         if (PointsComponent* p = registry->findComponent<PointsComponent>(entity)) p->needUpdateShaderUniforms = true;
         if (LinesComponent* l = registry->findComponent<LinesComponent>(entity)) l->needUpdateShaderUniforms = true;
         if (SkyComponent* s = registry->findComponent<SkyComponent>(entity)) s->needUpdateShaderUniforms = true;
+        if (WaterComponent* w = registry->findComponent<WaterComponent>(entity)) w->needUpdateShaderUniforms = true;
+    }
+    if (updateFlags & (UpdateFlags_Water | UpdateFlags_Water_Texture)){
+        if (WaterComponent* water = registry->findComponent<WaterComponent>(entity)){
+            if (updateFlags & UpdateFlags_Water)
+                water->needReload = true;
+            if (updateFlags & UpdateFlags_Water_Texture)
+                water->needUpdateTexture = true;
+        }
     }
     if (updateFlags & UpdateFlags_Sprite){
         if (SpriteComponent* sprite = registry->findComponent<SpriteComponent>(entity)){
@@ -4319,6 +4385,12 @@ void editor::Catalog::copyComponent(EntityRegistry* sourceRegistry, Entity sourc
         case ComponentType::SkyComponent: {
             YAML::Node encoded = Stream::encodeSkyComponent(sourceRegistry->getComponent<SkyComponent>(sourceEntity));
             targetRegistry->getComponent<SkyComponent>(targetEntity) = Stream::decodeSkyComponent(encoded);
+            break;
+        }
+
+        case ComponentType::WaterComponent: {
+            YAML::Node encoded = Stream::encodeWaterComponent(sourceRegistry->getComponent<WaterComponent>(sourceEntity));
+            targetRegistry->getComponent<WaterComponent>(targetEntity) = Stream::decodeWaterComponent(encoded);
             break;
         }
 

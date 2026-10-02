@@ -508,6 +508,12 @@ void editor::ShaderBuilder::addLinesPropertyDefinitions(std::vector<shadercompil
     if (prop & (1 << 1))  defs.push_back({"HAS_VERTEX_COLOR_VEC4", "1"});    // 'Vc4'
 }
 
+void editor::ShaderBuilder::addWaterPropertyDefinitions(std::vector<shadercompiler::define_t>& defs, const uint32_t prop) {
+    if (prop & (1 << 0))  defs.push_back({"HAS_FOG", "1"});                  // 'Fog'
+    if (prop & (1 << 1))  defs.push_back({"USE_SCENE_DEPTH", "1"});          // 'Dep'
+    if (prop & (1 << 2))  defs.push_back({"USE_PLANAR_REFLECTION", "1"});    // 'Prf'
+}
+
 ShaderBuildResult editor::ShaderBuilder::buildShader(ShaderKey shaderKey, Project* project) {
     std::unique_lock<std::mutex> lock(cacheMutex);
 
@@ -684,6 +690,10 @@ bool editor::ShaderBuilder::setupShaderArgs(shadercompiler::args_t& args, Shader
     }else if (shaderType == ShaderType::POSTPROCESS){
         args.vert_file = "fullscreen.vert";
         args.frag_file = "postprocess.frag";
+    }else if (shaderType == ShaderType::WATER){
+        args.vert_file = "water.vert";
+        args.frag_file = "water.frag";
+        addWaterPropertyDefinitions(args.defines, properties);
     }else{
         return false;
     }
@@ -691,8 +701,10 @@ bool editor::ShaderBuilder::setupShaderArgs(shadercompiler::args_t& args, Shader
     if (shaderType == ShaderType::MESH || shaderType == ShaderType::GBUFFER){
         args.defines.push_back({"MAX_TERRAIN_LAYERS", std::to_string(MAX_TERRAIN_LAYERS)});
     }
-    if (shaderType == ShaderType::MESH){
+    if (shaderType == ShaderType::MESH || shaderType == ShaderType::WATER){
         args.defines.push_back({"MAX_LIGHTS", "6"});
+    }
+    if (shaderType == ShaderType::MESH){
         args.defines.push_back({"MAX_LIGHTS_2D", std::to_string(MAX_LIGHTS_2D)});
         args.defines.push_back({"MAX_SHADOW_ATLAS_SLOTS", std::to_string(MAX_SHADOW_ATLAS_SLOTS)});
         args.defines.push_back({"MAX_POINT_SHADOW_ATLAS_SLOTS", std::to_string(MAX_POINT_SHADOW_ATLAS_SLOTS)});

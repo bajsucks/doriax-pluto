@@ -1,0 +1,306 @@
+#version 450
+
+// A fork may declare a u_fs_customParams block: its members are filled by name from the
+// component's shader uniforms (Properties window, setShaderUniform). Two names are
+// written by the engine instead: "time" (seconds since startup) and "resolution"
+// (xy = render target size, zw = 1 / size). Do not mix int and float members: GL
+// uploads the block typed after its first member.
+//
+//   uniform u_fs_customParams {
+//       float time;
+//       vec4 tint;
+//   } customParams;
+
+in vec3 v_position;
+in vec3 v_normal;
+in float v_waveHeight;
+
+out vec4 g_finalColor;
+
+uniform u_fs_waterParams {
+    mat4 viewProjection;           // logical, finds the scene depth under the fragment
+    mat4 invViewProjection;        // logical, unprojects the scene depth
+    mat4 reflectionViewProjection; // logical, of the planar reflection camera
+    vec4 shallowColor;             // rgb (linear), w = depth fade
+    vec4 deepColor;                // rgb (linear), w = 1 when the scene depth is valid
+    vec4 foamColor;                // rgb (linear), w = shore foam depth
+    vec4 ripples;                  // x = 1 / tile size, y = strength, z = wave height, w = crest foam
+    vec4 rippleOffsets;            // xy = first layer, zw = second layer (tiles)
+    vec4 surface;                  // x = reflectivity, y = specular, z = roughness, w = reflection distortion
+    vec4 envColor;                 // rgb = sky tint (linear), w = sky rotation (radians)
+    vec4 eyePos;                   // xyz = eye of this pass, w = time (seconds)
+    vec4 flags;                    // x = scene lights on, y = IBL ambient available, z = planar reflection
+} water;
+
+// same layout as fs_lighting_t (RenderSystem.h) and mesh.frag
+uniform u_fs_lighting {
+    vec4 direction_range[MAX_LIGHTS]; //direction.xyz and range.w
+    vec4 color_intensity[MAX_LIGHTS]; //color.xyz and intensity.w
+    vec4 position_type[MAX_LIGHTS]; //position.xyz and type.w
+    vec4 inCone_ouCone_shadows_cascades[MAX_LIGHTS]; //innerConeCos.x, outerConeCos.y, shadowMapIndex.z, numCascades.w
+    vec4 spotUp_maskAspect[MAX_LIGHTS]; //spot projection up.xyz; mask width/height in .w (0 = default circle)
+    vec4 eyePos; //eyePos.xyz
+    vec4 cameraDir; //camera backward axis.xyz
+    vec4 globalIllum; //globalColor.xyz and globalIntensity.w
+    vec4 envColor; //environment color.rgb (linear) and environment rotation.w (radians)
+    vec4 viewportInfo; //1.0/viewportSize.xy in .xy, rendering-flipped flag in .w
+} lighting;
+
+uniform texture2D u_waterNormalTexture;
+uniform sampler u_waterNormal_smp;
+
+uniform textureCube u_lambertianEnvTexture;
+uniform sampler u_lambertianEnv_smp;
+
+uniform texture2D u_spotMaskAtlas;
+uniform sampler u_spotMaskAtlas_smp;
+
+uniform textureCube u_skyTexture;
+uniform sampler u_sky_smp;
+
+#ifdef USE_PLANAR_REFLECTION
+    uniform texture2D u_reflectionTexture;
+    uniform sampler u_reflection_smp;
+#endif
+
+#ifdef USE_SCENE_DEPTH
+    uniform texture2D u_depthTexture;
+    uniform sampler u_depth_smp;
+#endif
+
+const float M_PI = 3.141592653589793;
+const float WATER_F0 = 0.02;
+
+float clampedDot(vec3 x, vec3 y){
+    return clamp(dot(x, y), 0.0, 1.0);
+}
+
+#include "includes/srgb.glsl"
+#include "includes/brdf.glsl"
+#include "includes/punctual.glsl"
+#ifdef USE_SCENE_DEPTH
+    #include "includes/depth_util.glsl"
+#endif
+#ifdef HAS_FOG
+    #include "includes/fog.glsl"
+#endif
+
+// same sky rotation as ibl.glsl
+vec3 rotateEnv(vec3 dir){
+    float angle = water.envColor.w;
+    float c = cos(angle);
+    float s = sin(angle);
+    return vec3(c * dir.x - s * dir.z, dir.y, s * dir.x + c * dir.z);
+}
+
+float hash12(vec2 p){
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+float valueNoise(vec2 p){
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash12(i), hash12(i + vec2(1.0, 0.0)), u.x),
+               mix(hash12(i + vec2(0.0, 1.0)), hash12(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+
+// drifting foam pattern, in [0, 1]
+float foamNoise(vec2 p, float time){
+    float n = valueNoise(p * 1.9 + vec2(time * 0.21, -time * 0.13));
+    n += 0.5 * valueNoise(p * 4.3 - vec2(time * 0.17, time * 0.27));
+    return n / 1.5;
+}
+
+vec3 skyColor(vec3 direction){
+    return sRGBToLinear(texture(samplerCube(u_skyTexture, u_sky_smp), rotateEnv(direction)).rgb) * water.envColor.rgb;
+}
+
+// two drifting ripple layers, blended in tangent space (z up)
+vec3 getRippleNormal(vec2 worldXZ){
+    vec2 uv = worldXZ * water.ripples.x;
+    vec2 uv2 = mat2(0.8, -0.6, 0.6, 0.8) * uv * 0.71;
+    vec3 n1 = texture(sampler2D(u_waterNormalTexture, u_waterNormal_smp), uv + water.rippleOffsets.xy).xyz * 2.0 - 1.0;
+    vec3 n2 = texture(sampler2D(u_waterNormalTexture, u_waterNormal_smp), uv2 + water.rippleOffsets.zw).xyz * 2.0 - 1.0;
+    return normalize(vec3(n1.xy + n2.xy, n1.z * n2.z));
+}
+
+void main(){
+    vec3 toEye = water.eyePos.xyz - v_position;
+    float eyeDistance = length(toEye);
+    vec3 v = toEye / max(eyeDistance, 0.0001);
+
+    // distant ripples fade, they would only shimmer
+    vec3 ripple = getRippleNormal(v_position.xz);
+    float tileSize = 1.0 / max(water.ripples.x, 0.0001);
+    float rippleStrength = water.ripples.y * mix(1.0, 0.3, smoothstep(tileSize * 15.0, tileSize * 120.0, eyeDistance));
+    vec3 n = normalize(v_normal + vec3(ripple.x, 0.0, ripple.y) * (rippleStrength / max(ripple.z, 0.1)));
+
+    // not gl_FrontFacing, which flips with the winding of offscreen passes
+    bool underwater = dot(v_normal, toEye) < 0.0;
+    if (underwater){
+        n = -n;
+    }
+    float NdotV = clampedDot(n, v);
+
+    // light reaching the water body, without ripples so they do not speckle it
+    vec3 ambient;
+    if (water.flags.y > 0.5){
+        ambient = sRGBToLinear(texture(samplerCube(u_lambertianEnvTexture, u_lambertianEnv_smp), rotateEnv(vec3(0.0, 1.0, 0.0)))).rgb * water.envColor.rgb;
+    }else{
+        ambient = lighting.globalIllum.rgb * lighting.globalIllum.w;
+    }
+
+    vec3 bodyLight = ambient;
+    vec3 specular = vec3(0.0);
+    vec3 scatter = vec3(0.0);
+    float alphaRoughness = max(water.surface.z * water.surface.z, 0.0005);
+    float crest = clamp(v_waveHeight / max(water.ripples.z, 0.001), 0.0, 1.0);
+
+    if (water.flags.x > 0.5){
+        for (int i = 0; i < MAX_LIGHTS; ++i){
+            Light light = Light(
+                int(lighting.position_type[i].w),
+                lighting.direction_range[i].xyz,
+                lighting.color_intensity[i].xyz,
+                lighting.position_type[i].xyz,
+                lighting.direction_range[i].w,
+                lighting.color_intensity[i].w,
+                lighting.inCone_ouCone_shadows_cascades[i].x,
+                lighting.inCone_ouCone_shadows_cascades[i].y,
+                lighting.spotUp_maskAspect[i].xyz,
+                lighting.spotUp_maskAspect[i].w,
+                false,
+                -1,
+                0
+            );
+
+            if (light.intensity <= 0.0){
+                continue;
+            }
+
+            vec3 pointToLight;
+            if (light.type != LightType_Directional){
+                pointToLight = light.position - v_position;
+            }else{
+                pointToLight = -light.direction;
+            }
+
+            vec3 l = normalize(pointToLight);
+            vec3 intensity = getLighIntensity(light, pointToLight, i);
+
+            bodyLight += intensity * max(l.y, 0.0) / M_PI;
+
+            if (!underwater){
+                vec3 h = normalize(l + v);
+                float NdotL = clampedDot(n, l);
+                if (NdotL > 0.0){
+                    specular += intensity * NdotL * BRDF_specularGGX(vec3(WATER_F0), vec3(1.0), alphaRoughness,
+                        clampedDot(v, h), NdotL, NdotV, clampedDot(n, h));
+                }
+
+                // light through the thin crests facing the eye
+                scatter += intensity * pow(clampedDot(v, -l), 4.0) * crest * max(l.y, 0.0) / M_PI;
+            }
+        }
+        specular *= water.surface.y;
+    }else{
+        bodyLight = vec3(1.0);
+    }
+
+    // water crossed along the view ray before the opaque scene
+    float pathDepth = 1.0e4;
+    bool hasDepth = false;
+    #ifdef USE_SCENE_DEPTH
+        if (water.deepColor.w > 0.5){
+            // projected, so the lookup ignores the viewport origin and the target size
+            vec4 clip = water.viewProjection * vec4(v_position, 1.0);
+            vec2 ndc = clip.xy / clip.w;
+            float sceneDepth = decodeDepth(texture(sampler2D(u_depthTexture, u_depth_smp), vec2(ndc.x * 0.5 + 0.5, ndcYToDepthUV(ndc.y))));
+            if (sceneDepth < 0.9999){
+                vec4 behind = water.invViewProjection * vec4(ndc, sceneDepth * 2.0 - 1.0, 1.0);
+                pathDepth = length(behind.xyz / behind.w - v_position);
+            }
+            hasDepth = true;
+        }
+    #endif
+
+    float depthFade = max(water.shallowColor.w, 0.001);
+    float deepness;
+    float opacity;
+    if (hasDepth){
+        deepness = 1.0 - exp(-2.5 * pathDepth / depthFade);
+        opacity = 1.0 - exp(-2.0 * pathDepth / depthFade);
+    }else{
+        // without depth, a deep body that clears a little when looked into
+        deepness = mix(0.8, 1.0, 1.0 - NdotV);
+        opacity = mix(0.85, 1.0, 1.0 - NdotV);
+    }
+    vec3 body = mix(water.shallowColor.rgb, water.deepColor.rgb, deepness);
+
+    // shore and crest foam, broken up by noise that settles far away
+    float noise = foamNoise(v_position.xz * 2.5, water.eyePos.w);
+    noise = mix(noise, 0.5, smoothstep(25.0, 90.0, eyeDistance));
+    float foam = 0.0;
+    if (hasDepth && water.foamColor.w > 0.0){
+        float shore = 1.0 - clamp(pathDepth / water.foamColor.w, 0.0, 1.0);
+        foam = smoothstep(noise - 0.08, noise + 0.08, shore * shore);
+    }
+    float crestFoam = water.ripples.w;
+    float crestMask = smoothstep(1.0 - crestFoam * 2.0, 1.0 - crestFoam, crest) * step(0.001, crestFoam);
+    foam = max(foam, crestMask * smoothstep(0.4, 0.7, noise));
+
+    vec3 color;
+    float alpha;
+
+    if (!underwater){
+        vec3 r = reflect(-v, n);
+        r.y = abs(r.y); // ripples bend some rays under the horizon
+        vec3 reflection = skyColor(r);
+        #ifdef USE_PLANAR_REFLECTION
+            if (water.flags.z > 0.5){
+                vec4 reflectionClip = water.reflectionViewProjection * vec4(v_position, 1.0);
+                vec2 reflectionUV = vec2(reflectionClip.x / reflectionClip.w * 0.5 + 0.5,
+                                         0.5 - reflectionClip.y / reflectionClip.w * 0.5);
+                reflectionUV += n.xz * water.surface.w;
+                reflectionUV = clamp(reflectionUV, vec2(0.001), vec2(0.999));
+                reflection = sRGBToLinear(texture(sampler2D(u_reflectionTexture, u_reflection_smp), reflectionUV).rgb);
+            }
+        #endif
+
+        float fresnel = WATER_F0 + (1.0 - WATER_F0) * pow(1.0 - NdotV, 5.0);
+        fresnel = clamp(fresnel * water.surface.x, 0.0, 1.0);
+
+        vec3 waterLight = body * bodyLight * opacity * (1.0 - fresnel)
+                        + water.shallowColor.rgb * scatter
+                        + reflection * fresnel
+                        + specular;
+        vec3 emitted = mix(waterLight, water.foamColor.rgb * bodyLight, foam);
+
+        float transmitted = (1.0 - opacity) * (1.0 - fresnel) * (1.0 - foam);
+        alpha = 1.0 - transmitted;
+        // raise alpha so blending does not clip bright highlights
+        vec3 clampedEmitted = clamp(emitted, 0.0, 1.0);
+        alpha = max(alpha, max(clampedEmitted.r, max(clampedEmitted.g, clampedEmitted.b)));
+        color = (alpha > 0.0001) ? emitted / alpha : vec3(0.0);
+    }else{
+        // from below the sky shows only through Snell's window, the rest mirrors the depths
+        vec3 below = normalize(mix(-v_normal, n, 0.35));
+        float cosView = clampedDot(below, v);
+        float window = smoothstep(0.62, 0.72, cosView);
+        vec3 refracted = refract(-v, below, 1.33);
+        vec3 overhead = (dot(refracted, refracted) > 0.0) ? skyColor(normalize(refracted)) : water.envColor.rgb;
+        vec3 depths = water.deepColor.rgb * bodyLight;
+        color = mix(depths, overhead * mix(vec3(1.0), water.shallowColor.rgb, 0.4), window);
+        color = mix(color, water.foamColor.rgb * bodyLight, foam * 0.3);
+        alpha = 1.0;
+    }
+
+    #ifdef HAS_FOG
+        color = getFogColor(color);
+    #endif
+
+    g_finalColor = vec4(linearTosRGB(color), alpha);
+}

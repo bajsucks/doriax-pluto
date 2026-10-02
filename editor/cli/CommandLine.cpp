@@ -172,6 +172,7 @@ static bool parseShaderTypeName(const std::string& value, ShaderType& out) {
     if (token == "shadow2d")                    { out = ShaderType::SHADOW2D; return true; }
     if (token == "blit")                        { out = ShaderType::BLIT;   return true; }
     if (token == "postprocess" || token == "post") { out = ShaderType::POSTPROCESS; return true; }
+    if (token == "water")                       { out = ShaderType::WATER;  return true; }
     return false;
 }
 

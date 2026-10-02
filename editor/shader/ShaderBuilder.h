@@ -56,6 +56,7 @@ namespace doriax::editor {
         void addUIPropertyDefinitions(std::vector<shadercompiler::define_t>& defs, const uint32_t prop);
         void addPointsPropertyDefinitions(std::vector<shadercompiler::define_t>& defs, const uint32_t prop);
         void addLinesPropertyDefinitions(std::vector<shadercompiler::define_t>& defs, const uint32_t prop);
+        void addWaterPropertyDefinitions(std::vector<shadercompiler::define_t>& defs, const uint32_t prop);
 
         bool setupShaderArgs(shadercompiler::args_t& args, ShaderType shaderType, uint32_t properties);
         std::string getLangSuffix(shadercompiler::lang_type_t lang, int version, bool es, shadercompiler::platform_t platform);

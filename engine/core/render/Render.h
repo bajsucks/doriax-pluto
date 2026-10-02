@@ -54,7 +54,8 @@ namespace doriax{
         SHADOW2D,   // 1D polar shadow pass: occluder segments into a 2D-light atlas row
         BLIT,       // fullscreen upscale of the fixed-resolution scene color
         // keep appending: the ShaderKey stores this enum and validates cached .sdat
-        POSTPROCESS // fullscreen user post-process pass
+        POSTPROCESS, // fullscreen user post-process pass
+        WATER       // water surface displaced by Gerstner waves
     };
 
     enum class AttributeType{
@@ -144,7 +145,9 @@ namespace doriax{
         COMPOSITE_FS_PARAMS,
         FS_LIGHTING2D,
         SHADOW2D_VS_PARAMS,
-        BLIT_FS_PARAMS
+        BLIT_FS_PARAMS,
+        WATER_VS_PARAMS,
+        WATER_FS_PARAMS
     };
 
     enum class StorageBufferType{
@@ -180,7 +183,9 @@ namespace doriax{
         GBUFFERALBEDOTEXTURE, // linear base color (rgb) + hasIBL flag (a)
         SHADOW2DATLAS,       // 1D polar shadow rows (one per 2D light)
         SPOTMASKATLAS,       // projected spot masks, one horizontal tile per 3D light slot
-        BONES
+        BONES,
+        WATERNORMAL,         // water ripple normal map
+        WATERREFLECTION      // water planar reflection camera target
     };
 
     enum class TextureType {

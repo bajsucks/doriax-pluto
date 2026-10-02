@@ -102,6 +102,9 @@ static void markTextureUpdate(Scene* scene, Entity entity, editor::ComponentType
     if (componentType == editor::ComponentType::SkyComponent) {
         scene->getComponent<SkyComponent>(entity).needUpdateTexture = true;
     }
+    if (componentType == editor::ComponentType::WaterComponent) {
+        scene->getComponent<WaterComponent>(entity).needUpdateTexture = true;
+    }
 }
 
 static std::vector<editor::EnumEntry> entriesPrimitiveType = {
@@ -315,6 +318,8 @@ static std::vector<int> cascadeValues = { 1, 2, 3, 4, 5, 6 };
 static std::vector<int> po2Values = { 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384 };
 // reflection probe captures are clamped to [16, 1024] in RenderSystem
 static std::vector<int> probeResolutionValues = { 16, 32, 64, 128, 256, 512, 1024 };
+
+static std::vector<int> waterSubdivisionValues = { 16, 32, 64, 128, 256, 512 };
 
 static std::vector<editor::EnumEntry> entriesActionState = {
     { (int)ActionState::Running, "Running" },
@@ -1565,6 +1570,9 @@ void editor::Properties::dragDropResourcesTexture(ComponentType cpType, std::str
                                 if (componentType == ComponentType::UIComponent){
                                     sceneProject->scene->getComponent<UIComponent>(entity).needUpdateTexture = true;
                                 }
+                                if (componentType == ComponentType::WaterComponent){
+                                    sceneProject->scene->getComponent<WaterComponent>(entity).needUpdateTexture = true;
+                                }
                                 //printf("needUpdateTexture %s\n", name.c_str());
                             }
                         }
@@ -1622,6 +1630,9 @@ void editor::Properties::dragDropResourcesTexture(ComponentType cpType, std::str
                     }
                     if (componentType == ComponentType::UIComponent){
                         sceneProject->scene->getComponent<UIComponent>(entity).needUpdateTexture = true;
+                    }
+                    if (componentType == ComponentType::WaterComponent){
+                        sceneProject->scene->getComponent<WaterComponent>(entity).needUpdateTexture = true;
                     }
                     //printf("needUpdateTexture %s\n", id.c_str());
                 }
@@ -8374,6 +8385,104 @@ void editor::Properties::drawReflectionProbeComponent(ComponentType cpType, Scen
     }
 }
 
+void editor::Properties::drawWaterComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
+    WaterComponent& water = sceneProject->scene->getComponent<WaterComponent>(entities[0]);
+
+    RowSettings floatSettings;
+    floatSettings.secondColSize = 6 * ImGui::GetFontSize();
+
+    drawCustomShaderRow(cpType, ShaderType::WATER, sceneProject, entities);
+
+    ImGui::SeparatorText("Surface");
+    beginTable(cpType, getLabelSize("Subdivisions"), "water_surface");
+    RowSettings subdivisionSettings;
+    subdivisionSettings.sliderValues = &waterSubdivisionValues;
+    subdivisionSettings.help = "Grid cells along each side. Short waves need more cells to keep their shape.";
+    propertyRow(RowPropertyType::Vector2, cpType, "size", "Size", sceneProject, entities);
+    propertyRow(RowPropertyType::UIntSlider, cpType, "subdivisions", "Subdivisions", sceneProject, entities, subdivisionSettings);
+    endTable();
+
+    ImGui::SeparatorText("Color");
+    beginTable(cpType, getLabelSize("Shallow Color"), "water_color");
+    RowSettings depthFadeSettings = floatSettings;
+    depthFadeSettings.help = "Depth where the deep color takes over. Shallower water is lighter and clearer.";
+    propertyRow(RowPropertyType::Color3L, cpType, "shallowColor", "Shallow Color", sceneProject, entities);
+    propertyRow(RowPropertyType::Color3L, cpType, "deepColor", "Deep Color", sceneProject, entities);
+    propertyRow(RowPropertyType::FloatPositive, cpType, "depthFade", "Depth Fade", sceneProject, entities, depthFadeSettings);
+    endTable();
+
+    ImGui::SeparatorText("Waves");
+    beginTable(cpType, getLabelSize("Steepness"), "water_waves");
+    RowSettings heightSettings = floatSettings;
+    heightSettings.stepSize = 0.01f;
+    heightSettings.help = "How far the crests rise above the water level.";
+    RowSettings lengthSettings = floatSettings;
+    lengthSettings.help = "Length of the longest wave. Longer waves also travel faster.";
+    RowSettings directionSettings = floatSettings;
+    directionSettings.stepSize = 1.0f;
+    directionSettings.format = "%.0f";
+    directionSettings.help = "Angle around Y the waves travel toward. 0 is +X.";
+    RowSettings steepnessSettings = floatSettings;
+    steepnessSettings.stepSize = 0.01f;
+    steepnessSettings.help = "0 gives round waves, 1 sharp crests. Lowered where the waves would fold over.";
+    propertyRow(RowPropertyType::FloatPositive, cpType, "waveHeight", "Height", sceneProject, entities, heightSettings);
+    propertyRow(RowPropertyType::FloatPositive, cpType, "waveLength", "Length", sceneProject, entities, lengthSettings);
+    propertyRow(RowPropertyType::Float, cpType, "waveSpeed", "Speed", sceneProject, entities, floatSettings);
+    propertyRow(RowPropertyType::Float, cpType, "waveDirection", "Direction", sceneProject, entities, directionSettings);
+    propertyRow(RowPropertyType::Float_0_1, cpType, "waveSteepness", "Steepness", sceneProject, entities, steepnessSettings);
+    endTable();
+
+    ImGui::SeparatorText("Ripples");
+    beginTable(cpType, getLabelSize("Normal Map"), "water_ripples");
+    RowSettings normalSettings;
+    normalSettings.allowCameraTexture = false;
+    normalSettings.help = "Tiling normal map of the small ripples, the built-in one when empty. Use a mipmap filter so distant ripples do not shimmer.";
+    RowSettings tileSettings = floatSettings;
+    tileSettings.help = "World size of one tile of the normal map.";
+    RowSettings strengthSettings = floatSettings;
+    strengthSettings.stepSize = 0.01f;
+    propertyRow(RowPropertyType::Texture, cpType, "normalTexture", "Normal Map", sceneProject, entities, normalSettings);
+    propertyRow(RowPropertyType::FloatPositive, cpType, "normalScale", "Tile Size", sceneProject, entities, tileSettings);
+    propertyRow(RowPropertyType::FloatPositive, cpType, "normalStrength", "Strength", sceneProject, entities, strengthSettings);
+    propertyRow(RowPropertyType::Float, cpType, "rippleSpeed", "Speed", sceneProject, entities, floatSettings);
+    endTable();
+
+    ImGui::SeparatorText("Reflection");
+    beginTable(cpType, getLabelSize("Planar Reflection"), "water_reflection");
+    RowSettings unitSettings = floatSettings;
+    unitSettings.stepSize = 0.01f;
+    RowSettings roughnessSettings = unitSettings;
+    roughnessSettings.help = "Spread of the sun highlight. Low values give sharp glints.";
+    RowSettings planarSettings;
+    planarSettings.help = "Reflects the scene, not only the sky. Draws the scene a second time at half resolution.";
+    RowSettings distortionSettings = floatSettings;
+    distortionSettings.stepSize = 0.005f;
+    distortionSettings.format = "%.3f";
+    distortionSettings.help = "How much the ripples bend the planar reflection.";
+    propertyRow(RowPropertyType::FloatPositive, cpType, "reflectivity", "Reflectivity", sceneProject, entities, unitSettings);
+    propertyRow(RowPropertyType::FloatPositive, cpType, "specularIntensity", "Specular", sceneProject, entities, unitSettings);
+    propertyRow(RowPropertyType::Float_0_1, cpType, "roughness", "Roughness", sceneProject, entities, roughnessSettings);
+    propertyRow(RowPropertyType::Bool, cpType, "planarReflection", "Planar Reflection", sceneProject, entities, planarSettings);
+    if (water.planarReflection){
+        propertyRow(RowPropertyType::FloatPositive, cpType, "reflectionDistortion", "Distortion", sceneProject, entities, distortionSettings);
+    }
+    endTable();
+
+    ImGui::SeparatorText("Foam");
+    beginTable(cpType, getLabelSize("Depth Effects"), "water_foam");
+    RowSettings depthSettings;
+    depthSettings.help = "Shore foam, soft edges and depth tint from the scene depth. Adds a depth pass when SSAO and SSR are off.";
+    RowSettings shoreSettings = floatSettings;
+    shoreSettings.help = "Water depth the shore foam covers. Needs Depth Effects.";
+    RowSettings crestSettings = unitSettings;
+    crestSettings.help = "Share of the highest crests that turn to foam.";
+    propertyRow(RowPropertyType::Bool, cpType, "depthEffects", "Depth Effects", sceneProject, entities, depthSettings);
+    propertyRow(RowPropertyType::Color3L, cpType, "foamColor", "Foam Color", sceneProject, entities);
+    propertyRow(RowPropertyType::FloatPositive, cpType, "shoreFoam", "Shore Foam", sceneProject, entities, shoreSettings);
+    propertyRow(RowPropertyType::Float_0_1, cpType, "crestFoam", "Crest Foam", sceneProject, entities, crestSettings);
+    endTable();
+}
+
 void editor::Properties::drawScriptComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
     if (entities.empty()) return;
 
@@ -13448,6 +13557,8 @@ void editor::Properties::show(){
                     drawCameraComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::SoundComponent){
                     drawAudioComponent(cpType, sceneProject, entities);
+                }else if (cpType == ComponentType::WaterComponent){
+                    drawWaterComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::SkyComponent){
                     drawSkyComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::ScriptComponent){
