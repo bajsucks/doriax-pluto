@@ -282,10 +282,16 @@ namespace doriax{
 		// editor-only, draws as if the scene had no fog
 		bool disableFog = false;
 
+		// editor-only, draws as if the camera were never inside a water
+		bool disableUnderwater = false;
+
 		// Editor-only override that suppresses the scene's fixed game resolution
 		// (edit-mode viewports render native; play mode re-enables it). Defaults
 		// to false and is never set at runtime, so exported games are unaffected.
 		bool disableFixedResolution = false;
+
+		// editor-only, holds the waves while the scene is stopped or paused
+		bool waterPaused = false;
 
 		static uint32_t pixelsWhite[64];
 		static uint32_t pixelsBlack[64];
@@ -766,10 +772,14 @@ namespace doriax{
 
 		void setDisableFog(bool disableFog);
 
+		void setDisableUnderwater(bool disableUnderwater);
+
 		// Editor-only override (see member declaration). No reload needed: the
 		// editor always renders through Engine::getFramebuffer(), so PIP_RTT is
 		// already baked either way.
 		void setDisableFixedResolution(bool disableFixedResolution);
+
+		void setWaterPaused(bool waterPaused);
 
 		// the depth pass alpha-tests the submesh (MASK, or the legacy AUTO + textureShadow);
 		// the editor derives export keys from it, so the rule lives in one place

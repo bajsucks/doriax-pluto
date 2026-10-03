@@ -2193,6 +2193,9 @@ void editor::SceneWindow::show() {
                             drawSettingRow(ICON_FA_CLONE " Disable face culling", sceneProject.displaySettings.disableFaceCulling, notStopped);
                         }
                         drawSettingRow(ICON_FA_SMOG " Disable fog", sceneProject.displaySettings.disableFog, notStopped);
+                        if (sceneProject.sceneType == SceneType::SCENE_3D) {
+                            drawSettingRow(ICON_FA_WATER " Disable underwater", sceneProject.displaySettings.disableUnderwater, notStopped);
+                        }
 
                         ImGui::EndTable();
                     }

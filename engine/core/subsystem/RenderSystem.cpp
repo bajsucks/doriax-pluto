@@ -2548,10 +2548,18 @@ void RenderSystem::setDisableFog(bool disableFog){
     needReloadMeshes();
 }
 
+void RenderSystem::setDisableUnderwater(bool disableUnderwater){
+    this->disableUnderwater = disableUnderwater;
+}
+
 void RenderSystem::setDisableFixedResolution(bool disableFixedResolution){
     // No reload needed: the editor always renders through Engine::getFramebuffer(),
     // so the PIP_RTT pipeline is already baked whether fixed resolution is on or off.
     this->disableFixedResolution = disableFixedResolution;
+}
+
+void RenderSystem::setWaterPaused(bool waterPaused){
+    this->waterPaused = waterPaused;
 }
 
 bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint16_t pipelines, InstancedMeshComponent* instmesh, TerrainComponent* terrain){
@@ -6358,7 +6366,8 @@ void RenderSystem::advanceWater(WaterComponent& water, float seconds){
 
 void RenderSystem::updateWater(Entity entity, WaterComponent& water, Transform& transform, uint16_t pipelines, double dt){
     // applied by draw()
-    water.pendingTime += (float)dt;
+    if (!waterPaused)
+        water.pendingTime += (float)dt;
 
     // the variant follows the scene fog and shadows, and the water switches
     if (water.loaded && !water.needReload &&
@@ -9259,7 +9268,7 @@ void RenderSystem::draw(){
         }
 
         // the water the main camera is inside of, even with its surface out of view
-        WaterComponent* underwater = isMainCamera ? findUnderwater(cameraTransform.worldPosition) : NULL;
+        WaterComponent* underwater = (isMainCamera && !disableUnderwater) ? findUnderwater(cameraTransform.worldPosition) : NULL;
         currentUnderwater = (underwater && loadUnderwater(*underwater)) ? underwater : NULL;
 
         // the swapchain redirect of a water copying the scene, when no other effect took it
