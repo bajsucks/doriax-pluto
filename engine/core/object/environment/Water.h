@@ -106,6 +106,9 @@ namespace doriax{
         void setCustomShader(const std::string& path);
         std::string getCustomShader() const;
 
+        void setCustomUnderwaterShader(const std::string& path);
+        std::string getCustomUnderwaterShader() const;
+
         void setShaderUniform(const std::string& name, const Vector4& value);
         void setShaderUniform(const std::string& name, const Vector3& value);
         void setShaderUniform(const std::string& name, const Vector2& value);

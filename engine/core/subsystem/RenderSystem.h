@@ -469,11 +469,7 @@ namespace doriax{
 		CameraRender resumePassRender; // continues the camera pass after the copy
 		TextureRender* currentSceneCopy;
 		Vector4 currentSceneCopyRect;
-		// fades the scene copy when the main camera is inside a water
-		bool underwaterLoaded;
-		ObjectRender underwaterRender;
-		std::shared_ptr<ShaderRender> underwaterShader;
-		int underwaterSlotParams;
+		// the water holding the main camera, which fades the scene copy
 		WaterComponent* currentUnderwater;
 
 		// engine-written custom uniforms: seconds since startup, sampled once per draw(),
@@ -742,8 +738,7 @@ namespace doriax{
 		void destroyWater(Entity entity, WaterComponent& water);
 		static bool isBehindWater(const std::vector<WaterRenderData>& waters, const AABB& box);
 		WaterComponent* findUnderwater(const Vector3& eye);
-		void loadUnderwater();
-		void destroyUnderwater();
+		bool loadUnderwater(WaterComponent& water);
 		// the fullscreen fade of the scene copy, in the pass already started
 		void drawUnderwater(WaterComponent& water, CameraComponent& camera, Transform& cameraTransform);
 

@@ -31,6 +31,7 @@ const char* ShaderForkDialog::shaderTypeName(ShaderType shaderType) {
         case ShaderType::SKYBOX: return "Sky";
         case ShaderType::POSTPROCESS: return "Post-process";
         case ShaderType::WATER:  return "Water";
+        case ShaderType::UNDERWATER: return "Underwater";
         default:                 return "Unknown";
     }
 }

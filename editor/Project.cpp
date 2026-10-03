@@ -1551,8 +1551,8 @@ void editor::Project::cleanupAssetFilePath(const std::filesystem::path& deletedP
 
 void editor::Project::applyCustomShaderPathChange(const std::function<bool(std::string&)>& transform) {
     // customShader lives on every renderable component type (a mesh also has its depth
-    // fork); visit each array in a registry, apply the transform, and flag a shader
-    // reload on the entities that changed.
+    // fork, a water its underwater one); visit each array in a registry, apply the
+    // transform, and flag a shader reload on the entities that changed.
     auto applyToRegistry = [&](EntityRegistry* registry) -> bool {
         bool changed = false;
         auto applyToArray = [&](auto arr, auto shaderField) {
@@ -1573,6 +1573,7 @@ void editor::Project::applyCustomShaderPathChange(const std::function<bool(std::
         applyToArray(registry->getComponentArray<LinesComponent>(), &LinesComponent::customShader);
         applyToArray(registry->getComponentArray<SkyComponent>(), &SkyComponent::customShader);
         applyToArray(registry->getComponentArray<WaterComponent>(), &WaterComponent::customShader);
+        applyToArray(registry->getComponentArray<WaterComponent>(), &WaterComponent::customUnderwaterShader);
         return changed;
     };
 
@@ -3506,7 +3507,7 @@ void editor::Project::collectSceneShaderKeys(const SceneProject* sceneProject, s
                 sceneShadows && water.receiveShadows, water.refraction),
                 ShaderPool::registerCustomShader(water.customShader));
             if (water.underwater) {
-                keys.insert(ShaderPool::getShaderKey(ShaderType::UNDERWATER, 0));
+                insertKeys(ShaderType::UNDERWATER, 0, ShaderPool::registerCustomShader(water.customUnderwaterShader));
             }
         }
     }
@@ -3597,7 +3598,7 @@ void editor::Project::invalidateCustomShaders() {
             if (SkyComponent* sky = scene->findComponent<SkyComponent>(entity))
                 flagReload(sky->needReload, sceneSky || !sky->customShader.empty());
             if (WaterComponent* water = scene->findComponent<WaterComponent>(entity))
-                flagReload(water->needReload, !water->customShader.empty());
+                flagReload(water->needReload, !water->customShader.empty() || !water->customUnderwaterShader.empty());
         }
 
         // post-process passes hold their shader directly, so the chain is rebuilt whole

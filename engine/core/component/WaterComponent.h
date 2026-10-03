@@ -60,6 +60,15 @@ namespace doriax{
         CustomUniformBlock customVSParams;
         CustomUniformBlock customFSParams;
 
+        // the fullscreen fade seen from inside, loaded with the water while underwater is on
+        bool underwaterLoaded = false;
+        ObjectRender underwaterRender;
+        std::shared_ptr<ShaderRender> underwaterShader;
+        std::string customUnderwaterShader; // fork of underwater.frag, built-in when empty
+        uint16_t customUnderwaterShaderId = 0;
+        int slotUnderwaterParams = -1;
+        CustomUniformBlock customUnderwaterParams;
+
         Vector2 size = Vector2(50.0f, 50.0f);
         unsigned int subdivisions = 128;
 

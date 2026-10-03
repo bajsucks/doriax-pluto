@@ -201,6 +201,7 @@ namespace doriax::editor{
         static bool isCustomShaderBuildFailed(Scene* scene, Entity entity, ComponentType component);
         // same for a mesh's depth fork
         static bool isCustomDepthShaderBuildFailed(Scene* scene, Entity entity);
+        static bool isCustomUnderwaterShaderBuildFailed(Scene* scene, Entity entity);
 
         template<typename T>
         static T* getPropertyRef(EntityRegistry* registry, Entity entity, ComponentType component, std::string propertyName){

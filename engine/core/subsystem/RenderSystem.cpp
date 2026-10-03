@@ -143,6 +143,17 @@ namespace {
         mesh.needUpdateShaderUniforms = false;
     }
 
+    // the water blocks of both forks, from whichever pass draws first (underwater runs before the surface)
+    void writeCustomUniforms(WaterComponent& water){
+        if (!water.needUpdateShaderUniforms)
+            return;
+
+        water.customVSParams.writeValues(water.shaderUniforms);
+        water.customFSParams.writeValues(water.shaderUniforms);
+        water.customUnderwaterParams.writeValues(water.shaderUniforms);
+        water.needUpdateShaderUniforms = false;
+    }
+
     bool usesAlphaBlend(const Material& material){
         return material.alphaMode == MaterialAlphaMode::BLEND ||
             (material.alphaMode == MaterialAlphaMode::AUTO &&
@@ -260,8 +271,6 @@ RenderSystem::RenderSystem(Scene* scene): SubSystem(scene){
     currentSceneCopyRect = Vector4(0.0f, 0.0f, 0.0f, 0.0f);
     resumePassRender.setLoadActionLoad();
     resumePassRender.setDepthLoadActionLoad();
-    underwaterLoaded = false;
-    underwaterSlotParams = -1;
     currentUnderwater = NULL;
     hasWaterDepth = false;
     frameTime = 0.0f;
@@ -359,7 +368,6 @@ void RenderSystem::destroy(){
     destroySSR();
     destroyBlit();
     destroyPostProcess();
-    destroyUnderwater();
     for (InstanceView& view : instanceViews){
         view.buffer.getRender()->destroyBuffer();
         view.data.clear();
@@ -6364,6 +6372,10 @@ void RenderSystem::updateWater(Entity entity, WaterComponent& water, Transform& 
     if (!water.loadCalled){
         loadWater(entity, water, pipelines);
     }
+    // with the water, so a first dive does not stall and a fork shows its uniforms and errors
+    if (water.loaded && !water.needReload && water.underwater){
+        loadUnderwater(water);
+    }
 
     // bounds grow by the wave height up, down and sideways
     const float height = std::max(water.waveHeight, 0.0f);
@@ -6493,7 +6505,9 @@ bool RenderSystem::drawWater(Entity entity, WaterComponent& water, Transform& tr
     render.applyUniformBlock(water.slotVSShadows, sizeof(vs_shadows_t), &vs_shadows);
     render.applyUniformBlock(water.slotFSShadows, sizeof(fs_shadows_t), &fs_shadows);
     render.applyUniformBlock(water.slotFSPointShadows, sizeof(fs_point_shadows_t), &fs_point_shadows);
-    applyCustomUniforms(render, water.customVSParams, water.customFSParams, water.shaderUniforms, water.needUpdateShaderUniforms, frameTime, passResolution);
+    writeCustomUniforms(water);
+    applyCustomUniforms(render, water.customVSParams, frameTime, passResolution);
+    applyCustomUniforms(render, water.customFSParams, frameTime, passResolution);
 
     render.draw(0, water.indexCount, 1);
 
@@ -6510,6 +6524,10 @@ void RenderSystem::destroyWater(Entity entity, WaterComponent& water){
             water.shader.reset();
             ShaderPool::remove(ShaderType::WATER, water.shaderProperties, water.customShaderId);
         }
+        if (water.underwaterShader){
+            water.underwaterShader.reset();
+            ShaderPool::remove(ShaderType::UNDERWATER, 0, water.customUnderwaterShaderId);
+        }
 
         //Destroy texture
         water.normalTexture.destroy();
@@ -6523,6 +6541,10 @@ void RenderSystem::destroyWater(Entity entity, WaterComponent& water){
 
     //Destroy render
     water.render.destroy();
+    if (water.underwaterLoaded){
+        water.underwaterRender.destroy();
+        water.underwaterLoaded = false;
+    }
 
     //Destroy buffers
     if (!water.needReload){
@@ -6544,6 +6566,8 @@ void RenderSystem::destroyWater(Entity entity, WaterComponent& water){
     water.slotFSPointShadows = -1;
     water.customVSParams.clear();
     water.customFSParams.clear();
+    water.slotUnderwaterParams = -1;
+    water.customUnderwaterParams.clear();
 
     SystemRender::addQueueCommand(&changeWaterDestroy, new check_load_t{scene, entity});
 }
@@ -6590,39 +6614,41 @@ WaterComponent* RenderSystem::findUnderwater(const Vector3& eye){
     return NULL;
 }
 
-void RenderSystem::loadUnderwater(){
-    if (underwaterLoaded)
-        return;
+// unloaded with the water in destroyWater
+bool RenderSystem::loadUnderwater(WaterComponent& water){
+    if (water.underwaterLoaded)
+        return true;
 
-    // the fullscreen shader may still be building (async in the editor)
-    underwaterShader = ShaderPool::get(ShaderType::UNDERWATER, 0);
-    if (!underwaterShader || !underwaterShader->isCreated())
-        return;
-
-    underwaterRender.beginLoad(PrimitiveType::TRIANGLES);
-    underwaterRender.setShader(underwaterShader.get());
-    underwaterSlotParams = underwaterShader.get()->shaderData.getUniformBlockIndex(UniformBlockType::UNDERWATER_FS_PARAMS);
-    if (!underwaterRender.endLoad(PIP_RTT_NODEPTH, false, true, CullingMode::BACK, WindingOrder::CCW))
-        return;
-
-    underwaterLoaded = true;
-}
-
-void RenderSystem::destroyUnderwater(){
-    if (underwaterLoaded){
-        underwaterRender.destroy();
-    }
-    if (underwaterShader){
-        underwaterShader.reset();
-        ShaderPool::remove(ShaderType::UNDERWATER, 0);
+    water.customUnderwaterShaderId = ShaderPool::registerCustomShader(water.customUnderwaterShader);
+    water.underwaterShader = ShaderPool::get(ShaderType::UNDERWATER, 0, water.customUnderwaterShaderId);
+    if (!water.underwaterShader->isCreated()){
+        // as in loadWater, a fork that failed to compile falls back to the built-in shader
+        if (water.customUnderwaterShaderId != 0 && ShaderPool::isShaderBuildFailed(ShaderType::UNDERWATER, 0, water.customUnderwaterShaderId)){
+            Log::error("Custom shader '%s' failed to compile; using the built-in shader", water.customUnderwaterShader.c_str());
+            water.customUnderwaterShaderId = 0;
+            water.underwaterShader = ShaderPool::get(ShaderType::UNDERWATER, 0);
+        }
+        // may still be building (async in the editor)
+        if (!water.underwaterShader->isCreated())
+            return false;
     }
 
-    underwaterSlotParams = -1;
-    underwaterLoaded = false;
+    ShaderData& shaderData = water.underwaterShader.get()->shaderData;
+    water.underwaterRender.beginLoad(PrimitiveType::TRIANGLES);
+    water.underwaterRender.setShader(water.underwaterShader.get());
+    water.slotUnderwaterParams = shaderData.getUniformBlockIndex(UniformBlockType::UNDERWATER_FS_PARAMS);
+    water.customUnderwaterParams.resolve(shaderData, "u_fs_customParams");
+    water.customUnderwaterParams.writeValues(water.shaderUniforms);
+    if (!water.underwaterRender.endLoad(PIP_RTT_NODEPTH, false, true, CullingMode::BACK, WindingOrder::CCW))
+        return false;
+
+    water.underwaterLoaded = true;
+    return true;
 }
 
 void RenderSystem::drawUnderwater(WaterComponent& water, CameraComponent& camera, Transform& cameraTransform){
-    if (!underwaterRender.beginDraw(PIP_RTT_NODEPTH))
+    ObjectRender& render = water.underwaterRender;
+    if (!render.beginDraw(PIP_RTT_NODEPTH))
         return;
 
     // the body light of water.frag, with only the directional lights
@@ -6659,12 +6685,14 @@ void RenderSystem::drawUnderwater(WaterComponent& water, CameraComponent& camera
     params.eyePos = Vector4(cameraTransform.worldPosition.x, cameraTransform.worldPosition.y, cameraTransform.worldPosition.z, 0.0f);
     params.sceneRect = currentSceneCopyRect;
 
-    ShaderData& shaderData = underwaterShader.get()->shaderData;
-    underwaterRender.addTexture(shaderData.getTextureIndex(TextureShaderType::SCENECOLORTEXTURE), ShaderStageType::FRAGMENT, currentSceneCopy);
-    underwaterRender.addTexture(shaderData.getTextureIndex(TextureShaderType::DEPTHTEXTURE), ShaderStageType::FRAGMENT, currentSceneDepthTexture ? currentSceneDepthTexture : &emptyWhite);
-    underwaterRender.addTexture(shaderData.getTextureIndex(TextureShaderType::IRRADIANCEMAP), ShaderStageType::FRAGMENT, irradiance);
-    underwaterRender.applyUniformBlock(underwaterSlotParams, sizeof(fs_underwater_t), &params);
-    underwaterRender.draw(0, 3, 1);
+    ShaderData& shaderData = water.underwaterShader.get()->shaderData;
+    render.addTexture(shaderData.getTextureIndex(TextureShaderType::SCENECOLORTEXTURE), ShaderStageType::FRAGMENT, currentSceneCopy);
+    render.addTexture(shaderData.getTextureIndex(TextureShaderType::DEPTHTEXTURE), ShaderStageType::FRAGMENT, currentSceneDepthTexture ? currentSceneDepthTexture : &emptyWhite);
+    render.addTexture(shaderData.getTextureIndex(TextureShaderType::IRRADIANCEMAP), ShaderStageType::FRAGMENT, irradiance);
+    render.applyUniformBlock(water.slotUnderwaterParams, sizeof(fs_underwater_t), &params);
+    writeCustomUniforms(water);
+    applyCustomUniforms(render, water.customUnderwaterParams, frameTime, passResolution);
+    render.draw(0, 3, 1);
 }
 
 void RenderSystem::destroyLight(LightComponent& light){
@@ -7469,11 +7497,16 @@ void RenderSystem::getLoadCount(size_t& loaded, size_t& total) const{
         count(sky.loaded);
     }
 
-    // Check WaterComponents, one without a Transform never loads
+    // Check WaterComponents, one without a Transform never loads; the underwater pass
+    // builds with its water, so the editor keeps drawing until it is in
     auto waters = scene->getComponentArray<WaterComponent>();
     for (int i = 0; i < waters->size(); i++) {
-        if (scene->findComponent<Transform>(waters->getEntity(i)))
-            count(waters->getComponentFromIndex(i).loaded);
+        if (!scene->findComponent<Transform>(waters->getEntity(i)))
+            continue;
+        const WaterComponent& water = waters->getComponentFromIndex(i);
+        count(water.loaded);
+        if (water.underwater)
+            count(water.underwaterLoaded);
     }
 }
 
@@ -9226,10 +9259,7 @@ void RenderSystem::draw(){
 
         // the water the main camera is inside of, even with its surface out of view
         WaterComponent* underwater = isMainCamera ? findUnderwater(cameraTransform.worldPosition) : NULL;
-        if (underwater){
-            loadUnderwater();
-        }
-        currentUnderwater = underwaterLoaded ? underwater : NULL;
+        currentUnderwater = (underwater && loadUnderwater(*underwater)) ? underwater : NULL;
 
         // the swapchain redirect of a water copying the scene, when no other effect took it
         const bool useSceneTarget = isMainCamera && swapchainRedirect && !useSSR && !usePostProcess

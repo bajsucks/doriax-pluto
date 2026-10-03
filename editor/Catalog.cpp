@@ -540,6 +540,7 @@ namespace {
         makeFastProperty<WaterComponent, float, &WaterComponent::refractionDistortion>("refractionDistortion", PropertyType::Float, UpdateFlags_None),
         makeFastProperty<WaterComponent, bool, &WaterComponent::underwater>("underwater", PropertyType::Bool, UpdateFlags_None),
         makeFastProperty<WaterComponent, std::string, &WaterComponent::customShader>("customShader", PropertyType::String, UpdateFlags_Shader_Reload),
+        makeFastProperty<WaterComponent, std::string, &WaterComponent::customUnderwaterShader>("customUnderwaterShader", PropertyType::String, UpdateFlags_Shader_Reload),
         makeFastProperty<WaterComponent, ShaderUniformValues, &WaterComponent::shaderUniforms>("shaderUniforms", PropertyType::Custom, UpdateFlags_Shader_Uniforms),
     };
 
@@ -3928,6 +3929,7 @@ std::vector<const CustomUniformBlock*> editor::Catalog::getShaderUniformBlocks(E
             if (WaterComponent* water = registry->findComponent<WaterComponent>(entity)) {
                 blocks.push_back(&water->customVSParams);
                 blocks.push_back(&water->customFSParams);
+                blocks.push_back(&water->customUnderwaterParams);
             }
             break;
         default:
@@ -4004,6 +4006,13 @@ bool editor::Catalog::isCustomDepthShaderBuildFailed(Scene* scene, Entity entity
     MeshComponent* mesh = scene->findComponent<MeshComponent>(entity);
     return mesh && !mesh->customDepthShader.empty() && mesh->loaded && !mesh->needReload &&
            mesh->numSubmeshes > 0 && mesh->submeshes[0].customDepthShaderId == 0;
+}
+
+bool editor::Catalog::isCustomUnderwaterShaderBuildFailed(Scene* scene, Entity entity) {
+    // a failed fork reloads on the built-in, which registers no custom id
+    WaterComponent* water = scene->findComponent<WaterComponent>(entity);
+    return water && !water->customUnderwaterShader.empty() && water->underwaterLoaded &&
+           water->customUnderwaterShaderId == 0;
 }
 
 void editor::Catalog::updateEntity(EntityRegistry* registry, Entity entity, uint64_t updateFlags){

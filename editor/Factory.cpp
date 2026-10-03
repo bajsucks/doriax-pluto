@@ -1646,6 +1646,8 @@ std::string editor::Factory::createWaterComponent(int indentSpaces, EntityRegist
     code << ind << "water.underwater = " << formatBool(water.underwater) << ";\n";
     if (!water.customShader.empty())
         code << ind << "water.customShader = " << formatString(water.customShader) << ";\n";
+    if (!water.customUnderwaterShader.empty())
+        code << ind << "water.customUnderwaterShader = " << formatString(water.customUnderwaterShader) << ";\n";
     if (!water.shaderUniforms.empty())
         code << ind << "water.shaderUniforms = " << formatShaderUniforms(water.shaderUniforms) << ";\n";
 

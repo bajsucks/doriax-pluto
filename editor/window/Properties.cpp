@@ -5084,7 +5084,12 @@ void editor::Properties::drawCustomShaderRow(ComponentType cpType, ShaderType sh
 
     // the uniform rows share the table, so the label column fits their names
     ShaderUniformRows uniformRows = resolveShaderUniformRows(cpType, sceneProject, shaderEntity);
-    float labelSize = getLabelSize(cpType == ComponentType::MeshComponent ? "Depth Shader" : "Shader", false);
+    const char* longestLabel = "Shader";
+    if (cpType == ComponentType::MeshComponent)
+        longestLabel = "Depth Shader";
+    else if (cpType == ComponentType::WaterComponent)
+        longestLabel = "Underwater Shader";
+    float labelSize = getLabelSize(longestLabel, false);
     for (const ShaderUniform& uniform : uniformRows.members)
         labelSize = std::max(labelSize, getLabelSize(uniform.name, false));
 
@@ -5105,6 +5110,18 @@ void editor::Properties::drawCustomShaderRow(ComponentType cpType, ShaderType sh
         }
     }
 
+    // the fullscreen fade of a camera inside the water, a shader of its own
+    if (cpType == ComponentType::WaterComponent) {
+        propertyHeader("Underwater Shader");
+        drawComponentShaderRow(cpType, ShaderType::UNDERWATER, sceneProject, shaderEntity, "customUnderwaterShader", "custom_underwater_shader");
+        ImGui::SameLine(); helpMarker("Shader of the fade a camera below the surface sees over the scene. Needs Underwater on.");
+        if (Catalog::isCustomUnderwaterShaderBuildFailed(sceneProject->scene, shaderEntity)) {
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(1);
+            ImGui::TextDisabled("Underwater shader failed to build");
+        }
+    }
+
     drawShaderUniformRows(cpType, sceneProject, shaderEntity, uniformRows);
 
     endTable();
@@ -5121,6 +5138,8 @@ void editor::Properties::drawComponentShaderRow(ComponentType cpType, ShaderType
     std::string defaultName = sceneProject->scene->getEntityName(entity);
     if (shaderType == ShaderType::DEPTH)
         defaultName += "_depth";
+    else if (shaderType == ShaderType::UNDERWATER)
+        defaultName += "_underwater";
     auto onFork = [this, sceneId, entity, cpType, shaderType, propertyName, defaultName]() {
         shaderForkDialog.open(project, shaderType, defaultName,
             [this, sceneId, entity, cpType, shaderType, propertyName](const std::filesystem::path& directory,

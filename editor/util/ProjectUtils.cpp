@@ -143,6 +143,7 @@ std::string shaderTypeFileName(ShaderType shaderType) {
         case ShaderType::SKYBOX: return "sky";
         case ShaderType::POSTPROCESS: return "postprocess";
         case ShaderType::WATER:  return "water";
+        case ShaderType::UNDERWATER: return "underwater";
         default:                 return "";
     }
 }
@@ -264,7 +265,7 @@ editor::ProjectUtils::ShaderForkPlan editor::ProjectUtils::prepareShaderFork(
     std::filesystem::path projectRoot = project->getProjectPath();
 
     // fullscreen passes share one vertex entry point; the fork still gets its own copy
-    std::string vertFile = (shaderType == ShaderType::POSTPROCESS) ? "fullscreen" : typeFile;
+    std::string vertFile = (shaderType == ShaderType::POSTPROCESS || shaderType == ShaderType::UNDERWATER) ? "fullscreen" : typeFile;
     auto vertIt = editor::shaderMap.find(vertFile + ".vert");
     auto fragIt = editor::shaderMap.find(typeFile + ".frag");
     if (vertIt == editor::shaderMap.end() || fragIt == editor::shaderMap.end()) {

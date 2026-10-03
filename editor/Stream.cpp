@@ -6323,6 +6323,8 @@ YAML::Node editor::Stream::encodeWaterComponent(const WaterComponent& water) {
 
     if (!water.customShader.empty())
         node["customShader"] = water.customShader;
+    if (!water.customUnderwaterShader.empty())
+        node["customUnderwaterShader"] = water.customUnderwaterShader;
     if (!water.shaderUniforms.empty())
         node["shaderUniforms"] = encodeShaderUniforms(water.shaderUniforms);
 
@@ -6365,6 +6367,7 @@ WaterComponent editor::Stream::decodeWaterComponent(const YAML::Node& node, cons
     if (node["underwater"]) water.underwater = node["underwater"].as<bool>();
 
     if (node["customShader"]) water.customShader = node["customShader"].as<std::string>();
+    if (node["customUnderwaterShader"]) water.customUnderwaterShader = node["customUnderwaterShader"].as<std::string>();
     water.shaderUniforms = decodeShaderUniforms(node["shaderUniforms"]);
     water.needUpdateShaderUniforms = true;
     water.needUpdateTexture = true;
