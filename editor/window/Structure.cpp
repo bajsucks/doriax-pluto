@@ -1380,6 +1380,11 @@ void editor::Structure::showTreeNode(editor::TreeNode& node) {
                 sourceParent = p->parent;
                 sourceOrder = p->order;
                 sourceHasTransform = p->hasTransform;
+
+                // child scene entities can only be referenced
+                if (p->entitySceneId != 0 && p->entitySceneId != project->getSelectedSceneId()) {
+                    allowEntityDragDrop = false;
+                }
             }
 
             if (sourceHasTransform != node.hasTransform && !node.isScene) {
@@ -2530,8 +2535,9 @@ void editor::Structure::show(){
                     const EntityPayload* p = reinterpret_cast<const EntityPayload*>(payload->Data);
                     Entity sourceEntity = p->entity;
                     bool sourceHasTransform = p->hasTransform;
+                    bool sameScene = (p->entitySceneId == 0 || p->entitySceneId == project->getSelectedSceneId());
 
-                    if (sourceHasTransform) {
+                    if (sameScene && sourceHasTransform) {
                         std::vector<Entity> movableEntities = getMovableDraggedEntities(sourceEntity, root, InsertionType::AFTER);
                         if (!movableEntities.empty() && ImGui::AcceptDragDropPayload("entity")) {
                             if (payload->IsDelivery()) {

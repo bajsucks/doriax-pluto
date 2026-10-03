@@ -2808,11 +2808,17 @@ void editor::ResourcesWindow::show() {
 
             saveMaterialFile(currentPath, materialContent, contentLen, sourcePtr);
         }
-        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("entity")) {
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("entity", ImGuiDragDropFlags_AcceptBeforeDelivery)) {
             const char* entityContent = (const char*)payload->Data;
             size_t contentLen = payload->DataSize;
+            const EntityPayload* entityPayload = static_cast<const EntityPayload*>(payload->Data);
+            bool sameScene = (entityPayload->entitySceneId == 0 || entityPayload->entitySceneId == project->getSelectedSceneId());
 
-            saveEntityFile(currentPath, entityContent, contentLen);
+            if (!sameScene) {
+                ImGui::SetTooltip("Entity belongs to another scene");
+            } else if (payload->IsDelivery()) {
+                saveEntityFile(currentPath, entityContent, contentLen);
+            }
         }
         ImGui::EndDragDropTarget();
     }

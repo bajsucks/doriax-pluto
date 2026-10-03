@@ -4574,10 +4574,13 @@ bool editor::Properties::propertyRow(RowPropertyType type, ComponentType cpType,
             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("entity", ImGuiDragDropFlags_AcceptBeforeDelivery)) {
                 const EntityPayload* entityPayload = static_cast<const EntityPayload*>(payload->Data);
                 Entity droppedEntity = entityPayload->entity;
+                bool sameScene = (entityPayload->entitySceneId == 0 || entityPayload->entitySceneId == sceneProject->id);
                 bool excluded = std::find(settings.excludeEntities.begin(), settings.excludeEntities.end(), droppedEntity) != settings.excludeEntities.end();
-                bool valid = sceneProject->scene->isEntityCreated(droppedEntity) && !excluded;
+                bool valid = sameScene && sceneProject->scene->isEntityCreated(droppedEntity) && !excluded;
 
-                if (!valid && ImGui::IsItemHovered()){
+                if (!sameScene){
+                    ImGui::SetTooltip("Entity belongs to another scene");
+                }else if (!valid){
                     ImGui::SetTooltip(excluded ? "Cannot reference this entity here" : "Invalid entity");
                 }
 
