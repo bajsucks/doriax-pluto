@@ -87,6 +87,7 @@ namespace doriax{
 #endif
 #ifdef DORIAX_PHYSICS_3D
 		void updateBody3DPosition(Signature signature, Entity entity, Body3DComponent& body);
+		void applyBuoyancy3D(float dt);
 		bool loadJoint3D(Entity entity, Joint3DComponent& joint);
 		bool syncBody3DShapes(Entity entity, Body3DComponent& body);
 		bool isShapeSourceLoading(Entity entity, const Shape3D& shapeData) const;

@@ -1798,6 +1798,9 @@ std::string editor::Factory::createBody3DComponent(int indentSpaces, EntityRegis
     code << ind << "body3d.motionQuality = " << formatBody3DMotionQuality(body.motionQuality) << ";\n";
     code << ind << "body3d.sensor = " << formatBool(body.sensor) << ";\n";
     code << ind << "body3d.gravityFactor = " << formatFloat(body.gravityFactor) << ";\n";
+    code << ind << "body3d.buoyancy = " << formatFloat(body.buoyancy) << ";\n";
+    code << ind << "body3d.waterDrag = " << formatFloat(body.waterDrag) << ";\n";
+    code << ind << "body3d.waterAngularDrag = " << formatFloat(body.waterAngularDrag) << ";\n";
     // The bit mask, rather than six OR'd enumerators in the generated source.
     code << ind << "body3d.allowedDOFs = " << static_cast<unsigned int>(body.allowedDOFs) << ";\n";
     code << ind << "body3d.needReloadBody = " << formatBool(body.needReloadBody) << ";\n";

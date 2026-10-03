@@ -103,6 +103,16 @@ namespace doriax{
         float getGravityFactor() const;
         void setGravityFactor(float gravityFactor);
 
+        // applied each fixed step while the body is in a Water
+        float getBuoyancy() const;
+        void setBuoyancy(float buoyancy);
+
+        float getWaterDrag() const;
+        void setWaterDrag(float waterDrag);
+
+        float getWaterAngularDrag() const;
+        void setWaterAngularDrag(float waterAngularDrag);
+
         void setBitsFilter(uint16_t category, uint16_t mask);
 
         uint16_t getCategoryBitsFilter() const;

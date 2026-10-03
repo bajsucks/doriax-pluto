@@ -1011,6 +1011,15 @@ namespace {
         if (propertyName == "gravityFactor") {
             return {PropertyType::Float, UpdateFlags_Body3D, (void*)&defaultBody3D.gravityFactor, (void*)&comp->gravityFactor};
         }
+        if (propertyName == "buoyancy") {
+            return {PropertyType::Float, UpdateFlags_None, (void*)&defaultBody3D.buoyancy, (void*)&comp->buoyancy};
+        }
+        if (propertyName == "waterDrag") {
+            return {PropertyType::Float, UpdateFlags_None, (void*)&defaultBody3D.waterDrag, (void*)&comp->waterDrag};
+        }
+        if (propertyName == "waterAngularDrag") {
+            return {PropertyType::Float, UpdateFlags_None, (void*)&defaultBody3D.waterAngularDrag, (void*)&comp->waterAngularDrag};
+        }
         if (propertyName == "numShapes") {
             return {PropertyType::UInt, UpdateFlags_Body3D, (void*)&defaultBody3D.numShapes, (void*)&comp->numShapes};
         }
@@ -2518,6 +2527,9 @@ namespace {
         ps["motionQuality"] = {PropertyType::Enum, UpdateFlags_Body3D, (void*)&def.motionQuality, compRef ? (void*)&comp->motionQuality : nullptr};
         ps["sensor"] = {PropertyType::Bool, UpdateFlags_Body3D, (void*)&def.sensor, compRef ? (void*)&comp->sensor : nullptr};
         ps["gravityFactor"] = {PropertyType::Float, UpdateFlags_Body3D, (void*)&def.gravityFactor, compRef ? (void*)&comp->gravityFactor : nullptr};
+        ps["buoyancy"] = {PropertyType::Float, UpdateFlags_None, (void*)&def.buoyancy, compRef ? (void*)&comp->buoyancy : nullptr};
+        ps["waterDrag"] = {PropertyType::Float, UpdateFlags_None, (void*)&def.waterDrag, compRef ? (void*)&comp->waterDrag : nullptr};
+        ps["waterAngularDrag"] = {PropertyType::Float, UpdateFlags_None, (void*)&def.waterAngularDrag, compRef ? (void*)&comp->waterAngularDrag : nullptr};
         ps["numShapes"] = {PropertyType::UInt, UpdateFlags_Body3D, (void*)&def.numShapes, compRef ? (void*)&comp->numShapes : nullptr};
         ps["overrideMassProperties"] = {PropertyType::Bool, UpdateFlags_Body3D, (void*)&def.overrideMassProperties, compRef ? (void*)&comp->overrideMassProperties : nullptr};
         ps["solidBoxSize"] = {PropertyType::Vector3, UpdateFlags_Body3D, (void*)&def.solidBoxSize, compRef ? (void*)&comp->solidBoxSize : nullptr};

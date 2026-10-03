@@ -785,7 +785,7 @@ namespace doriax{
 		// the editor derives export keys from it, so the rule lives in one place
 		static bool usesAlphaMask(const Material& material, bool textureShadow);
 
-		// water surface offset over the world point (x, z) as drawn, for Water::getHeight
+		// water surface offset over the world point (x, z) as drawn, for Water::getHeight and buoyancy
 		static Vector3 getWaterSurfaceOffset(const WaterComponent& water, float x, float z, Vector3* normal = nullptr);
 
 		// copies the stacked scene composite to the swapchain (Engine::endCompositeFramebuffer)

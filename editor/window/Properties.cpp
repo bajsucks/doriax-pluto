@@ -10724,6 +10724,27 @@ void editor::Properties::drawBody3DComponent(ComponentType cpType, SceneProject*
     }
     endTable();
 
+    if (body.type == BodyType::DYNAMIC) {
+        ImGui::SeparatorText("Buoyancy");
+        beginTable(cpType, getLabelSize("Angular Drag"), "buoyancy");
+        RowSettings buoyancySettings;
+        buoyancySettings.stepSize = 0.01f;
+        buoyancySettings.help = "How the body floats in Water. 1 is neutral, more floats and less sinks. 0 ignores the water.";
+        RowSettings dragSettings;
+        dragSettings.stepSize = 0.01f;
+        dragSettings.help = "How much the water slows the body down.";
+        RowSettings angularDragSettings;
+        angularDragSettings.stepSize = 0.001f;
+        angularDragSettings.format = "%.3f";
+        angularDragSettings.help = "How much the water slows the body rotation.";
+        propertyRow(RowPropertyType::FloatPositive, cpType, "buoyancy", "Buoyancy", sceneProject, entities, buoyancySettings);
+        if (body.buoyancy > 0.0f) {
+            propertyRow(RowPropertyType::FloatPositive, cpType, "waterDrag", "Drag", sceneProject, entities, dragSettings);
+            propertyRow(RowPropertyType::FloatPositive, cpType, "waterAngularDrag", "Angular Drag", sceneProject, entities, angularDragSettings);
+        }
+        endTable();
+    }
+
     ImGui::SeparatorText("Shapes");
     ImGui::Text("Shapes: %zu", body.numShapes);
 

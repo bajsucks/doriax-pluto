@@ -556,6 +556,30 @@ void Body3D::setGravityFactor(float gravityFactor){
     }
 }
 
+float Body3D::getBuoyancy() const{
+    return getComponent<Body3DComponent>().buoyancy;
+}
+
+void Body3D::setBuoyancy(float buoyancy){
+    getComponent<Body3DComponent>().buoyancy = buoyancy;
+}
+
+float Body3D::getWaterDrag() const{
+    return getComponent<Body3DComponent>().waterDrag;
+}
+
+void Body3D::setWaterDrag(float waterDrag){
+    getComponent<Body3DComponent>().waterDrag = waterDrag;
+}
+
+float Body3D::getWaterAngularDrag() const{
+    return getComponent<Body3DComponent>().waterAngularDrag;
+}
+
+void Body3D::setWaterAngularDrag(float waterAngularDrag){
+    getComponent<Body3DComponent>().waterAngularDrag = waterAngularDrag;
+}
+
 void Body3D::setBitsFilter(uint16_t category, uint16_t mask){
     Body3DComponent& body = getComponent<Body3DComponent>();
 

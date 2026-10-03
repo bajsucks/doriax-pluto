@@ -609,6 +609,41 @@ void PhysicsSystem::updateBody3DPosition(Signature signature, Entity entity, Bod
         }
     }
 }
+
+// the water surface under the center of mass, with the waves of the frame about to be drawn
+void PhysicsSystem::applyBuoyancy3D(float dt){
+    auto waters = scene->getComponentArray<WaterComponent>();
+    if (waters->size() == 0)
+        return;
+
+    JPH::BodyInterface &body_interface = world3D.GetBodyInterfaceNoLock();
+
+    auto bodies3d = scene->getComponentArray<Body3DComponent>();
+    for (int i = 0; i < bodies3d->size(); i++){
+        Body3DComponent& body = bodies3d->getComponentFromIndex(i);
+        if (body.buoyancy <= 0.0f || body.type != BodyType::DYNAMIC || body.body.IsInvalid())
+            continue;
+
+        const JPH::RVec3 center = body_interface.GetCenterOfMassPosition(body.body);
+        const float x = center.GetX();
+        const float z = center.GetZ();
+
+        for (int j = 0; j < waters->size(); j++){
+            WaterComponent& water = waters->getComponentFromIndex(j);
+            Transform* transform = scene->findComponent<Transform>(waters->getEntity(j));
+            const AABB& area = water.worldAABB;
+            if (!transform || x < area.getMinimum().x || x > area.getMaximum().x ||
+                    z < area.getMinimum().z || z > area.getMaximum().z)
+                continue;
+
+            Vector3 normal;
+            const float height = transform->worldPosition.y + RenderSystem::getWaterSurfaceOffset(water, x, z, &normal).y;
+            body_interface.ApplyBuoyancyImpulse(body.body, JPH::RVec3(x, height, z), JPH::Vec3(normal.x, normal.y, normal.z),
+                body.buoyancy, body.waterDrag, body.waterAngularDrag, JPH::Vec3::sZero(), world3D.GetGravity(), dt);
+            break;
+        }
+    }
+}
 #endif
 
 #ifdef DORIAX_PHYSICS_2D
@@ -2817,6 +2852,8 @@ void PhysicsSystem::fixedUpdate(double dt){
     }
 
     if (bodies3d->size() > 0){
+		applyBuoyancy3D(fixedStep);
+
 		const int cCollisionSteps = 1;
 
 		// Clears the flag and drains the teardown queue from the destructor, so a C++

@@ -6649,6 +6649,9 @@ YAML::Node editor::Stream::encodeBody3DComponent(const Body3DComponent& body) {
     node["motionQuality"] = body3DMotionQualityToString(body.motionQuality);
     node["sensor"] = body.sensor;
     node["gravityFactor"] = body.gravityFactor;
+    node["buoyancy"] = body.buoyancy;
+    node["waterDrag"] = body.waterDrag;
+    node["waterAngularDrag"] = body.waterAngularDrag;
 
     // Six booleans instead of the bit mask, so the file stays readable.
     YAML::Node dofsNode;
@@ -6721,6 +6724,9 @@ Body3DComponent editor::Stream::decodeBody3DComponent(const YAML::Node& node, co
     if (node["motionQuality"]) body.motionQuality = stringToBody3DMotionQuality(node["motionQuality"].as<std::string>());
     if (node["sensor"]) body.sensor = node["sensor"].as<bool>();
     if (node["gravityFactor"]) body.gravityFactor = node["gravityFactor"].as<float>();
+    if (node["buoyancy"]) body.buoyancy = node["buoyancy"].as<float>();
+    if (node["waterDrag"]) body.waterDrag = node["waterDrag"].as<float>();
+    if (node["waterAngularDrag"]) body.waterAngularDrag = node["waterAngularDrag"].as<float>();
 
     if (node["allowedDOFs"]) {
         const YAML::Node& dofsNode = node["allowedDOFs"];

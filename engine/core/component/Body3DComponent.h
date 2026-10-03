@@ -102,6 +102,10 @@ namespace doriax{
         BodyType type = BodyType::STATIC;
         Body3DMotionQuality motionQuality = Body3DMotionQuality::DISCRETE;
         float gravityFactor = 1.0f;
+        // in Water: 1 is neutral, more floats, less sinks, 0 ignores the water
+        float buoyancy = 0.0f;
+        float waterDrag = 0.5f;
+        float waterAngularDrag = 0.01f;
         uint8_t allowedDOFs = Body3DAllowedDOF_All;
         bool sensor = false;
         bool newBody = true;
