@@ -2744,7 +2744,8 @@ std::filesystem::path editor::App::getUserShaderCacheDir(){
     //      transmission adds foliageTransmission to u_fs_pbrParams.
     // v29: sprite and tilemap UVs (HAS_TEXTURERECT) use centroid interpolation, so MSAA
     //      edge pixels no longer sample outside their atlas rect.
-    return App::getUserCacheBaseDir() / "doriax" / "shaders" / "v29";
+    // v30: Water component — new water and underwater shaders.
+    return App::getUserCacheBaseDir() / "doriax" / "shaders" / "v30";
 }
 
 void editor::App::pushTabNotificationStyle(){
