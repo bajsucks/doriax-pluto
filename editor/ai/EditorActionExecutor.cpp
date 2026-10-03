@@ -841,12 +841,12 @@ bool shaderTypeForComponent(ComponentType component, ShaderType& out) {
     }
 }
 
-// Parses the "mesh"/"ui"/"sky"/"points"/"lines" shader_type argument used to fork or
+// Parses the "mesh"/"ui"/"sky"/"points"/"lines"/"water" shader_type argument used to fork or
 // address a scene's default shader (as opposed to a specific entity's component).
 bool parseShaderTypeName(const std::string& name, ShaderType& out) {
     static const std::unordered_map<std::string, ShaderType> map = {
         {"mesh", ShaderType::MESH}, {"ui", ShaderType::UI}, {"sky", ShaderType::SKYBOX},
-        {"points", ShaderType::POINTS}, {"lines", ShaderType::LINES}
+        {"points", ShaderType::POINTS}, {"lines", ShaderType::LINES}, {"water", ShaderType::WATER}
     };
     auto it = map.find(lower(name));
     if (it == map.end()) return false;
@@ -863,6 +863,7 @@ const char* scenePropertyNameForShaderType(ShaderType type) {
         case ShaderType::SKYBOX: return "default_sky_shader";
         case ShaderType::POINTS: return "default_points_shader";
         case ShaderType::LINES:  return "default_lines_shader";
+        case ShaderType::WATER:  return "default_water_shader";
         default: return "";
     }
 }
@@ -1893,6 +1894,7 @@ Json sceneReadableProperties(SceneProject* sceneProject) {
     props["default_sky_shader"] = {{"type", "string"}, {"value", Catalog::getSceneProperty<std::string>(scene, "default_sky_shader")}};
     props["default_points_shader"] = {{"type", "string"}, {"value", Catalog::getSceneProperty<std::string>(scene, "default_points_shader")}};
     props["default_lines_shader"] = {{"type", "string"}, {"value", Catalog::getSceneProperty<std::string>(scene, "default_lines_shader")}};
+    props["default_water_shader"] = {{"type", "string"}, {"value", Catalog::getSceneProperty<std::string>(scene, "default_water_shader")}};
     return props;
 }
 
@@ -3190,7 +3192,7 @@ ActionResult EditorActionExecutor::setSceneProperty(const Json& arguments) {
                                                   static_cast<ShadowQuality>(arguments["int_value"].get<int>()));
     } else if (property == "default_mesh_shader" || property == "default_ui_shader" ||
                property == "default_sky_shader" || property == "default_points_shader" ||
-               property == "default_lines_shader") {
+               property == "default_lines_shader" || property == "default_water_shader") {
         if (!arguments.contains("string_value") || !arguments["string_value"].is_string()) {
             return failResult(property + " requires string_value (custom shader base path, empty for built-in).");
         }
@@ -4381,7 +4383,7 @@ bool EditorActionExecutor::validateCustomShaderValue(const std::string& property
     // default) is a project-relative base path; both must reference real files.
     static const std::set<std::string> shaderPathProperties = {
         "customShader", "customDepthShader", "customUnderwaterShader", "default_mesh_shader", "default_ui_shader",
-        "default_sky_shader", "default_points_shader", "default_lines_shader"
+        "default_sky_shader", "default_points_shader", "default_lines_shader", "default_water_shader"
     };
     if (!shaderPathProperties.count(propertyName)) {
         return true;
@@ -4422,7 +4424,7 @@ ActionResult EditorActionExecutor::forkShader(const Json& arguments) {
         ShaderType shaderType;
         if (!parseShaderTypeName(shaderTypeArg, shaderType)) {
             return failResult("fork_shader requires entity_id/entity_name, or shader_type "
-                              "(mesh, ui, sky, points, or lines) to fork a scene default.");
+                              "(mesh, ui, sky, points, lines, or water) to fork a scene default.");
         }
         const std::string scenePropertyName = scenePropertyNameForShaderType(shaderType);
 

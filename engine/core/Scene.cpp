@@ -519,6 +519,17 @@ const std::string& Scene::getDefaultLinesShader() const{
     return settings.defaultLinesShader;
 }
 
+void Scene::setDefaultWaterShader(const std::string& path){
+    if (settings.defaultWaterShader != path){
+        settings.defaultWaterShader = path;
+        getSystem<RenderSystem>()->needReloadWater();
+    }
+}
+
+const std::string& Scene::getDefaultWaterShader() const{
+    return settings.defaultWaterShader;
+}
+
 void Scene::setDefaultCustomShader(ShaderType type, const std::string& path){
     switch (type){
         case ShaderType::MESH:   setDefaultMeshShader(path);   break;
@@ -526,6 +537,7 @@ void Scene::setDefaultCustomShader(ShaderType type, const std::string& path){
         case ShaderType::SKYBOX: setDefaultSkyShader(path);    break;
         case ShaderType::POINTS: setDefaultPointsShader(path); break;
         case ShaderType::LINES:  setDefaultLinesShader(path);  break;
+        case ShaderType::WATER:  setDefaultWaterShader(path);  break;
         default: break; // internal pass types cannot have scene defaults
     }
 }
@@ -538,6 +550,7 @@ const std::string& Scene::getDefaultCustomShader(ShaderType type) const{
         case ShaderType::SKYBOX: return settings.defaultSkyShader;
         case ShaderType::POINTS: return settings.defaultPointsShader;
         case ShaderType::LINES:  return settings.defaultLinesShader;
+        case ShaderType::WATER:  return settings.defaultWaterShader;
         default: return empty;
     }
 }

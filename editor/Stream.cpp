@@ -2806,6 +2806,8 @@ YAML::Node editor::Stream::encodeScene(Scene* scene) {
         sceneNode["defaultPointsShader"] = scene->getDefaultPointsShader();
     if (!scene->getDefaultLinesShader().empty())
         sceneNode["defaultLinesShader"] = scene->getDefaultLinesShader();
+    if (!scene->getDefaultWaterShader().empty())
+        sceneNode["defaultWaterShader"] = scene->getDefaultWaterShader();
 
     for (const PostProcessPass& pass : scene->getPostProcessPasses()) {
         YAML::Node passNode;
@@ -2929,6 +2931,7 @@ Scene* editor::Stream::decodeScene(Scene* scene, const YAML::Node& node) {
     scene->setDefaultSkyShader(node["defaultSkyShader"] ? node["defaultSkyShader"].as<std::string>() : "");
     scene->setDefaultPointsShader(node["defaultPointsShader"] ? node["defaultPointsShader"].as<std::string>() : "");
     scene->setDefaultLinesShader(node["defaultLinesShader"] ? node["defaultLinesShader"].as<std::string>() : "");
+    scene->setDefaultWaterShader(node["defaultWaterShader"] ? node["defaultWaterShader"].as<std::string>() : "");
 
     // absent key clears the chain so decoding into a reused scene (play restore) is exact
     std::vector<PostProcessPass> postProcess;

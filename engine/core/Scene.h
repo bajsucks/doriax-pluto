@@ -211,6 +211,9 @@ namespace doriax{
         void setDefaultLinesShader(const std::string& path);
         const std::string& getDefaultLinesShader() const;
 
+        void setDefaultWaterShader(const std::string& path);
+        const std::string& getDefaultWaterShader() const;
+
         void setDefaultCustomShader(ShaderType type, const std::string& path);
         const std::string& getDefaultCustomShader(ShaderType type) const;
 

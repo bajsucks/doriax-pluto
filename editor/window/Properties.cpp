@@ -13914,8 +13914,10 @@ void editor::Properties::show(){
 
                 if (sceneProject->sceneType != SceneType::SCENE_UI) {
                     drawSceneShaderRow(sceneProject, ShaderType::MESH, "default_mesh_shader", "Mesh");
-                    if (sceneProject->sceneType == SceneType::SCENE_3D)
+                    if (sceneProject->sceneType == SceneType::SCENE_3D) {
                         drawSceneShaderRow(sceneProject, ShaderType::SKYBOX, "default_sky_shader", "Sky");
+                        drawSceneShaderRow(sceneProject, ShaderType::WATER, "default_water_shader", "Water");
+                    }
                 }
                 drawSceneShaderRow(sceneProject, ShaderType::UI, "default_ui_shader", "UI");
                 if (sceneProject->sceneType != SceneType::SCENE_UI) {

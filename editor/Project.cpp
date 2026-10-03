@@ -1580,7 +1580,7 @@ void editor::Project::applyCustomShaderPathChange(const std::function<bool(std::
     // scene-level default shaders reference the same files; the setter flags the reload
     auto applyToSceneDefaults = [&](Scene* scene) -> bool {
         bool changed = false;
-        for (ShaderType type : {ShaderType::MESH, ShaderType::UI, ShaderType::SKYBOX, ShaderType::POINTS, ShaderType::LINES}) {
+        for (ShaderType type : {ShaderType::MESH, ShaderType::UI, ShaderType::SKYBOX, ShaderType::POINTS, ShaderType::LINES, ShaderType::WATER}) {
             std::string defaultShader = scene->getDefaultCustomShader(type);
             if (!defaultShader.empty() && transform(defaultShader)) {
                 scene->setDefaultCustomShader(type, defaultShader);
@@ -3505,7 +3505,7 @@ void editor::Project::collectSceneShaderKeys(const SceneProject* sceneProject, s
             }
             insertKeys(ShaderType::WATER, ShaderPool::getWaterProperties(sceneFog, water.depthEffects, water.planarReflection,
                 sceneShadows && water.receiveShadows, water.refraction),
-                ShaderPool::registerCustomShader(water.customShader));
+                effectiveShaderId(water.customShader, ShaderType::WATER));
             if (water.underwater) {
                 insertKeys(ShaderType::UNDERWATER, 0, ShaderPool::registerCustomShader(water.customUnderwaterShader));
             }
@@ -3575,6 +3575,7 @@ void editor::Project::invalidateCustomShaders() {
         bool scenePoints = !scene->getDefaultPointsShader().empty();
         bool sceneLines = !scene->getDefaultLinesShader().empty();
         bool sceneSky = !scene->getDefaultSkyShader().empty();
+        bool sceneWater = !scene->getDefaultWaterShader().empty();
 
         // needReload is only consumed while the scene draws, and the idle loop skips
         // scenes that are not flagged, so the redraw has to be requested here. Saving a
@@ -3598,7 +3599,7 @@ void editor::Project::invalidateCustomShaders() {
             if (SkyComponent* sky = scene->findComponent<SkyComponent>(entity))
                 flagReload(sky->needReload, sceneSky || !sky->customShader.empty());
             if (WaterComponent* water = scene->findComponent<WaterComponent>(entity))
-                flagReload(water->needReload, !water->customShader.empty() || !water->customUnderwaterShader.empty());
+                flagReload(water->needReload, sceneWater || !water->customShader.empty() || !water->customUnderwaterShader.empty());
         }
 
         // post-process passes hold their shader directly, so the chain is rebuilt whole

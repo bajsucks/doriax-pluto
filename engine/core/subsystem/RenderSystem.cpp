@@ -6212,13 +6212,14 @@ bool RenderSystem::loadWater(Entity entity, WaterComponent& water, uint16_t pipe
 
     const bool receiveShadows = hasLights && hasShadows && water.receiveShadows;
     water.shaderProperties = ShaderPool::getWaterProperties(hasFog, water.depthEffects, water.planarReflection, receiveShadows, water.refraction);
-    water.customShaderId = ShaderPool::registerCustomShader(water.customShader);
+    const std::string& waterShaderSrc = water.customShader.empty() ? scene->getDefaultCustomShader(ShaderType::WATER) : water.customShader;
+    water.customShaderId = ShaderPool::registerCustomShader(waterShaderSrc);
     water.shader = ShaderPool::get(ShaderType::WATER, water.shaderProperties, water.customShaderId);
     if (!water.shader->isCreated()){
         // A custom shader that failed to compile falls back to the built-in shader (so the
         // object stays visible and loading finishes); retried after its source changes.
         if (water.customShaderId != 0 && ShaderPool::isShaderBuildFailed(ShaderType::WATER, water.shaderProperties, water.customShaderId)){
-            Log::error("Custom shader '%s' failed to compile; using the built-in shader", water.customShader.c_str());
+            Log::error("Custom shader '%s' failed to compile; using the built-in shader", waterShaderSrc.c_str());
             water.customShaderId = 0;
             water.shader = ShaderPool::get(ShaderType::WATER, water.shaderProperties, 0);
         }
@@ -6245,7 +6246,7 @@ bool RenderSystem::loadWater(Entity entity, WaterComponent& water, uint16_t pipe
     shaderData.getUniformBlockMembers("u_fs_waterParams", fsParamsSize);
     water.fsParamsSize = std::min(fsParamsSize, (unsigned int)sizeof(fs_water_t));
     if (water.customShaderId != 0 && fsParamsSize < sizeof(fs_water_t)){
-        Log::warn("Custom shader '%s' is a fork of an older water shader; fork it again for the newer effects", water.customShader.c_str());
+        Log::warn("Custom shader '%s' is a fork of an older water shader; fork it again for the newer effects", waterShaderSrc.c_str());
     }
     water.slotFSLighting = shaderData.getUniformBlockIndex(UniformBlockType::FS_LIGHTING);
     water.slotFSFog = hasFog ? shaderData.getUniformBlockIndex(UniformBlockType::FS_FOG) : -1;

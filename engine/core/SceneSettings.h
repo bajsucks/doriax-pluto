@@ -107,6 +107,7 @@ namespace doriax{
         std::string defaultSkyShader;
         std::string defaultPointsShader;
         std::string defaultLinesShader;
+        std::string defaultWaterShader;
 
         // ordered user post-process chain (main camera only), applied after SSR
         std::vector<PostProcessPass> postProcess;

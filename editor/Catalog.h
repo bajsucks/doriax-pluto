@@ -400,6 +400,11 @@ namespace doriax::editor{
                     return scene->getDefaultLinesShader();
                 }
             }
+            else if (propertyName == "default_water_shader") {
+                if constexpr (std::is_same_v<T, std::string>) {
+                    return scene->getDefaultWaterShader();
+                }
+            }
             else if (propertyName == "post_process") {
                 if constexpr (std::is_same_v<T, std::vector<PostProcessPass>>) {
                     return scene->getPostProcessPasses();
@@ -532,6 +537,9 @@ namespace doriax::editor{
             }
             else if (propertyName == "default_lines_shader") {
                 if constexpr (std::is_same_v<T, std::string>) return d.defaultLinesShader;
+            }
+            else if (propertyName == "default_water_shader") {
+                if constexpr (std::is_same_v<T, std::string>) return d.defaultWaterShader;
             }
             else if (propertyName == "post_process") {
                 if constexpr (std::is_same_v<T, std::vector<PostProcessPass>>) return d.postProcess;
@@ -713,6 +721,11 @@ namespace doriax::editor{
             else if (propertyName == "default_lines_shader") {
                 if constexpr (std::is_same_v<T, std::string>) {
                     scene->setDefaultLinesShader(value);
+                }
+            }
+            else if (propertyName == "default_water_shader") {
+                if constexpr (std::is_same_v<T, std::string>) {
+                    scene->setDefaultWaterShader(value);
                 }
             }
             else if (propertyName == "post_process") {

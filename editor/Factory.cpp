@@ -2634,6 +2634,8 @@ std::string editor::Factory::createScene(int indentSpaces, Scene* scene, std::st
         out << ind2 << "scene->setDefaultPointsShader(" << formatString(scene->getDefaultPointsShader()) << ");\n";
     if (!scene->getDefaultLinesShader().empty())
         out << ind2 << "scene->setDefaultLinesShader(" << formatString(scene->getDefaultLinesShader()) << ");\n";
+    if (!scene->getDefaultWaterShader().empty())
+        out << ind2 << "scene->setDefaultWaterShader(" << formatString(scene->getDefaultWaterShader()) << ");\n";
     if (!scene->getPostProcessPasses().empty()) {
         out << ind2 << "{\n";
         out << ind3 << "std::vector<PostProcessPass> postProcess;\n";

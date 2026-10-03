@@ -742,6 +742,7 @@ void LuaBinding::registerCoreClasses(lua_State *L){
         .addProperty("defaultSkyShader", &Scene::getDefaultSkyShader, &Scene::setDefaultSkyShader)
         .addProperty("defaultPointsShader", &Scene::getDefaultPointsShader, &Scene::setDefaultPointsShader)
         .addProperty("defaultLinesShader", &Scene::getDefaultLinesShader, &Scene::setDefaultLinesShader)
+        .addProperty("defaultWaterShader", &Scene::getDefaultWaterShader, &Scene::setDefaultWaterShader)
         .addProperty("postProcessPasses", &Scene::getPostProcessPasses, &Scene::setPostProcessPasses)
         .addFunction("setPostProcessUniform",
             luabridge::overload<unsigned int, const std::string&, const Vector4&>(&Scene::setPostProcessUniform),
