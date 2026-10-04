@@ -6327,6 +6327,8 @@ YAML::Node editor::Stream::encodeWaterComponent(const WaterComponent& water) {
     node["caustics"] = water.caustics;
     node["causticsScale"] = water.causticsScale;
     node["underwater"] = water.underwater;
+    node["buoyancy"] = water.buoyancy;
+    node["buoyancyDepth"] = water.buoyancyDepth;
 
     if (!water.customShader.empty())
         node["customShader"] = water.customShader;
@@ -6374,6 +6376,8 @@ WaterComponent editor::Stream::decodeWaterComponent(const YAML::Node& node, cons
     if (node["caustics"]) water.caustics = node["caustics"].as<float>();
     if (node["causticsScale"]) water.causticsScale = node["causticsScale"].as<float>();
     if (node["underwater"]) water.underwater = node["underwater"].as<bool>();
+    if (node["buoyancy"]) water.buoyancy = node["buoyancy"].as<bool>();
+    if (node["buoyancyDepth"]) water.buoyancyDepth = node["buoyancyDepth"].as<float>();
 
     if (node["customShader"]) water.customShader = node["customShader"].as<std::string>();
     if (node["customUnderwaterShader"]) water.customUnderwaterShader = node["customUnderwaterShader"].as<std::string>();

@@ -453,6 +453,8 @@ void LuaBinding::registerObjectClasses(lua_State *L){
         .addProperty("caustics", &Water::getCaustics, &Water::setCaustics)
         .addProperty("causticsScale", &Water::getCausticsScale, &Water::setCausticsScale)
         .addProperty("underwater", &Water::isUnderwater, &Water::setUnderwater)
+        .addProperty("buoyancy", &Water::isBuoyancy, &Water::setBuoyancy)
+        .addProperty("buoyancyDepth", &Water::getBuoyancyDepth, &Water::setBuoyancyDepth)
         .addProperty("customShader", &Water::getCustomShader, &Water::setCustomShader)
         .addProperty("customUnderwaterShader", &Water::getCustomUnderwaterShader, &Water::setCustomUnderwaterShader)
         .addFunction("setShaderUniform",

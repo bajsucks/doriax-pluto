@@ -541,6 +541,8 @@ namespace {
         makeFastProperty<WaterComponent, float, &WaterComponent::caustics>("caustics", PropertyType::Float, UpdateFlags_None),
         makeFastProperty<WaterComponent, float, &WaterComponent::causticsScale>("causticsScale", PropertyType::Float, UpdateFlags_None),
         makeFastProperty<WaterComponent, bool, &WaterComponent::underwater>("underwater", PropertyType::Bool, UpdateFlags_None),
+        makeFastProperty<WaterComponent, bool, &WaterComponent::buoyancy>("buoyancy", PropertyType::Bool, UpdateFlags_None),
+        makeFastProperty<WaterComponent, float, &WaterComponent::buoyancyDepth>("buoyancyDepth", PropertyType::Float, UpdateFlags_None),
         makeFastProperty<WaterComponent, std::string, &WaterComponent::customShader>("customShader", PropertyType::String, UpdateFlags_Shader_Reload),
         makeFastProperty<WaterComponent, std::string, &WaterComponent::customUnderwaterShader>("customUnderwaterShader", PropertyType::String, UpdateFlags_Shader_Reload),
         makeFastProperty<WaterComponent, ShaderUniformValues, &WaterComponent::shaderUniforms>("shaderUniforms", PropertyType::Custom, UpdateFlags_Shader_Uniforms),

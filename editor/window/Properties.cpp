@@ -8537,6 +8537,18 @@ void editor::Properties::drawWaterComponent(ComponentType cpType, SceneProject* 
     propertyRow(RowPropertyType::FloatPositive, cpType, "shoreFoam", "Shore Foam", sceneProject, entities, shoreSettings);
     propertyRow(RowPropertyType::Float_0_1, cpType, "crestFoam", "Crest Foam", sceneProject, entities, crestSettings);
     endTable();
+
+    ImGui::SeparatorText("Buoyancy");
+    beginTable(cpType, getLabelSize("Buoyancy"), "water_buoyancy");
+    RowSettings buoyancySettings;
+    buoyancySettings.help = "Floats the dynamic bodies that have Body3D buoyancy.";
+    RowSettings buoyancyDepthSettings = floatSettings;
+    buoyancyDepthSettings.help = "How far below the surface bodies still float. 0 has no bottom. Where waters overlap, the one with the highest bottom is used.";
+    propertyRow(RowPropertyType::Bool, cpType, "buoyancy", "Buoyancy", sceneProject, entities, buoyancySettings);
+    if (water.buoyancy){
+        propertyRow(RowPropertyType::FloatPositive, cpType, "buoyancyDepth", "Depth", sceneProject, entities, buoyancyDepthSettings);
+    }
+    endTable();
 }
 
 void editor::Properties::drawScriptComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){

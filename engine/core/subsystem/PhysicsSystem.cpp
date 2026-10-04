@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <map>
 #include <set>
 #include <tuple>
@@ -626,22 +627,37 @@ void PhysicsSystem::applyBuoyancy3D(float dt){
 
         const JPH::RVec3 center = body_interface.GetCenterOfMassPosition(body.body);
         const float x = center.GetX();
+        const float y = center.GetY();
         const float z = center.GetZ();
 
+        // where waters overlap the highest bottom wins, so a pool over a lake floats only its own bodies
+        const WaterComponent* found = nullptr;
+        float foundLevel = 0.0f;
+        float foundBottom = 0.0f;
         for (int j = 0; j < waters->size(); j++){
-            WaterComponent& water = waters->getComponentFromIndex(j);
+            const WaterComponent& water = waters->getComponentFromIndex(j);
             Transform* transform = scene->findComponent<Transform>(waters->getEntity(j));
             const AABB& area = water.worldAABB;
-            if (!transform || x < area.getMinimum().x || x > area.getMaximum().x ||
+            if (!water.buoyancy || !transform || x < area.getMinimum().x || x > area.getMaximum().x ||
                     z < area.getMinimum().z || z > area.getMaximum().z)
                 continue;
 
-            Vector3 normal;
-            const float height = transform->worldPosition.y + RenderSystem::getWaterSurfaceOffset(water, x, z, &normal).y;
-            body_interface.ApplyBuoyancyImpulse(body.body, JPH::RVec3(x, height, z), JPH::Vec3(normal.x, normal.y, normal.z),
-                body.buoyancy, body.waterDrag, body.waterAngularDrag, JPH::Vec3::sZero(), world3D.GetGravity(), dt);
-            break;
+            const float level = transform->worldPosition.y;
+            const float bottom = (water.buoyancyDepth > 0.0f) ? level - water.buoyancyDepth : std::numeric_limits<float>::lowest();
+            if (y < bottom || (found && bottom <= foundBottom))
+                continue;
+
+            found = &water;
+            foundLevel = level;
+            foundBottom = bottom;
         }
+        if (!found)
+            continue;
+
+        Vector3 normal;
+        const float height = foundLevel + RenderSystem::getWaterSurfaceOffset(*found, x, z, &normal).y;
+        body_interface.ApplyBuoyancyImpulse(body.body, JPH::RVec3(x, height, z), JPH::Vec3(normal.x, normal.y, normal.z),
+            body.buoyancy, body.waterDrag, body.waterAngularDrag, JPH::Vec3::sZero(), world3D.GetGravity(), dt);
     }
 }
 #endif

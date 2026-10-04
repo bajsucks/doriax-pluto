@@ -110,6 +110,12 @@ namespace doriax{
         void setUnderwater(bool underwater);
         bool isUnderwater() const;
 
+        void setBuoyancy(bool buoyancy);
+        bool isBuoyancy() const;
+
+        void setBuoyancyDepth(float buoyancyDepth);
+        float getBuoyancyDepth() const;
+
         void setCustomShader(const std::string& path);
         std::string getCustomShader() const;
 

@@ -1647,6 +1647,8 @@ std::string editor::Factory::createWaterComponent(int indentSpaces, EntityRegist
     code << ind << "water.caustics = " << formatFloat(water.caustics) << ";\n";
     code << ind << "water.causticsScale = " << formatFloat(water.causticsScale) << ";\n";
     code << ind << "water.underwater = " << formatBool(water.underwater) << ";\n";
+    code << ind << "water.buoyancy = " << formatBool(water.buoyancy) << ";\n";
+    code << ind << "water.buoyancyDepth = " << formatFloat(water.buoyancyDepth) << ";\n";
     if (!water.customShader.empty())
         code << ind << "water.customShader = " << formatString(water.customShader) << ";\n";
     if (!water.customUnderwaterShader.empty())

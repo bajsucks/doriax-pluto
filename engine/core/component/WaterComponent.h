@@ -104,6 +104,8 @@ namespace doriax{
         float caustics = 0.5f; // sunlight patterns on the floor seen through, 0 = off
         float causticsScale = 2.0f; // world size of one pattern cell
         bool underwater = true; // a camera inside sees the scene fade into the water
+        bool buoyancy = true; // floats the dynamic bodies that have Body3D buoyancy
+        float buoyancyDepth = 0.0f; // how far below the surface they still float, 0 = no bottom
 
         // advanced by RenderSystem after each draw
         float wavePhase[WATER_WAVE_COUNT] = {0.0f, 0.0f, 0.0f, 0.0f};

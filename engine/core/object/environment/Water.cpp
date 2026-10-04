@@ -392,6 +392,30 @@ bool Water::isUnderwater() const{
     return water.underwater;
 }
 
+void Water::setBuoyancy(bool buoyancy){
+    WaterComponent& water = getComponent<WaterComponent>();
+
+    water.buoyancy = buoyancy;
+}
+
+bool Water::isBuoyancy() const{
+    WaterComponent& water = getComponent<WaterComponent>();
+
+    return water.buoyancy;
+}
+
+void Water::setBuoyancyDepth(float buoyancyDepth){
+    WaterComponent& water = getComponent<WaterComponent>();
+
+    water.buoyancyDepth = buoyancyDepth;
+}
+
+float Water::getBuoyancyDepth() const{
+    WaterComponent& water = getComponent<WaterComponent>();
+
+    return water.buoyancyDepth;
+}
+
 void Water::setCustomShader(const std::string& path){
     WaterComponent& water = getComponent<WaterComponent>();
 
