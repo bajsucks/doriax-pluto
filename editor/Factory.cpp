@@ -815,6 +815,7 @@ std::string editor::Factory::createMeshComponent(int indentSpaces, EntityRegistr
     // not runtime geometry sources and keep their inline data.
     const bool hasModel = Stream::isModelBackedMesh(entity, scene, scene->getSignature(entity));
 
+    code << ind << "mesh.receiveLights = " << formatBool(mesh.receiveLights) << ";\n";
     code << ind << "mesh.receiveIBL = " << formatBool(mesh.receiveIBL) << ";\n";
     code << ind << "mesh.castShadows = " << formatBool(mesh.castShadows) << ";\n";
     code << ind << "mesh.receiveShadows = " << formatBool(mesh.receiveShadows) << ";\n";
@@ -1643,6 +1644,8 @@ std::string editor::Factory::createWaterComponent(int indentSpaces, EntityRegist
     code << ind << "water.reflectionDistortion = " << formatFloat(water.reflectionDistortion) << ";\n";
     code << ind << "water.refraction = " << formatBool(water.refraction) << ";\n";
     code << ind << "water.refractionDistortion = " << formatFloat(water.refractionDistortion) << ";\n";
+    code << ind << "water.caustics = " << formatFloat(water.caustics) << ";\n";
+    code << ind << "water.causticsScale = " << formatFloat(water.causticsScale) << ";\n";
     code << ind << "water.underwater = " << formatBool(water.underwater) << ";\n";
     if (!water.customShader.empty())
         code << ind << "water.customShader = " << formatString(water.customShader) << ";\n";

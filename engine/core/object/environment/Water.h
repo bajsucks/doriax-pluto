@@ -100,6 +100,13 @@ namespace doriax{
         void setRefractionDistortion(float refractionDistortion);
         float getRefractionDistortion() const;
 
+        // needs refraction and depth effects
+        void setCaustics(float caustics);
+        float getCaustics() const;
+
+        void setCausticsScale(float causticsScale);
+        float getCausticsScale() const;
+
         void setUnderwater(bool underwater);
         bool isUnderwater() const;
 

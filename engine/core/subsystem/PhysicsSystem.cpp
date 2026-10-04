@@ -2794,8 +2794,10 @@ void PhysicsSystem::fixedUpdate(double dt){
             if (signature.test(scene->getComponentId<Transform>())){
                 Transform& transform = scene->getComponent<Transform>(entity);
 
-                Vector3 nPosition = Vector3(bTransform.p.x * pointsToMeterScale2D, bTransform.p.y * pointsToMeterScale2D, transform.worldPosition.z);
-                Quaternion nRotation = Quaternion(Angle::radToDefault(b2Rot_GetAngle(bTransform.q)), Vector3(0, 0, 1));
+                Vector3 worldPosition = Vector3(bTransform.p.x * pointsToMeterScale2D, bTransform.p.y * pointsToMeterScale2D, transform.worldPosition.z);
+                Quaternion worldRotation = Quaternion(Angle::radToDefault(b2Rot_GetAngle(bTransform.q)), Vector3(0, 0, 1));
+                Vector3 nPosition = worldPosition;
+                Quaternion nRotation = worldRotation;
 
                 if (transform.parent != NULL_ENTITY){
                     Transform* transformParent = scene->findComponent<Transform>(transform.parent);
@@ -2805,13 +2807,12 @@ void PhysicsSystem::fixedUpdate(double dt){
                     }
                 }
 
-                if (transform.position != nPosition){
+                if (transform.position != nPosition || transform.rotation != nRotation){
                     transform.position = nPosition;
-                    transform.needUpdate = true;
-                }
-
-                if (transform.rotation != nRotation){
                     transform.rotation = nRotation;
+                    // the next fixed step of this frame syncs the body from the world pose
+                    transform.worldPosition = worldPosition;
+                    transform.worldRotation = worldRotation;
                     transform.needUpdate = true;
                 }
             }
@@ -2881,8 +2882,10 @@ void PhysicsSystem::fixedUpdate(double dt){
                 Transform& transform = scene->getComponent<Transform>(entity);
 
                 if (!std::isnan(position.GetX()) && !std::isnan(position.GetY()) && !std::isnan(position.GetZ())){
-                    Vector3 nPosition = Vector3(position.GetX(), position.GetY(), position.GetZ());
-                    Quaternion nRotation = Quaternion(rotation.GetW(), rotation.GetX(), rotation.GetY(), rotation.GetZ());
+                    Vector3 worldPosition = Vector3(position.GetX(), position.GetY(), position.GetZ());
+                    Quaternion worldRotation = Quaternion(rotation.GetW(), rotation.GetX(), rotation.GetY(), rotation.GetZ());
+                    Vector3 nPosition = worldPosition;
+                    Quaternion nRotation = worldRotation;
 
                     if (transform.parent != NULL_ENTITY){
                         Transform* transformParent = scene->findComponent<Transform>(transform.parent);
@@ -2892,13 +2895,12 @@ void PhysicsSystem::fixedUpdate(double dt){
                         }
                     }
 
-                    if (transform.position != nPosition){
+                    if (transform.position != nPosition || transform.rotation != nRotation){
                         transform.position = nPosition;
-                        transform.needUpdate = true;
-                    }
-
-                    if (transform.rotation != nRotation){
                         transform.rotation = nRotation;
+                        // the next fixed step of this frame syncs the body from the world pose
+                        transform.worldPosition = worldPosition;
+                        transform.worldRotation = worldRotation;
                         transform.needUpdate = true;
                     }
                 }

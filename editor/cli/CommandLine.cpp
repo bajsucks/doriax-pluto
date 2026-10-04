@@ -435,11 +435,13 @@ static bool parseShadersArgs(int argc, char** argv, ShaderCliOptions& options, s
     return true;
 }
 
+// absolute, as the project joins relative paths onto its folder
 static fs::path normalizeProjectPath(const fs::path& path) {
-    if (path.filename() == "project.yaml") {
-        return path.parent_path();
+    fs::path projectPath = fs::absolute(path);
+    if (projectPath.filename() == "project.yaml") {
+        return projectPath.parent_path();
     }
-    return path;
+    return projectPath;
 }
 
 static uint32_t resolveStartSceneId(const Project& project, const std::string& requested) {
@@ -538,7 +540,7 @@ int CommandLine::runExportCommand(int argc, char** argv, const char* executableN
     }
 
     ExportConfig config;
-    config.targetDir = options.targetDir;
+    config.targetDir = fs::absolute(options.targetDir);
     config.assetsDir = options.assetsDir.empty() ? project.getAssetsDir() : options.assetsDir;
     config.luaDir    = options.luaDir.empty()    ? project.getLuaDir()    : options.luaDir;
     config.startSceneId = resolveStartSceneId(project, options.startScene);

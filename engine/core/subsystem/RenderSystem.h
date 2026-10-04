@@ -172,6 +172,8 @@ namespace doriax{
 		Vector4 flags;         // x = scene lights on, y = IBL ambient available, z = planar reflection, w = eye inside the water
 		Vector4 refraction;    // x = distortion, y = 1 when this pass has the scene copy
 		Vector4 refractionRect; // xy = view origin, zw = view size, in scene copy uv
+		Vector4 caustics;      // x = strength, y = 1 / cell size
+		Vector4 waveScale;     // x = longest wavelength
 	} fs_water_t;
 
 	typedef struct fs_underwater_t {

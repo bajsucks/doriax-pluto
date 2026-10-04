@@ -356,6 +356,30 @@ float Water::getRefractionDistortion() const{
     return water.refractionDistortion;
 }
 
+void Water::setCaustics(float caustics){
+    WaterComponent& water = getComponent<WaterComponent>();
+
+    water.caustics = caustics;
+}
+
+float Water::getCaustics() const{
+    WaterComponent& water = getComponent<WaterComponent>();
+
+    return water.caustics;
+}
+
+void Water::setCausticsScale(float causticsScale){
+    WaterComponent& water = getComponent<WaterComponent>();
+
+    water.causticsScale = causticsScale;
+}
+
+float Water::getCausticsScale() const{
+    WaterComponent& water = getComponent<WaterComponent>();
+
+    return water.causticsScale;
+}
+
 void Water::setUnderwater(bool underwater){
     WaterComponent& water = getComponent<WaterComponent>();
 

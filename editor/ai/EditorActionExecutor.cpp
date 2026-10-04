@@ -1669,16 +1669,38 @@ Command* buildPropertyCommand(Project* project, uint32_t sceneId, Entity entity,
                 error = "Property requires texture_path.";
                 return nullptr;
             }
-            fs::path rel(args["texture_path"].get<std::string>());
-            if (!PathUtils::isSafeRelativePath(rel)) {
-                error = "texture_path must be a safe project-relative path.";
+            std::vector<std::string> paths;
+            std::istringstream texturePath(args["texture_path"].get<std::string>());
+            for (std::string path; std::getline(texturePath, path, '|');) {
+                fs::path rel(path);
+                if (!PathUtils::isSafeRelativePath(rel)) {
+                    error = "texture_path must be a safe project-relative path.";
+                    return nullptr;
+                }
+                if (!isInsideAssets(project, rel)) {
+                    error = outsideAssetsError(project, "texture_path");
+                    return nullptr;
+                }
+                paths.push_back(assetPathFromAi(project, rel));
+            }
+            // a cubemap takes one cross-layout image or its six faces
+            const bool cubeMap = propertyName == "texture" &&
+                (component == ComponentType::SkyComponent || component == ComponentType::ReflectionProbeComponent);
+            if (paths.size() != 1 && !(cubeMap && paths.size() == 6)) {
+                error = "texture_path takes one path, or six faces joined by '|' for a cubemap.";
                 return nullptr;
             }
-            if (!isInsideAssets(project, rel)) {
-                error = outsideAssetsError(project, "texture_path");
-                return nullptr;
+            Texture texture;
+            if (!cubeMap) {
+                texture = Texture(paths[0]);
+            } else if (paths.size() == 1) {
+                texture.setCubeMap(paths[0]);
+            } else {
+                for (size_t face = 0; face < paths.size(); face++) {
+                    texture.setCubePath(face, paths[face]);
+                }
             }
-            return new PropertyCmd<Texture>(project, sceneId, entity, component, propertyName, Texture(assetPathFromAi(project, rel)), onChanged);
+            return new PropertyCmd<Texture>(project, sceneId, entity, component, propertyName, texture, onChanged);
         }
         case PropertyType::Entity:
             if (!valueFieldPresent(args, "entity_value") || !args["entity_value"].is_number_integer()) {
@@ -1716,6 +1738,46 @@ std::string filenameFromUrl(const std::string& url, const std::string& fallback)
         name = fallback;
     }
     return name;
+}
+
+// Files a .gltf references, as {path, url}. Poly Haven keeps them in other folders and
+// lists them in its files API; other uris resolve against the .gltf url.
+std::vector<std::pair<std::string, std::string>> gltfDependencies(const HttpClient* httpClient, const Json& arguments,
+                                                                  const fs::path& gltfFile, const std::atomic<bool>* cancel) {
+    std::vector<std::pair<std::string, std::string>> files;
+    const std::string url = arguments.value("download_url", "");
+
+    if (lower(arguments.value("provider", "")) == "polyhaven") {
+        HttpResponse response = httpClient->get("https://api.polyhaven.com/files/" + HttpClient::urlEncode(arguments.value("asset_id", "")),
+            {"Accept: application/json", "User-Agent: DoriaxEditorAI/1.0"}, cancel);
+        Json root = Json::parse(response.body, nullptr, false);
+        if (root.is_object() && root.contains("gltf")) {
+            for (const Json& resolution : root["gltf"]) {
+                const Json gltf = resolution.value("gltf", Json::object());
+                if (gltf.value("url", "") != url) continue;
+                const Json include = gltf.value("include", Json::object());
+                for (auto it = include.begin(); it != include.end(); ++it) {
+                    files.emplace_back(it.key(), it.value().value("url", ""));
+                }
+                return files;
+            }
+        }
+    }
+
+    std::ifstream in(gltfFile);
+    Json gltf = Json::parse(in, nullptr, false);
+    if (!gltf.is_object()) return files;
+
+    const std::string base = url.substr(0, url.find_last_of('/') + 1);
+    for (const char* key : {"buffers", "images"}) {
+        for (const Json& item : gltf.value(key, Json::array())) {
+            const std::string uri = item.value("uri", "");
+            if (!uri.empty() && uri.rfind("data:", 0) != 0 && uri.find("://") == std::string::npos) {
+                files.emplace_back(uri, base + uri);
+            }
+        }
+    }
+    return files;
 }
 
 Entity resolveTerrainEntity(Project* project, SceneProject* sceneProject, const Json& args) {
@@ -2475,6 +2537,9 @@ ActionResult EditorActionExecutor::createEntity(const Json& arguments) {
     if (arguments.contains("parent_id")) {
         parent = resolveEntityByKeys(sceneProject, arguments, "parent_id", "parent_name");
         if (parent == NULL_ENTITY) return failResult("Parent entity not found.");
+        if (!sceneProject->scene->findComponent<Transform>(parent)) {
+            return failResult("Parent entity has no Transform. Create it as type 'object' instead of 'empty'.");
+        }
     }
 
     auto* cmd = parent != NULL_ENTITY
@@ -2569,6 +2634,9 @@ ActionResult EditorActionExecutor::reparentEntity(const Json& arguments) {
     }
 
     if (parent != NULL_ENTITY) {
+        if (!sceneProject->scene->findComponent<Transform>(entity) || !sceneProject->scene->findComponent<Transform>(parent)) {
+            return failResult("Both entities need a Transform to be parented.");
+        }
         CommandHandle::get(sceneId)->addCommandNoMerge(new MoveEntityOrderCmd(project, sceneId, entity, parent, InsertionType::INTO));
         return okResult("Reparented entity through the command history.");
     }
@@ -3450,8 +3518,11 @@ ActionResult EditorActionExecutor::setTerrainTextures(const Json& arguments) {
             SceneProject* sp = project ? project->getScene(sceneId) : nullptr;
             TerrainComponent* terrain = sp && sp->scene ? sp->scene->findComponent<TerrainComponent>(entity) : nullptr;
             if (!terrain) return;
-            if (height) terrain->heightMapLoaded = false;
-            terrain->needUpdateTerrain = height;
+            // only set, a blend map in the same call must not cancel the height rebuild
+            if (height) {
+                terrain->heightMapLoaded = false;
+                terrain->needUpdateTerrain = true;
+            }
             terrain->needUpdateTexture = true;
         };
     };
@@ -4972,13 +5043,20 @@ ActionResult EditorActionExecutor::searchCuratedAssets(const Json& arguments, co
             std::string name = meta.value("name", id);
             std::string haystack = lower(id + " " + name + " " + meta.value("categories", Json::array()).dump() + " " + meta.value("tags", Json::array()).dump());
             if (haystack.find(query) == std::string::npos) continue;
+            std::string author;
+            const Json authors = meta.value("authors", Json::object());
+            for (auto a = authors.begin(); a != authors.end(); ++a) {
+                author += (author.empty() ? "" : ", ") + a.key();
+            }
             results.push_back({
                 {"provider", "polyhaven"},
                 {"asset_id", id},
                 {"title", name},
+                {"author", author},
                 {"license", "CC0 / Poly Haven license terms"},
                 {"source_url", "https://polyhaven.com/a/" + id},
-                {"download_note", "Run files endpoint manually or provide a reviewed direct .glb/.gltf/.obj URL for download_curated_asset."}
+                {"download_url", "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/" + id + "/" + id + "_1k.gltf"},
+                {"polycount", meta.value("polycount", 0)}
             });
         }
         return okResult("Searched Poly Haven. API commercial usage may require custom licensing.", Json{{"results", results}});
@@ -5049,6 +5127,19 @@ ActionResult EditorActionExecutor::downloadCuratedAsset(const Json& arguments, c
     if (ec) return failResult("Failed to create import directory: " + ec.message());
     fs::copy_file(stagingFile, importedFile, fs::copy_options::overwrite_existing, ec);
     if (ec) return failResult("Failed to copy downloaded asset into project: " + ec.message());
+
+    if (lower(importedFile.extension().string()) == ".gltf") {
+        for (const auto& [relative, fileUrl] : gltfDependencies(httpClient, arguments, stagingFile, cancel)) {
+            if (!PathUtils::isSafeRelativePath(relative)) {
+                return failResult("The glTF references an unsafe path: " + relative);
+            }
+            HttpResponse dependency = httpClient->downloadToFile(fileUrl, importDir / relative, {"Accept: */*"}, cancel);
+            if (!dependency.error.empty()) return failResult(dependency.error);
+            if (dependency.status < 200 || dependency.status >= 300) {
+                return failResult("Download of " + relative + " returned HTTP " + std::to_string(dependency.status));
+            }
+        }
+    }
 
     fs::path attributionPath = project->getProjectInternalPath() / "ai" / "asset_attributions.yaml";
     YAML::Node root;
@@ -5314,6 +5405,8 @@ ActionResult EditorActionExecutor::openScene(const Json& arguments) {
 
     const bool closePrevious = arguments.value("close_previous", false);
     project->openScene(rel, closePrevious);
+    // a focused scene window would select its own scene back
+    getEditorHost().requestScenePlayFocus(project->getSelectedSceneId());
     return okResult("Requested scene open.",
                     Json{{"scene_path", rel.lexically_normal().generic_string()},
                          {"selected_scene_id", project->getSelectedSceneId()}});
@@ -5326,6 +5419,8 @@ ActionResult EditorActionExecutor::selectScene(const Json& arguments) {
     if (!sceneProject->opened) return failResult("Scene is not open. Use open_scene first.");
 
     project->setSelectedSceneId(sceneId);
+    // a focused scene window would select its own scene back
+    getEditorHost().requestScenePlayFocus(sceneId);
     return okResult("Selected scene tab.", Json{{"scene_id", sceneId}, {"scene_name", sceneProject->name}});
 }
 

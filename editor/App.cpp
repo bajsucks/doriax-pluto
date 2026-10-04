@@ -2745,7 +2745,8 @@ std::filesystem::path editor::App::getUserShaderCacheDir(){
     // v29: sprite and tilemap UVs (HAS_TEXTURERECT) use centroid interpolation, so MSAA
     //      edge pixels no longer sample outside their atlas rect.
     // v30: Water component — new water and underwater shaders.
-    return App::getUserCacheBaseDir() / "doriax" / "shaders" / "v30";
+    // v31: Water caustics and distant wave fade, appended to u_fs_waterParams.
+    return App::getUserCacheBaseDir() / "doriax" / "shaders" / "v31";
 }
 
 void editor::App::pushTabNotificationStyle(){

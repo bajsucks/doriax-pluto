@@ -2549,7 +2549,8 @@ void MeshSystem::calculateMeshAABB(MeshComponent& mesh){
         }
     }
 
-    mesh.verticesAABB = AABB::ZERO;
+    // not AABB::ZERO, a box at the origin that every merge would keep
+    mesh.verticesAABB.setNull();
     mesh.bonesAABB.clear();
     mesh.skinnedAABB.setNull(); // reposed on the next RenderSystem update
 
@@ -2605,6 +2606,9 @@ void MeshSystem::calculateMeshAABB(MeshComponent& mesh){
         }
     }
 
+    if (mesh.verticesAABB.isNull()){
+        mesh.verticesAABB = AABB::ZERO;
+    }
     mesh.aabb = mesh.verticesAABB;
 
     mesh.needUpdateAABB = true;

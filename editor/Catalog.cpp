@@ -538,6 +538,8 @@ namespace {
         makeFastProperty<WaterComponent, float, &WaterComponent::reflectionDistortion>("reflectionDistortion", PropertyType::Float, UpdateFlags_None),
         makeFastProperty<WaterComponent, bool, &WaterComponent::refraction>("refraction", PropertyType::Bool, UpdateFlags_None),
         makeFastProperty<WaterComponent, float, &WaterComponent::refractionDistortion>("refractionDistortion", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<WaterComponent, float, &WaterComponent::caustics>("caustics", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<WaterComponent, float, &WaterComponent::causticsScale>("causticsScale", PropertyType::Float, UpdateFlags_None),
         makeFastProperty<WaterComponent, bool, &WaterComponent::underwater>("underwater", PropertyType::Bool, UpdateFlags_None),
         makeFastProperty<WaterComponent, std::string, &WaterComponent::customShader>("customShader", PropertyType::String, UpdateFlags_Shader_Reload),
         makeFastProperty<WaterComponent, std::string, &WaterComponent::customUnderwaterShader>("customUnderwaterShader", PropertyType::String, UpdateFlags_Shader_Reload),
@@ -613,6 +615,7 @@ namespace {
     };
 
     static const FastPropertyDescriptor kMeshTopProperties[] = {
+        makeFastProperty<MeshComponent, bool, &MeshComponent::receiveLights>("receiveLights", PropertyType::Bool, UpdateFlags_Mesh_Reload),
         makeFastProperty<MeshComponent, bool, &MeshComponent::receiveIBL>("receiveIBL", PropertyType::Bool, UpdateFlags_Mesh_Reload),
         makeFastProperty<MeshComponent, bool, &MeshComponent::castShadows>("castShadows", PropertyType::Bool, UpdateFlags_Mesh_Reload),
         makeFastProperty<MeshComponent, bool, &MeshComponent::receiveShadows>("receiveShadows", PropertyType::Bool, UpdateFlags_Mesh_Reload),

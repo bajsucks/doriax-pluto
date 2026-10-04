@@ -5955,6 +5955,10 @@ void editor::Properties::drawMeshComponent(ComponentType cpType, SceneProject* s
         ImGui::EndPopup();
     }
 
+    RowSettings lightsSettings;
+    lightsSettings.help = "Light this mesh with the scene lights. When off, it is unlit and shows its colors as they are.";
+    propertyRow(RowPropertyType::Bool, cpType, "receiveLights", "Receive Lights", sceneProject, entities, lightsSettings);
+
     RowSettings iblSettings;
     iblSettings.help = "Light this mesh with image-based lighting, from the scene's Sky environment and from Reflection Probes. Sky lighting requires a Sky entity with a texture.";
     propertyRow(RowPropertyType::Bool, cpType, "receiveIBL", "Receive IBL", sceneProject, entities, iblSettings);
@@ -8496,14 +8500,20 @@ void editor::Properties::drawWaterComponent(ComponentType cpType, SceneProject* 
     endTable();
 
     ImGui::SeparatorText("Refraction");
-    beginTable(cpType, getLabelSize("Refraction"), "water_refraction");
+    beginTable(cpType, getLabelSize("Caustics Scale"), "water_refraction");
     RowSettings refractionSettings;
     refractionSettings.help = "Shows the scene behind the water, bent by the ripples and tinted by the water it crosses. Copies the scene once per frame.";
     RowSettings refractionDistortionSettings = distortionSettings;
     refractionDistortionSettings.help = "How much the ripples bend the scene behind the water.";
+    RowSettings causticsSettings = unitSettings;
+    causticsSettings.help = "Sunlight patterns on the floor seen through the water. Needs Depth Effects.";
+    RowSettings causticsScaleSettings = floatSettings;
+    causticsScaleSettings.help = "World size of one cell of the caustics.";
     propertyRow(RowPropertyType::Bool, cpType, "refraction", "Refraction", sceneProject, entities, refractionSettings);
     if (water.refraction){
         propertyRow(RowPropertyType::FloatPositive, cpType, "refractionDistortion", "Distortion", sceneProject, entities, refractionDistortionSettings);
+        propertyRow(RowPropertyType::FloatPositive, cpType, "caustics", "Caustics", sceneProject, entities, causticsSettings);
+        propertyRow(RowPropertyType::FloatPositive, cpType, "causticsScale", "Caustics Scale", sceneProject, entities, causticsScaleSettings);
     }
     endTable();
 

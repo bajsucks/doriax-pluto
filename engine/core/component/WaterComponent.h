@@ -101,6 +101,8 @@ namespace doriax{
         float reflectionDistortion = 0.04f;
         bool refraction = true; // the scene behind is seen through, bent and absorbed
         float refractionDistortion = 0.03f;
+        float caustics = 0.5f; // sunlight patterns on the floor seen through, 0 = off
+        float causticsScale = 2.0f; // world size of one pattern cell
         bool underwater = true; // a camera inside sees the scene fade into the water
 
         // advanced by RenderSystem after each draw

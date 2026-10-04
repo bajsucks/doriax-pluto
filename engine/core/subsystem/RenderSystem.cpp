@@ -2812,8 +2812,9 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint16_t pipelin
             p_punctual = hasLights;
             p_ibl = useIBL;
 
-            p_hasNormal = true;
-            if (mesh.submeshes[i].hasTangent){
+            // a mesh without normals gets flat ones from the shader
+            p_hasNormal = mesh.submeshes[i].hasNormal;
+            if (p_hasNormal && mesh.submeshes[i].hasTangent){
                 p_hasTangent = true;
             }
             if (mesh.submeshes[i].hasNormalMap){
@@ -2833,8 +2834,8 @@ bool RenderSystem::loadMesh(Entity entity, MeshComponent& mesh, uint16_t pipelin
         bool p_light2d = useLight2D;
         bool p_shadows2d = useLight2D && hasShadows2D && mesh.receiveShadows;
         if (useLight2D){
-            p_hasNormal = true;
-            if (mesh.submeshes[i].hasTangent){
+            p_hasNormal = mesh.submeshes[i].hasNormal;
+            if (p_hasNormal && mesh.submeshes[i].hasTangent){
                 p_hasTangent = true;
             }
             if (mesh.submeshes[i].hasNormalMap){
@@ -6505,6 +6506,8 @@ bool RenderSystem::drawWater(Entity entity, WaterComponent& water, Transform& tr
     // only a pass that copied its scene refracts, the others blend over it
     fsParams.refraction = Vector4(water.refractionDistortion, (water.refraction && currentSceneCopy) ? 1.0f : 0.0f, 0.0f, 0.0f);
     fsParams.refractionRect = currentSceneCopyRect;
+    fsParams.caustics = Vector4(std::max(water.caustics, 0.0f), 1.0f / std::max(water.causticsScale, 0.01f), 0.0f, 0.0f);
+    fsParams.waveScale = Vector4(std::max(water.waveLength, 0.01f), 0.0f, 0.0f, 0.0f);
 
     render.applyUniformBlock(water.slotVSParams, sizeof(vs_water_t), &vsParams);
     render.applyUniformBlock(water.slotFSParams, water.fsParamsSize, &fsParams);

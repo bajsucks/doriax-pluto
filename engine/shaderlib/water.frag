@@ -32,6 +32,8 @@ uniform u_fs_waterParams {
     vec4 flags;                    // x = scene lights on, y = IBL ambient available, z = planar reflection, w = eye inside the water
     vec4 refraction;               // x = distortion, y = 1 when this pass has the scene copy
     vec4 refractionRect;           // xy = view origin, zw = view size, in scene copy uv
+    vec4 caustics;                 // x = strength, y = 1 / cell size
+    vec4 waveScale;                // x = longest wavelength
 } water;
 
 // same layout as fs_lighting_t (RenderSystem.h) and mesh.frag
@@ -143,6 +145,34 @@ float foamNoise(vec2 p, float time){
     return n / 1.5;
 }
 
+// a web of light where drifting cells meet, in [0, 1]
+float causticCells(vec2 p, float time){
+    vec2 cell = floor(p);
+    vec2 f = fract(p);
+    float nearest = 8.0;
+    float second = 8.0;
+    for (int y = -1; y <= 1; y++){
+        for (int x = -1; x <= 1; x++){
+            vec2 o = vec2(float(x), float(y));
+            vec2 seed = vec2(hash12(cell + o), hash12(cell + o + 17.31));
+            vec2 d = o + 0.5 + 0.4 * sin(time * 0.8 + 6.2831 * seed) - f;
+            float dist = dot(d, d);
+            second = (dist < nearest) ? nearest : min(second, dist);
+            nearest = min(nearest, dist);
+        }
+    }
+    return 1.0 - smoothstep(0.0, 0.2, sqrt(second) - sqrt(nearest));
+}
+
+// sunlight focused by the waves on the floor, two layers hide the repetition
+float getCaustics(vec2 p, float time){
+    p += 0.35 * vec2(valueNoise(p * 0.45 + time * 0.07), valueNoise(p * 0.45 - time * 0.05 + 9.1));
+    float a = causticCells(p, time);
+    float b = causticCells(p * 1.37 + vec2(3.7, 8.1), time * 1.17 + 2.0);
+    float web = 0.5 * (a + b);
+    return web * sqrt(web) * 2.0;
+}
+
 vec3 skyColor(vec3 direction){
     return sRGBToLinear(texture(samplerCube(u_skyTexture, u_sky_smp), rotateEnv(direction)).rgb) * water.envColor.rgb;
 }
@@ -162,8 +192,9 @@ vec2 getScreenTilt(vec3 n, vec4 clip){
 }
 
 // the scene behind the water in the copy taken before it, bent by the surface tilt;
-// w is the water crossed by the ray that was used
-vec4 getSceneBehind(vec2 screenTilt, vec4 clip, float through){
+// w is the water crossed by the ray that was used, floorPoint.w = 1 where it hit the scene
+vec4 getSceneBehind(vec2 screenTilt, vec4 clip, float through, out vec4 floorPoint){
+    floorPoint = vec4(0.0);
 #ifdef USE_REFRACTION
     vec2 ndc = clip.xy / clip.w;
     // shallow water bends little, which keeps the shore line in place
@@ -177,8 +208,14 @@ vec4 getSceneBehind(vec2 screenTilt, vec4 clip, float through){
             if (dot(hitPosition - v_position, v_position - water.eyePos.xyz) < 0.0 || hitPosition.y > v_position.y){
                 // landed in front of the water or above its surface, the straight ray is used
                 bent = ndc;
+                depth = decodeDepth(texture(sampler2D(u_depthTexture, u_depth_smp), vec2(ndc.x * 0.5 + 0.5, ndcYToDepthUV(ndc.y))));
+                hit = water.invViewProjection * vec4(ndc, depth * 2.0 - 1.0, 1.0);
+                hitPosition = hit.xyz / hit.w;
             }else{
                 through = (depth < 0.9999) ? length(hitPosition - v_position) : 1.0e4;
+            }
+            if (depth < 0.9999){
+                floorPoint = vec4(hitPosition, 1.0);
             }
         }
     #endif
@@ -217,18 +254,25 @@ vec3 getRippleNormal(vec2 worldXZ){
 void main(){
     vec3 toEye = water.eyePos.xyz - v_position;
     float eyeDistance = length(toEye);
+    // pixel size on the surface, taken before any branch
+    float footprint = length(fwidth(v_position.xz));
     vec3 v = toEye / max(eyeDistance, 0.0001);
     // logical, so screen lookups ignore the viewport origin and the target size
     vec4 clip = water.viewProjection * vec4(v_position, 1.0);
+
+    // waves narrower than a few pixels would only sparkle, the roughness takes them over
+    float waveDetail = 1.0 - smoothstep(0.04, 0.35, footprint / max(water.waveScale.x, 0.01));
+    vec3 waveNormal = normalize(mix(vec3(0.0, 1.0, 0.0), v_normal, waveDetail));
 
     // distant ripples fade, they would only shimmer
     vec3 ripple = getRippleNormal(v_position.xz);
     float tileSize = 1.0 / max(water.ripples.x, 0.0001);
     float rippleStrength = water.ripples.y * mix(1.0, 0.3, smoothstep(tileSize * 15.0, tileSize * 120.0, eyeDistance));
-    vec3 n = normalize(v_normal + vec3(ripple.x, 0.0, ripple.y) * (rippleStrength / max(ripple.z, 0.1)));
+    vec3 n = normalize(waveNormal + vec3(ripple.x, 0.0, ripple.y) * (rippleStrength / max(ripple.z, 0.1)));
 
-    // not gl_FrontFacing, which flips with the winding of offscreen passes
-    bool underwater = dot(v_normal, toEye) < 0.0;
+    // not gl_FrontFacing, which flips with the winding of offscreen passes; a grazing eye
+    // above the water also sees the backs of waves facing away from it
+    bool underwater = dot(v_normal, toEye) < 0.0 && water.eyePos.y < v_position.y;
     if (underwater){
         n = -n;
     }
@@ -245,7 +289,9 @@ void main(){
     vec3 bodyLight = ambient;
     vec3 specular = vec3(0.0);
     vec3 scatter = vec3(0.0);
-    float alphaRoughness = max(water.surface.z * water.surface.z, 0.0005);
+    float sunlight = 0.0; // directional light on the surface, for the caustics
+    float roughness = mix(max(water.surface.z, 0.3), water.surface.z, waveDetail);
+    float alphaRoughness = max(roughness * roughness, 0.0005);
     float crest = clamp(v_waveHeight / max(water.ripples.z, 0.001), 0.0, 1.0);
 
     if (water.flags.x > 0.5){
@@ -285,6 +331,9 @@ void main(){
             #endif
 
             bodyLight += intensity * max(l.y, 0.0) / M_PI;
+            if (light.type == LightType_Directional){
+                sunlight += dot(intensity, vec3(0.2126, 0.7152, 0.0722)) * max(l.y, 0.0);
+            }
 
             if (!underwater){
                 vec3 h = normalize(l + v);
@@ -371,7 +420,16 @@ void main(){
         if (water.refraction.y > 0.5){
             // the scene behind fades as the water gets deeper
             float through = hasDepth ? pathDepth : depthFade * mix(1.0, 3.0, 1.0 - NdotV);
-            vec4 behind = getSceneBehind(screenTilt, clip, through);
+            vec4 floorPoint;
+            vec4 behind = getSceneBehind(screenTilt, clip, through, floorPoint);
+            if (floorPoint.w > 0.5 && water.caustics.x > 0.0){
+                // brightest in shallow water, gone where the cells would be under a pixel
+                float below = v_position.y - floorPoint.y;
+                float cellsPerPixel = footprint * length(floorPoint.xyz - water.eyePos.xyz) / max(eyeDistance, 0.001) * water.caustics.y;
+                float fade = smoothstep(0.05, 0.6, below) * exp(-below * 0.1) * (1.0 - smoothstep(0.08, 0.35, cellsPerPixel));
+                float pattern = getCaustics(floorPoint.xz * water.caustics.y, water.eyePos.w);
+                behind.rgb *= 1.0 + water.caustics.x * pattern * fade * clamp(sunlight * 0.5, 0.0, 1.0);
+            }
             vec3 transmittance = exp(-getExtinction(depthFade) * behind.w);
 
             vec3 transmission = transmittance * (1.0 - fresnel) * (1.0 - foam);

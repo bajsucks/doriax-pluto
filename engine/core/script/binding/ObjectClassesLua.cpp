@@ -450,6 +450,8 @@ void LuaBinding::registerObjectClasses(lua_State *L){
         .addProperty("reflectionDistortion", &Water::getReflectionDistortion, &Water::setReflectionDistortion)
         .addProperty("refraction", &Water::isRefraction, &Water::setRefraction)
         .addProperty("refractionDistortion", &Water::getRefractionDistortion, &Water::setRefractionDistortion)
+        .addProperty("caustics", &Water::getCaustics, &Water::setCaustics)
+        .addProperty("causticsScale", &Water::getCausticsScale, &Water::setCausticsScale)
         .addProperty("underwater", &Water::isUnderwater, &Water::setUnderwater)
         .addProperty("customShader", &Water::getCustomShader, &Water::setCustomShader)
         .addProperty("customUnderwaterShader", &Water::getCustomUnderwaterShader, &Water::setCustomUnderwaterShader)
