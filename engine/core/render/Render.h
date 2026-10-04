@@ -188,7 +188,8 @@ namespace doriax{
         BONES,
         WATERNORMAL,         // water ripple normal map
         WATERREFLECTION,     // water planar reflection camera target
-        WATERREFRACTION      // copy of the scene drawn before the water
+        WATERREFRACTION,     // copy of the scene drawn before the water
+        WATEREXCLUSION       // hull maps of the volumes keeping the water out
     };
 
     enum class TextureType {

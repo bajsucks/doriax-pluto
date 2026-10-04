@@ -119,7 +119,8 @@ namespace doriax::editor{
         // Keep new component types at the end: their ordinal is used as the bit
         // position in EntityBundle's in-memory component override mask.
         ReflectionProbeComponent,
-        WaterComponent
+        WaterComponent,
+        WaterExclusionComponent
     };
 
     enum class PropertyType{

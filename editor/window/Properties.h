@@ -378,6 +378,7 @@ namespace doriax::editor{
         void drawAudioComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawSkyComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawWaterComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
+        void drawWaterExclusionComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawParticlesComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawLinesComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);
         void drawPolygonComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities);

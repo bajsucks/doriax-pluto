@@ -11,10 +11,13 @@
 #endif
 #ifdef DORIAX_PHYSICS_3D
 #include "util/JoltPhysicsAux.h"
+#include "Jolt/Geometry/ConvexHullBuilder.h"
 #endif
 
 #include <algorithm>
+#include <climits>
 #include <cmath>
+#include <cstring>
 #include <limits>
 #include <map>
 #include <set>
@@ -196,6 +199,139 @@ namespace {
                meshTransform->modelMatrix;
     }
 
+    // a mesh node into its model's space, through the local transforms between them
+    Matrix4 meshToModelMatrix(Scene* scene, Entity model, Entity mesh){
+        Matrix4 matrix;
+        Entity current = mesh;
+        for (int hops = 0; current != NULL_ENTITY && current != model && hops < 64; hops++){
+            Transform* transform = scene->findComponent<Transform>(current);
+            if (!transform)
+                break;
+            matrix = transform->localMatrix * matrix;
+            current = transform->parent;
+        }
+        return matrix;
+    }
+
+#ifdef DORIAX_PHYSICS_3D
+    // inside a volume keeping the water out that is not the body's own, like cargo in a boat
+    bool isKeptDry(Scene* scene, Entity body, const Vector3& point){
+        auto exclusions = scene->getComponentArray<WaterExclusionComponent>();
+        for (int i = 0; i < exclusions->size(); i++){
+            Entity entity = exclusions->getEntity(i);
+            Transform* transform = scene->findComponent<Transform>(entity);
+            if (!transform || !RenderSystem::isInsideWaterExclusion(exclusions->getComponentFromIndex(i), *transform, point))
+                continue;
+
+            // a volume on the body or on its children is the body's own
+            Entity current = entity;
+            for (int hops = 0; current != NULL_ENTITY && current != body && hops < 64; hops++){
+                Transform* currentTransform = scene->findComponent<Transform>(current);
+                current = currentTransform ? currentTransform->parent : NULL_ENTITY;
+            }
+            if (current != body)
+                return true;
+        }
+        return false;
+    }
+#endif
+
+}
+
+uint64_t PhysicsSystem::getMeshSignature(Scene* scene, Entity entity){
+    uint64_t hash = 1469598103934665603ull;
+    auto mix = [&hash](uint64_t value){
+        for (int i = 0; i < 8; i++){
+            hash ^= (value >> (i * 8)) & 0xFF;
+            hash *= 1099511628211ull;
+        }
+    };
+    auto mixFloat = [&mix](float value){
+        uint32_t bits;
+        std::memcpy(&bits, &value, sizeof(bits));
+        mix(bits);
+    };
+
+    for (Entity source : meshSourceEntities(scene, entity)){
+        mix(source);
+        const Matrix4 toModel = meshToModelMatrix(scene, entity, source);
+        for (int i = 0; i < 16; i++){
+            mixFloat(static_cast<const float*>(toModel)[i]);
+        }
+        MeshComponent& mesh = scene->getComponent<MeshComponent>(source);
+        for (const MeshSourceView& view : collectMeshSourceViews(&mesh)){
+            mix((uint64_t)(uintptr_t)view.vertexBuffer->getData());
+            mix(view.vertexAttr.getOffset());
+            mix(view.vertexAttr.getCount());
+        }
+        // a rebuild into the same buffer, like a resized box, still moves the bounds
+        for (int c = 0; c < 3; c++){
+            mixFloat(mesh.verticesAABB.getMinimum()[c]);
+            mixFloat(mesh.verticesAABB.getMaximum()[c]);
+        }
+    }
+
+    return hash;
+}
+
+bool PhysicsSystem::getMeshConvexHull(Scene* scene, Entity entity, std::vector<Vector4>& planes, std::vector<Vector3>& points){
+    planes.clear();
+    points.clear();
+
+#ifdef DORIAX_PHYSICS_3D
+    JPH::Array<JPH::Vec3> vertices;
+    AABB bounds;
+    for (Entity source : meshSourceEntities(scene, entity)){
+        const Matrix4 toModel = meshToModelMatrix(scene, entity, source);
+        std::set<VertexRange> addedRanges;
+
+        for (MeshSourceView& view : collectMeshSourceViews(scene->findComponent<MeshComponent>(source))){
+            if (!addedRanges.insert(vertexRange(view)).second) continue;
+
+            int verticesize = int(view.vertexAttr.getCount());
+            for (int i = 0; i < verticesize; i++){
+                Vector3 vertice = toModel * view.vertexBuffer->getVector3(&view.vertexAttr, i);
+                vertices.push_back(JPH::Vec3(vertice.x, vertice.y, vertice.z));
+                bounds.merge(vertice);
+            }
+        }
+    }
+
+    // also while its model is still loading
+    if (vertices.empty())
+        return false;
+
+    // vertices closer to the hull than a ten-thousandth of its size are left out
+    JPH::ConvexHullBuilder builder(vertices);
+    const char* error = nullptr;
+    const JPH::ConvexHullBuilder::EResult result = builder.Initialize(INT_MAX, std::max(bounds.getSize().length() * 1.0e-4f, 1.0e-6f), error);
+    if (result != JPH::ConvexHullBuilder::EResult::Success && result != JPH::ConvexHullBuilder::EResult::MaxVerticesReached){
+        Log::warn("Cannot build a convex hull for entity %u: %s", entity, error ? error : "flat mesh");
+        return false;
+    }
+
+    std::set<int> used;
+    for (const JPH::ConvexHullBuilder::Face* face : builder.GetFaces()){
+        if (face->mRemoved) continue;
+
+        const JPH::Vec3 normal = face->mNormal.Normalized();
+        planes.push_back(Vector4(normal.GetX(), normal.GetY(), normal.GetZ(), normal.Dot(face->mCentroid)));
+
+        const JPH::ConvexHullBuilder::Edge* edge = face->mFirstEdge;
+        do{
+            used.insert(edge->mStartIdx);
+            edge = edge->mNextEdge;
+        }while (edge != face->mFirstEdge);
+    }
+    for (int index : used){
+        points.push_back(Vector3(vertices[index].GetX(), vertices[index].GetY(), vertices[index].GetZ()));
+    }
+
+    return !planes.empty();
+#else
+    Log::warn("Cannot build a convex hull for entity %u without 3D physics", entity);
+    return false;
+#endif
 }
 
 #ifdef DORIAX_PHYSICS_3D
@@ -629,6 +765,9 @@ void PhysicsSystem::applyBuoyancy3D(float dt){
         const float x = center.GetX();
         const float y = center.GetY();
         const float z = center.GetZ();
+
+        if (isKeptDry(scene, bodies3d->getEntity(i), Vector3(x, y, z)))
+            continue;
 
         // where waters overlap the highest bottom wins, so a pool over a lake floats only its own bodies
         const WaterComponent* found = nullptr;

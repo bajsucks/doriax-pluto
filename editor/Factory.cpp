@@ -1660,6 +1660,22 @@ std::string editor::Factory::createWaterComponent(int indentSpaces, EntityRegist
     return code.str();
 }
 
+std::string editor::Factory::createWaterExclusionComponent(int indentSpaces, EntityRegistry* scene, Entity entity, std::string sceneName, std::string entityName, bool assignExisting, const std::unordered_map<Entity, std::string>* entityVarNames) {
+    if (!scene->findComponent<WaterExclusionComponent>(entity)) return "";
+    WaterExclusionComponent& exclusion = scene->getComponent<WaterExclusionComponent>(entity);
+    std::ostringstream code;
+    const std::string ind = indentation(indentSpaces);
+    const char* shape = "HULL";
+    if (exclusion.shape == WaterExclusionShape::BOX) shape = "BOX";
+    else if (exclusion.shape == WaterExclusionShape::SPHERE) shape = "SPHERE";
+    code << ind << "WaterExclusionComponent exclusion;\n";
+    code << ind << "exclusion.shape = WaterExclusionShape::" << shape << ";\n";
+    code << ind << "exclusion.center = " << formatVector3(exclusion.center) << ";\n";
+    code << ind << "exclusion.size = " << formatVector3(exclusion.size) << ";\n";
+    addComponentCode(code, ind, sceneName, entityName, entity, "WaterExclusionComponent", "exclusion", assignExisting);
+    return code.str();
+}
+
 std::string editor::Factory::formatBodyType(BodyType type) {
     switch (type) {
         case BodyType::STATIC: return "BodyType::STATIC";
@@ -2270,6 +2286,7 @@ std::string editor::Factory::createComponent(int indentSpaces, EntityRegistry* s
         case ComponentType::ScriptComponent: return createScriptComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::SkyComponent: return createSkyComponent(indentSpaces, scene, entity, projectPath, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::WaterComponent: return createWaterComponent(indentSpaces, scene, entity, projectPath, sceneName, entityName, assignExisting, entityVarNames);
+        case ComponentType::WaterExclusionComponent: return createWaterExclusionComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames);
         case ComponentType::Body2DComponent: return guardPhysicsCode(createBody2DComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames), "DORIAX_PHYSICS_2D");
         case ComponentType::Body3DComponent: return guardPhysicsCode(createBody3DComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames), "DORIAX_PHYSICS_3D");
         case ComponentType::Joint2DComponent: return guardPhysicsCode(createJoint2DComponent(indentSpaces, scene, entity, sceneName, entityName, assignExisting, entityVarNames), "DORIAX_PHYSICS_2D");

@@ -19,10 +19,12 @@
 #include "buffer/ExternalBuffer.h"
 #include "math/AABB.h"
 #include "pool/TextureDataPool.h"
+#include "subsystem/PhysicsSystem.h"
 #include <memory>
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <limits>
 #include <map>
 #include <random>
 #include <cstdint>
@@ -308,6 +310,8 @@ RenderSystem::RenderSystem(Scene* scene): SubSystem(scene){
     hasShadowAtlas = false;
     hasShadowPointAtlas = false;
     spotMaskAtlasCreated = false;
+    waterExclusionMapLayers = 0;
+    needUpdateWaterExclusionMaps = true;
     initShadowAtlasRects();
     initShadowPointAtlasRects();
 
@@ -393,6 +397,11 @@ void RenderSystem::destroy(){
     }
     spotMaskAtlasPixels.clear();
     spotMaskAtlasEntries.fill({});
+    if (waterExclusionMapLayers > 0){
+        waterExclusionMaps.destroyTexture();
+        waterExclusionMapLayers = 0;
+    }
+    needUpdateWaterExclusionMaps = true;
 
     auto skys = scene->getComponentArray<SkyComponent>();
     if (skys->size() > 0){
@@ -6101,6 +6110,69 @@ namespace {
 
         return offset;
     }
+
+    // local area of a hull map: the hull bounds and two texels around them
+    void getWaterExclusionMapArea(const AABB& bounds, Vector3& origin, Vector3& extent){
+        const float margin = 2.0f / (float)(WATER_EXCLUSION_MAP_SIZE - 4);
+        const Vector3 size = bounds.getSize();
+        origin = bounds.getMinimum() - Vector3(size.x * margin, 0.0f, size.z * margin);
+        extent = Vector3(std::max(size.x * (1.0f + 2.0f * margin), 1.0e-6f), std::max(size.y, 1.0e-6f),
+                std::max(size.z * (1.0f + 2.0f * margin), 1.0e-6f));
+    }
+
+    // world to 0-1 across the volume: its box, or the area of its hull map
+    Matrix4 getWaterExclusionSpace(const WaterExclusionComponent& exclusion, const Matrix4& modelMatrix){
+        Vector3 origin = exclusion.aabb.getMinimum();
+        Vector3 extent = exclusion.aabb.getSize();
+        if (exclusion.shape == WaterExclusionShape::HULL){
+            getWaterExclusionMapArea(exclusion.hullBounds, origin, extent);
+        }
+
+        return Matrix4::scaleMatrix(Vector3(1.0f / extent.x, 1.0f / extent.y, 1.0f / extent.z)) *
+                Matrix4::translateMatrix(-origin) * modelMatrix.inverse();
+    }
+
+    unsigned char toUnorm8(float value){
+        return (unsigned char)std::lround(std::clamp(value, 0.0f, 1.0f) * 255.0f);
+    }
+
+    // The hull from above: its bottom and top over each texel and how far the texel is outside
+    // its vertical walls, all linear between texels, so filtering keeps the edges straight
+    void buildWaterExclusionMap(WaterExclusionComponent& exclusion){
+        Vector3 origin;
+        Vector3 extent;
+        getWaterExclusionMapArea(exclusion.hullBounds, origin, extent);
+
+        const int size = WATER_EXCLUSION_MAP_SIZE;
+        const float wallRange = 4.0f * std::max(extent.x, extent.z) / (float)size; // four texels each way
+        exclusion.hullMap.resize((size_t)size * size * 4);
+        for (int z = 0; z < size; z++){
+            for (int x = 0; x < size; x++){
+                const float px = origin.x + extent.x * ((float)x + 0.5f) / (float)size;
+                const float pz = origin.z + extent.z * ((float)z + 0.5f) / (float)size;
+                float bottom = std::numeric_limits<float>::lowest();
+                float top = std::numeric_limits<float>::max();
+                float wall = -wallRange;
+                for (const Vector4& plane : exclusion.hullPlanes){
+                    const float rest = plane.w - plane.x * px - plane.z * pz;
+                    if (plane.y > 0.001f){
+                        top = std::min(top, rest / plane.y);
+                    }else if (plane.y < -0.001f){
+                        bottom = std::max(bottom, rest / plane.y);
+                    }else{
+                        wall = std::max(wall, -rest / std::sqrt(plane.x * plane.x + plane.z * plane.z));
+                    }
+                }
+
+                // an empty column stays empty, which clamping each height could turn into [1, 1]
+                unsigned char* texel = &exclusion.hullMap[((size_t)z * size + x) * 4];
+                texel[0] = (bottom > top) ? 255 : toUnorm8((bottom - origin.y) / extent.y);
+                texel[1] = (bottom > top) ? 0 : toUnorm8((top - origin.y) / extent.y);
+                texel[2] = toUnorm8(0.5f + wall / (2.0f * wallRange));
+                texel[3] = 255;
+            }
+        }
+    }
 }
 
 // the surface offset over the world point (x, z), from the grid point the waves move onto it
@@ -6133,6 +6205,34 @@ Vector3 RenderSystem::getWaterSurfaceOffset(const WaterComponent& water, float x
     }
 
     return offset;
+}
+
+// From the world pose, which the physics steps keep current for a body, unlike the model
+// matrix. A hull tests its exact planes, which its map only approximates.
+bool RenderSystem::isInsideWaterExclusion(const WaterExclusionComponent& exclusion, const Transform& transform, const Vector3& point){
+    const Vector3& scale = transform.worldScale;
+    if (exclusion.aabb.isNull() || scale.x * scale.y * scale.z == 0.0f)
+        return false;
+
+    const Matrix4 modelMatrix = Matrix4::translateMatrix(transform.worldPosition) *
+            transform.worldRotation.getRotationMatrix() * Matrix4::scaleMatrix(scale);
+    if (!(modelMatrix * exclusion.aabb).contains(point))
+        return false;
+
+    if (exclusion.shape == WaterExclusionShape::HULL){
+        const Vector3 local = modelMatrix.inverse() * point;
+        for (const Vector4& plane : exclusion.hullPlanes){
+            if (plane.x * local.x + plane.y * local.y + plane.z * local.z > plane.w)
+                return false;
+        }
+        return !exclusion.hullPlanes.empty();
+    }
+
+    const Vector3 q = getWaterExclusionSpace(exclusion, modelMatrix) * point;
+    if (q.x < 0.0f || q.x > 1.0f || q.y < 0.0f || q.y > 1.0f || q.z < 0.0f || q.z > 1.0f)
+        return false;
+
+    return exclusion.shape != WaterExclusionShape::SPHERE || (q - Vector3(0.5f, 0.5f, 0.5f)).squaredLength() <= 0.25f;
 }
 
 // Built-in ripples: a sum of sines on whole wave numbers, so the map tiles seamlessly
@@ -6472,6 +6572,9 @@ bool RenderSystem::drawWater(Entity entity, WaterComponent& water, Transform& tr
         render.addTexture(shaderData.getTextureIndex(TextureShaderType::WATERREFRACTION), ShaderStageType::FRAGMENT, currentSceneCopy ? currentSceneCopy : &emptyBlack);
     }
 
+    render.addTexture(shaderData.getTextureIndex(TextureShaderType::WATEREXCLUSION), ShaderStageType::FRAGMENT,
+            (waterExclusionMapLayers > 0) ? &waterExclusionMaps : &emptyArrayWhite);
+
     WaterWave waves[WATER_WAVE_COUNT];
     getWaterWaves(water, waves);
 
@@ -6508,6 +6611,7 @@ bool RenderSystem::drawWater(Entity entity, WaterComponent& water, Transform& tr
     fsParams.refractionRect = currentSceneCopyRect;
     fsParams.caustics = Vector4(std::max(water.caustics, 0.0f), 1.0f / std::max(water.causticsScale, 0.01f), 0.0f, 0.0f);
     fsParams.waveScale = Vector4(std::max(water.waveLength, 0.01f), 0.0f, 0.0f, 0.0f);
+    setWaterExclusionParams(water, camTransform.worldPosition, fsParams);
 
     render.applyUniformBlock(water.slotVSParams, sizeof(vs_water_t), &vsParams);
     render.applyUniformBlock(water.slotFSParams, water.fsParamsSize, &fsParams);
@@ -6608,6 +6712,14 @@ bool RenderSystem::isBehindWater(const std::vector<WaterRenderData>& waters, con
 
 // the water with the eye below its surface and within its area, if it shows the view from inside
 WaterComponent* RenderSystem::findUnderwater(const Vector3& eye){
+    // a dry volume, like a cabin below the waterline, keeps the view clear
+    auto exclusions = scene->getComponentArray<WaterExclusionComponent>();
+    for (int i = 0; i < exclusions->size(); i++){
+        Transform* transform = scene->findComponent<Transform>(exclusions->getEntity(i));
+        if (transform && isInsideWaterExclusion(exclusions->getComponentFromIndex(i), *transform, eye))
+            return NULL;
+    }
+
     auto waters = scene->getComponentArray<WaterComponent>();
     for (int i = 0; i < waters->size(); i++){
         WaterComponent& water = waters->getComponentFromIndex(i);
@@ -6625,6 +6737,118 @@ WaterComponent* RenderSystem::findUnderwater(const Vector3& eye){
     }
 
     return NULL;
+}
+
+// hulls follow the meshes they are built from, and their maps share one texture array
+void RenderSystem::updateWaterExclusions(){
+    auto exclusions = scene->getComponentArray<WaterExclusionComponent>();
+    int layers = 0;
+    for (int i = 0; i < exclusions->size(); i++){
+        WaterExclusionComponent& exclusion = exclusions->getComponentFromIndex(i);
+        Entity entity = exclusions->getEntity(i);
+
+        AABB bounds;
+        int layer = -1;
+        if (exclusion.shape == WaterExclusionShape::HULL){
+            const uint64_t signature = PhysicsSystem::getMeshSignature(scene, entity);
+            if (signature != exclusion.hullSignature){
+                exclusion.hullSignature = signature;
+                exclusion.hullBounds.setNull();
+                if (PhysicsSystem::getMeshConvexHull(scene, entity, exclusion.hullPlanes, exclusion.hullPoints)){
+                    for (const Vector3& point : exclusion.hullPoints){
+                        exclusion.hullBounds.merge(point);
+                    }
+                    buildWaterExclusionMap(exclusion);
+                }else{
+                    exclusion.hullMap.clear();
+                }
+                needUpdateWaterExclusionMaps = true;
+            }
+            if (!exclusion.hullMap.empty()){
+                bounds = exclusion.hullBounds;
+                layer = layers++;
+            }
+        }else{
+            const Vector3 half(std::abs(exclusion.size.x) * 0.5f, std::abs(exclusion.size.y) * 0.5f, std::abs(exclusion.size.z) * 0.5f);
+            bounds = AABB(exclusion.center - half, exclusion.center + half);
+        }
+        if (exclusion.hullLayer != layer){
+            exclusion.hullLayer = layer;
+            needUpdateWaterExclusionMaps = true;
+        }
+
+        // sized or scaled to nothing it keeps nothing out, and has no inverse to test with
+        Transform* transform = scene->findComponent<Transform>(entity);
+        const Vector3 scale = transform ? transform->worldScale : Vector3::ZERO;
+        exclusion.aabb = (bounds.volume() * scale.x * scale.y * scale.z != 0.0f) ? bounds : AABB();
+        exclusion.worldAABB = exclusion.aabb.isNull() ? AABB() : transform->modelMatrix * exclusion.aabb;
+    }
+
+    if (layers != waterExclusionMapLayers){
+        needUpdateWaterExclusionMaps = true;
+    }
+    if (!needUpdateWaterExclusionMaps || !Engine::isViewLoaded())
+        return;
+    needUpdateWaterExclusionMaps = false;
+
+    if (waterExclusionMapLayers > 0){
+        waterExclusionMaps.destroyTexture();
+        waterExclusionMapLayers = 0;
+    }
+    if (layers == 0)
+        return;
+
+    std::vector<void*> data(layers);
+    std::vector<size_t> sizes(layers);
+    for (int i = 0; i < exclusions->size(); i++){
+        WaterExclusionComponent& exclusion = exclusions->getComponentFromIndex(i);
+        if (exclusion.hullLayer >= 0){
+            data[exclusion.hullLayer] = exclusion.hullMap.data();
+            sizes[exclusion.hullLayer] = exclusion.hullMap.size();
+        }
+    }
+
+    if (waterExclusionMaps.createTexture("water|exclusion|maps", WATER_EXCLUSION_MAP_SIZE, WATER_EXCLUSION_MAP_SIZE,
+            ColorFormat::RGBA, TextureType::TEXTURE_ARRAY, layers, data.data(), sizes.data(),
+            TextureFilter::LINEAR, TextureFilter::LINEAR, TextureWrap::CLAMP_TO_EDGE, TextureWrap::CLAMP_TO_EDGE)){
+        waterExclusionMapLayers = layers;
+    }else{
+        waterExclusionMaps.destroyTexture();
+    }
+}
+
+// the volumes over the water nearest to the eye
+void RenderSystem::setWaterExclusionParams(const WaterComponent& water, const Vector3& eye, fs_water_t& params){
+    std::vector<std::pair<float, int>> nearest;
+    auto exclusions = scene->getComponentArray<WaterExclusionComponent>();
+    for (int i = 0; i < exclusions->size(); i++){
+        const WaterExclusionComponent& exclusion = exclusions->getComponentFromIndex(i);
+        if (!exclusion.worldAABB.intersects(water.worldAABB))
+            continue;
+        // a hull waits for its map in the texture
+        if (exclusion.shape == WaterExclusionShape::HULL && exclusion.hullLayer >= waterExclusionMapLayers)
+            continue;
+
+        nearest.push_back({exclusion.worldAABB.squaredDistance(eye), i});
+    }
+    std::sort(nearest.begin(), nearest.end());
+
+    int count = 0;
+    for (const auto& candidate : nearest){
+        const WaterExclusionComponent& exclusion = exclusions->getComponentFromIndex(candidate.second);
+        Transform* transform = scene->findComponent<Transform>(exclusions->getEntity(candidate.second));
+        if (!transform)
+            continue;
+
+        const Matrix4 space = getWaterExclusionSpace(exclusion, transform->modelMatrix);
+        for (int r = 0; r < 3; r++){
+            params.exclusionRows[count * 3 + r] = space.row(r);
+        }
+        params.exclusionShapes[count] = Vector4((float)(int)exclusion.shape, (float)exclusion.hullLayer, 0.0f, 0.0f);
+        if (++count == MAX_WATER_EXCLUSIONS)
+            break;
+    }
+    params.exclusionCount = Vector4((float)count, 0.0f, 0.0f, 0.0f);
 }
 
 // unloaded with the water in destroyWater
@@ -8484,6 +8708,8 @@ void RenderSystem::update(double dt){
         hasWaterDepth = newHasWaterDepth;
         needReloadMeshes();
     }
+
+    updateWaterExclusions();
 
     for (int i = 0; i < transforms->size(); i++){
         Transform& transform = transforms->getComponentFromIndex(i);

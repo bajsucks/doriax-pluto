@@ -20,6 +20,7 @@
 #include "component/MirrorComponent.h"
 #include "component/ReflectionProbeComponent.h"
 #include "component/WaterComponent.h"
+#include "component/WaterExclusionComponent.h"
 #include "component/ImageComponent.h"
 #include "component/UILayoutComponent.h"
 #include "component/UIContainerComponent.h"

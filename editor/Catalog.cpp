@@ -548,6 +548,12 @@ namespace {
         makeFastProperty<WaterComponent, ShaderUniformValues, &WaterComponent::shaderUniforms>("shaderUniforms", PropertyType::Custom, UpdateFlags_Shader_Uniforms),
     };
 
+    static const FastPropertyDescriptor kWaterExclusionProperties[] = {
+        makeFastProperty<WaterExclusionComponent, WaterExclusionShape, &WaterExclusionComponent::shape>("shape", PropertyType::Enum, UpdateFlags_None),
+        makeFastProperty<WaterExclusionComponent, Vector3, &WaterExclusionComponent::center>("center", PropertyType::Vector3, UpdateFlags_None),
+        makeFastProperty<WaterExclusionComponent, Vector3, &WaterExclusionComponent::size>("size", PropertyType::Vector3, UpdateFlags_None),
+    };
+
     static const FastPropertyDescriptor kSkyProperties[] = {
         makeFastProperty<SkyComponent, Texture, &SkyComponent::texture>("texture", PropertyType::Texture, UpdateFlags_Sky_Texture),
         makeFastProperty<SkyComponent, Vector4, &SkyComponent::color>("color", PropertyType::Vector4, UpdateFlags_None),
@@ -1481,6 +1487,10 @@ namespace {
 
     PropertyData resolveWaterPropertyFast(void* comp, const std::string& propertyName) {
         return resolveDirectProperties(static_cast<WaterComponent*>(comp), propertyName, kWaterProperties);
+    }
+
+    PropertyData resolveWaterExclusionPropertyFast(void* comp, const std::string& propertyName) {
+        return resolveDirectProperties(static_cast<WaterExclusionComponent*>(comp), propertyName, kWaterExclusionProperties);
     }
 
     PropertyData resolveSkyPropertyFast(void* comp, const std::string& propertyName) {
@@ -2463,6 +2473,10 @@ namespace {
         enumerateFromDescriptors(comp, ps, kWaterProperties);
     }
 
+    void enumerateWaterExclusionProperties(void* comp, std::map<std::string, PropertyData>& ps) {
+        enumerateFromDescriptors(comp, ps, kWaterExclusionProperties);
+    }
+
     void enumerateSkyProperties(void* comp, std::map<std::string, PropertyData>& ps) {
         enumerateFromDescriptors(comp, ps, kSkyProperties);
     }
@@ -3126,6 +3140,7 @@ namespace {
         {ComponentType::SoundComponent, &findComponentPtr<SoundComponent>, &resolveAudioPropertyFast, &enumerateAudioProperties},
         {ComponentType::SkyComponent, &findComponentPtr<SkyComponent>, &resolveSkyPropertyFast, &enumerateSkyProperties},
         {ComponentType::WaterComponent, &findComponentPtr<WaterComponent>, &resolveWaterPropertyFast, &enumerateWaterProperties},
+        {ComponentType::WaterExclusionComponent, &findComponentPtr<WaterExclusionComponent>, &resolveWaterExclusionPropertyFast, &enumerateWaterExclusionProperties},
         {ComponentType::TextComponent, &findComponentPtr<TextComponent>, &resolveTextPropertyFast, &enumerateTextProperties},
         {ComponentType::ScriptComponent, &findComponentPtr<ScriptComponent>, &resolveScriptPropertyFast, &enumerateScriptProperties},
         {ComponentType::Joint2DComponent, &findComponentPtr<Joint2DComponent>, &resolveJoint2DPropertyFast, &enumerateJoint2DProperties},
@@ -3249,6 +3264,8 @@ std::string editor::Catalog::getComponentName(ComponentType component, bool remo
         name = "ReflectionProbeComponent";
     }else if(component == ComponentType::WaterComponent){
         name = "WaterComponent";
+    }else if(component == ComponentType::WaterExclusionComponent){
+        name = "WaterExclusionComponent";
     }else if(component == ComponentType::Light2DComponent){
         name = "Light2DComponent";
     }else if(component == ComponentType::Occluder2DComponent){
@@ -3378,6 +3395,8 @@ ComponentId editor::Catalog::getComponentId(const EntityRegistry* registry, Comp
             return registry->getComponentId<ReflectionProbeComponent>();
         case ComponentType::WaterComponent:
             return registry->getComponentId<WaterComponent>();
+        case ComponentType::WaterExclusionComponent:
+            return registry->getComponentId<WaterExclusionComponent>();
         case ComponentType::Light2DComponent:
             return registry->getComponentId<Light2DComponent>();
         case ComponentType::Occluder2DComponent:
@@ -3484,6 +3503,8 @@ editor::ComponentType editor::Catalog::getComponentType(const std::string& compo
         return ComponentType::ReflectionProbeComponent;
     }else if(normalizedName == "water"){
         return ComponentType::WaterComponent;
+    }else if(normalizedName == "waterexclusion"){
+        return ComponentType::WaterExclusionComponent;
     }else if(normalizedName == "light2d"){
         return ComponentType::Light2DComponent;
     }else if(normalizedName == "occluder2d"){
@@ -3653,6 +3674,9 @@ std::vector<editor::ComponentType> editor::Catalog::findComponents(EntityRegistr
     }
     if (registry->findComponent<WaterComponent>(entity)){
         ret.push_back(ComponentType::WaterComponent);
+    }
+    if (registry->findComponent<WaterExclusionComponent>(entity)){
+        ret.push_back(ComponentType::WaterExclusionComponent);
     }
     if (registry->findComponent<Light2DComponent>(entity)){
         ret.push_back(ComponentType::Light2DComponent);
@@ -4421,6 +4445,12 @@ void editor::Catalog::copyComponent(EntityRegistry* sourceRegistry, Entity sourc
         case ComponentType::WaterComponent: {
             YAML::Node encoded = Stream::encodeWaterComponent(sourceRegistry->getComponent<WaterComponent>(sourceEntity));
             targetRegistry->getComponent<WaterComponent>(targetEntity) = Stream::decodeWaterComponent(encoded);
+            break;
+        }
+
+        case ComponentType::WaterExclusionComponent: {
+            YAML::Node encoded = Stream::encodeWaterExclusionComponent(sourceRegistry->getComponent<WaterExclusionComponent>(sourceEntity));
+            targetRegistry->getComponent<WaterExclusionComponent>(targetEntity) = Stream::decodeWaterExclusionComponent(encoded);
             break;
         }
 

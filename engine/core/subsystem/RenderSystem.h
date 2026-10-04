@@ -10,6 +10,7 @@
 #include "component/ModelComponent.h"
 #include "component/SkyComponent.h"
 #include "component/WaterComponent.h"
+#include "component/WaterExclusionComponent.h"
 #include "component/ReflectionProbeComponent.h"
 #include "component/UILayoutComponent.h"
 #include "component/UIComponent.h"
@@ -174,6 +175,9 @@ namespace doriax{
 		Vector4 refractionRect; // xy = view origin, zw = view size, in scene copy uv
 		Vector4 caustics;      // x = strength, y = 1 / cell size
 		Vector4 waveScale;     // x = longest wavelength
+		Vector4 exclusionCount; // x = volumes keeping the water out
+		Vector4 exclusionRows[MAX_WATER_EXCLUSIONS * 3]; // world to 0-1 across the volume, three rows each
+		Vector4 exclusionShapes[MAX_WATER_EXCLUSIONS];   // x = shape, y = hull map layer
 	} fs_water_t;
 
 	typedef struct fs_underwater_t {
@@ -333,6 +337,11 @@ namespace doriax{
 		std::array<SpotMaskAtlasEntry, MAX_LIGHTS> spotMaskAtlasEntries;
 		std::vector<unsigned char> spotMaskAtlasPixels;
 		bool spotMaskAtlasCreated;
+
+		// one layer per water exclusion hull
+		TextureRender waterExclusionMaps;
+		int waterExclusionMapLayers;
+		bool needUpdateWaterExclusionMaps;
 
 		struct ReflectionProbeRuntime{
 			FramebufferRender captureFramebuffer;
@@ -747,6 +756,8 @@ namespace doriax{
 		static bool isBehindWater(const std::vector<WaterRenderData>& waters, const AABB& box);
 		WaterComponent* findUnderwater(const Vector3& eye);
 		bool loadUnderwater(WaterComponent& water);
+		void updateWaterExclusions();
+		void setWaterExclusionParams(const WaterComponent& water, const Vector3& eye, fs_water_t& params);
 		// the fullscreen fade of the scene copy, in the pass already started
 		void drawUnderwater(WaterComponent& water, CameraComponent& camera, Transform& cameraTransform);
 
@@ -789,6 +800,8 @@ namespace doriax{
 
 		// water surface offset over the world point (x, z) as drawn, for Water::getHeight and buoyancy
 		static Vector3 getWaterSurfaceOffset(const WaterComponent& water, float x, float z, Vector3* normal = nullptr);
+
+		static bool isInsideWaterExclusion(const WaterExclusionComponent& exclusion, const Transform& transform, const Vector3& point);
 
 		// copies the stacked scene composite to the swapchain (Engine::endCompositeFramebuffer)
 		void presentFramebufferToSwapchain(Framebuffer* source);

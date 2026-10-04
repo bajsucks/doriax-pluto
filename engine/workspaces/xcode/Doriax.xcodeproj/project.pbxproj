@@ -30,9 +30,13 @@
 		175DCCB7300FA1F2008C19EC /* ReflectionProbe.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 175DCCB5300FA1F2008C19EC /* ReflectionProbe.cpp */; };
 		175DCCB8300FA1F2008C19EC /* ReflectionProbe.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 175DCCB5300FA1F2008C19EC /* ReflectionProbe.cpp */; };
 		17C4A1B1310A0001008C19EC /* WaterComponent.h in Headers */ = {isa = PBXBuildFile; fileRef = 17C4A1B0310A0001008C19EC /* WaterComponent.h */; };
+		17C4A1B8310A0001008C19EC /* WaterExclusionComponent.h in Headers */ = {isa = PBXBuildFile; fileRef = 17C4A1B7310A0001008C19EC /* WaterExclusionComponent.h */; };
 		17C4A1B4310A0001008C19EC /* Water.h in Headers */ = {isa = PBXBuildFile; fileRef = 17C4A1B2310A0001008C19EC /* Water.h */; };
 		17C4A1B5310A0001008C19EC /* Water.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 17C4A1B3310A0001008C19EC /* Water.cpp */; };
 		17C4A1B6310A0001008C19EC /* Water.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 17C4A1B3310A0001008C19EC /* Water.cpp */; };
+		17C4A1BB310A0001008C19EC /* WaterExclusion.h in Headers */ = {isa = PBXBuildFile; fileRef = 17C4A1B9310A0001008C19EC /* WaterExclusion.h */; };
+		17C4A1BC310A0001008C19EC /* WaterExclusion.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 17C4A1BA310A0001008C19EC /* WaterExclusion.cpp */; };
+		17C4A1BD310A0001008C19EC /* WaterExclusion.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 17C4A1BA310A0001008C19EC /* WaterExclusion.cpp */; };
 		175DCCBB300FA22F008C19EC /* Export.h in Headers */ = {isa = PBXBuildFile; fileRef = 175DCCB9300FA22F008C19EC /* Export.h */; };
 		175DCCBC300FA22F008C19EC /* SceneSettings.h in Headers */ = {isa = PBXBuildFile; fileRef = 175DCCBA300FA22F008C19EC /* SceneSettings.h */; };
 		175DCCBE3022C5A2008C19EC /* ComponentManager.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 175DCCBD3022C5A2008C19EC /* ComponentManager.cpp */; };
@@ -1453,6 +1457,9 @@
 		17C4A1B0310A0001008C19EC /* WaterComponent.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WaterComponent.h; sourceTree = "<group>"; };
 		17C4A1B2310A0001008C19EC /* Water.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Water.h; sourceTree = "<group>"; };
 		17C4A1B3310A0001008C19EC /* Water.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Water.cpp; sourceTree = "<group>"; };
+		17C4A1B7310A0001008C19EC /* WaterExclusionComponent.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WaterExclusionComponent.h; sourceTree = "<group>"; };
+		17C4A1B9310A0001008C19EC /* WaterExclusion.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WaterExclusion.h; sourceTree = "<group>"; };
+		17C4A1BA310A0001008C19EC /* WaterExclusion.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = WaterExclusion.cpp; sourceTree = "<group>"; };
 		175DCCB9300FA22F008C19EC /* Export.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Export.h; sourceTree = "<group>"; };
 		175DCCBA300FA22F008C19EC /* SceneSettings.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SceneSettings.h; sourceTree = "<group>"; };
 		175DCCBD3022C5A2008C19EC /* ComponentManager.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ComponentManager.cpp; sourceTree = "<group>"; };
@@ -4148,6 +4155,7 @@
 				71033D652BD1A7D200D81FB5 /* ScrollbarComponent.h */,
 				71CC839126B8C49B00EEBB93 /* SkyComponent.h */,
 				17C4A1B0310A0001008C19EC /* WaterComponent.h */,
+				17C4A1B7310A0001008C19EC /* WaterExclusionComponent.h */,
 				717AD963290B65E6007D7DB5 /* SoundComponent.h */,
 				71451BB7270C9D0F00712643 /* SpriteAnimationComponent.h */,
 				71451BB2270C9D0F00712643 /* SpriteComponent.h */,
@@ -4456,6 +4464,8 @@
 				7170A3D22818A8A30003E965 /* SkyBox.cpp */,
 				17C4A1B2310A0001008C19EC /* Water.h */,
 				17C4A1B3310A0001008C19EC /* Water.cpp */,
+				17C4A1B9310A0001008C19EC /* WaterExclusion.h */,
+				17C4A1BA310A0001008C19EC /* WaterExclusion.cpp */,
 			);
 			path = environment;
 			sourceTree = "<group>";
@@ -5727,6 +5737,7 @@
 				71E544FE284D5BB700C68FAB /* Animation.h in Headers */,
 				175DCCB3300FA1C2008C19EC /* ReflectionProbeComponent.h in Headers */,
 				17C4A1B1310A0001008C19EC /* WaterComponent.h in Headers */,
+				17C4A1B8310A0001008C19EC /* WaterExclusionComponent.h in Headers */,
 				17A4DD6D2F5E4F8800C1BFC6 /* HybridArray.h in Headers */,
 				713E581527BA9D1300376680 /* PolygonComponent.h in Headers */,
 				7157764E2B050C230049C970 /* FontPool.h in Headers */,
@@ -5827,6 +5838,7 @@
 				713E580827BA9CB700376680 /* MeshPolygon.h in Headers */,
 				175DCCB6300FA1F2008C19EC /* ReflectionProbe.h in Headers */,
 				17C4A1B4310A0001008C19EC /* Water.h in Headers */,
+				17C4A1BB310A0001008C19EC /* WaterExclusion.h in Headers */,
 				71ABBD23277A31E6001CE3AF /* UISystem.h in Headers */,
 				71033D662BD1A7D200D81FB5 /* ScrollbarComponent.h in Headers */,
 				71E54518284D5BE000C68FAB /* KeyframeTracksComponent.h in Headers */,
@@ -7118,6 +7130,7 @@
 				71451BDD270CA17F00712643 /* RotationAction.cpp in Sources */,
 				175DCCB8300FA1F2008C19EC /* ReflectionProbe.cpp in Sources */,
 				17C4A1B6310A0001008C19EC /* Water.cpp in Sources */,
+				17C4A1BD310A0001008C19EC /* WaterExclusion.cpp in Sources */,
 				71ABBD0F277A313C001CE3AF /* AlphaAction.cpp in Sources */,
 				1776226E3058741F00F220CC /* ShaderUniforms.cpp in Sources */,
 				716803CF2DF75EA200ED71BE /* ThreadPoolManager.cpp in Sources */,
@@ -7308,6 +7321,7 @@
 				71451BDC270CA17F00712643 /* RotationAction.cpp in Sources */,
 				175DCCB7300FA1F2008C19EC /* ReflectionProbe.cpp in Sources */,
 				17C4A1B5310A0001008C19EC /* Water.cpp in Sources */,
+				17C4A1BC310A0001008C19EC /* WaterExclusion.cpp in Sources */,
 				71ABBD0E277A313C001CE3AF /* AlphaAction.cpp in Sources */,
 				1776226D3058741F00F220CC /* ShaderUniforms.cpp in Sources */,
 				716803D12DF75EA200ED71BE /* ThreadPoolManager.cpp in Sources */,

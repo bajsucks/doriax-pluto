@@ -340,6 +340,11 @@ void editor::SceneRender3D::clearEntityOverlays(){
         delete pair.second;
     }
     reflectionProbeLines.clear();
+
+    for (auto& pair : waterExclusionLines) {
+        delete pair.second;
+    }
+    waterExclusionLines.clear();
 }
 
 void editor::SceneRender3D::createLines(){
@@ -507,6 +512,56 @@ void editor::SceneRender3D::createOrUpdateReflectionProbeLines(Entity entity, co
         probeLines->addLine(capturePosition - Vector3(0, captureMarker, 0), capturePosition + Vector3(0, captureMarker, 0), captureColor);
         probeLines->addLine(capturePosition - Vector3(0, 0, captureMarker), capturePosition + Vector3(0, 0, captureMarker), captureColor);
     }
+}
+
+bool editor::SceneRender3D::instanciateWaterExclusionLines(Entity entity){
+    if (waterExclusionLines.find(entity) == waterExclusionLines.end()) {
+        ScopedDefaultEntityPool sys(*scene, EntityPool::System);
+        waterExclusionLines[entity] = new Lines(scene);
+        return true;
+    }
+    return false;
+}
+
+void editor::SceneRender3D::createOrUpdateWaterExclusionLines(Entity entity, const Transform& transform, const WaterExclusionComponent& exclusion, bool visible){
+    Lines* exclusionLines = waterExclusionLines[entity];
+    exclusionLines->clearLines();
+    exclusionLines->setVisible(transform.visible && visible);
+    if (!transform.visible || !visible) return;
+
+    const Vector4 color(1.0f, 0.6f, 0.2f, 1.0f);
+    auto addLine = [&](const Vector3& a, const Vector3& b) {
+        exclusionLines->addLine(transform.modelMatrix * a, transform.modelMatrix * b, color);
+    };
+
+    if (exclusion.shape == WaterExclusionShape::HULL) {
+        buildConvexHullEdges(exclusion.hullPoints, addLine);
+        return;
+    }
+
+    const Vector3 half = exclusion.size * 0.5f;
+    const Vector3& c = exclusion.center;
+    if (exclusion.shape == WaterExclusionShape::SPHERE) {
+        const int segments = 48;
+        for (int i = 0; i < segments; i++) {
+            const float a0 = 2.0f * M_PI * i / segments;
+            const float a1 = 2.0f * M_PI * (i + 1) / segments;
+            const float c0 = std::cos(a0), s0 = std::sin(a0), c1 = std::cos(a1), s1 = std::sin(a1);
+            addLine(c + Vector3(c0 * half.x, s0 * half.y, 0), c + Vector3(c1 * half.x, s1 * half.y, 0));
+            addLine(c + Vector3(c0 * half.x, 0, s0 * half.z), c + Vector3(c1 * half.x, 0, s1 * half.z));
+            addLine(c + Vector3(0, c0 * half.y, s0 * half.z), c + Vector3(0, c1 * half.y, s1 * half.z));
+        }
+        return;
+    }
+
+    Vector3 p[8];
+    for (int i = 0; i < 8; i++) {
+        p[i] = c + Vector3((i & 1) ? half.x : -half.x, (i & 2) ? half.y : -half.y, (i & 4) ? half.z : -half.z);
+    }
+    const int edges[12][2] = {
+        {0,1}, {2,3}, {4,5}, {6,7}, {0,2}, {1,3}, {4,6}, {5,7}, {0,4}, {1,5}, {2,6}, {3,7}
+    };
+    for (const auto& edge : edges) addLine(p[edge[0]], p[edge[1]]);
 }
 
 // endpoint handles for a selected Lines entity, drawn as small 3-axis crosses
@@ -1815,6 +1870,9 @@ void editor::SceneRender3D::hideAllGizmos(){
     for (auto& pair : reflectionProbeLines) {
         pair.second->setVisible(false);
     }
+    for (auto& pair : waterExclusionLines) {
+        pair.second->setVisible(false);
+    }
 }
 
 void editor::SceneRender3D::activate(){
@@ -1947,6 +2005,7 @@ void editor::SceneRender3D::update(std::vector<Entity> selEntities, std::vector<
     std::set<Entity> currentPolygonPoints;
     std::set<Entity> currentTrackLines;
     std::set<Entity> currentReflectionProbes;
+    std::set<Entity> currentWaterExclusions;
 
     for (Entity& entity: entities){
         Signature signature = scene->getSignature(entity);
@@ -2064,6 +2123,15 @@ void editor::SceneRender3D::update(std::vector<Entity> selEntities, std::vector<
             currentReflectionProbes.insert(entity);
             instanciateReflectionProbeLines(entity);
             createOrUpdateReflectionProbeLines(entity, transform, probe, selectedEntities.find(entity) != selectedEntities.end());
+        }
+
+        if (signature.test(scene->getComponentId<WaterExclusionComponent>()) && signature.test(scene->getComponentId<Transform>())) {
+            currentWaterExclusions.insert(entity);
+            // before taking the components, which a new lines entity can move
+            instanciateWaterExclusionLines(entity);
+            WaterExclusionComponent& exclusion = scene->getComponent<WaterExclusionComponent>(entity);
+            Transform& transform = scene->getComponent<Transform>(entity);
+            createOrUpdateWaterExclusionLines(entity, transform, exclusion, selectedEntities.find(entity) != selectedEntities.end());
         }
 
         if (signature.test(scene->getComponentId<Joint3DComponent>())) {
@@ -2197,6 +2265,16 @@ void editor::SceneRender3D::update(std::vector<Entity> selEntities, std::vector<
             itProbeLines = reflectionProbeLines.erase(itProbeLines);
         } else {
             ++itProbeLines;
+        }
+    }
+
+    auto itExclusionLines = waterExclusionLines.begin();
+    while (itExclusionLines != waterExclusionLines.end()) {
+        if (currentWaterExclusions.find(itExclusionLines->first) == currentWaterExclusions.end()) {
+            delete itExclusionLines->second;
+            itExclusionLines = waterExclusionLines.erase(itExclusionLines);
+        } else {
+            ++itExclusionLines;
         }
     }
 }

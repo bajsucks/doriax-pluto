@@ -34,6 +34,9 @@ uniform u_fs_waterParams {
     vec4 refractionRect;           // xy = view origin, zw = view size, in scene copy uv
     vec4 caustics;                 // x = strength, y = 1 / cell size
     vec4 waveScale;                // x = longest wavelength
+    vec4 exclusionCount;           // x = volumes keeping the water out
+    vec4 exclusionRows[MAX_WATER_EXCLUSIONS * 3]; // world to 0-1 across the volume, three rows each
+    vec4 exclusionShapes[MAX_WATER_EXCLUSIONS];   // x = 0 box, 1 sphere, 2 hull; y = hull map layer
 } water;
 
 // same layout as fs_lighting_t (RenderSystem.h) and mesh.frag
@@ -61,6 +64,10 @@ uniform sampler u_spotMaskAtlas_smp;
 
 uniform textureCube u_skyTexture;
 uniform sampler u_sky_smp;
+
+// per hull: r = bottom, g = top (0-1 of its height), b < 0.5 inside its vertical walls
+uniform texture2DArray u_waterExclusionMaps;
+uniform sampler u_waterExclusionMaps_smp;
 
 #ifdef USE_PLANAR_REFLECTION
     uniform texture2D u_reflectionTexture;
@@ -249,6 +256,28 @@ vec3 getRippleNormal(vec2 worldXZ){
     vec3 n1 = texture(sampler2D(u_waterNormalTexture, u_waterNormal_smp), uv + water.rippleOffsets.xy).xyz * 2.0 - 1.0;
     vec3 n2 = texture(sampler2D(u_waterNormalTexture, u_waterNormal_smp), uv2 + water.rippleOffsets.zw).xyz * 2.0 - 1.0;
     return normalize(vec3(n1.xy + n2.xy, n1.z * n2.z));
+}
+
+bool isExcluded(vec3 position){
+    vec4 p = vec4(position, 1.0);
+    for (int i = 0; i < int(water.exclusionCount.x); i++){
+        vec3 q = vec3(dot(water.exclusionRows[i * 3], p), dot(water.exclusionRows[i * 3 + 1], p), dot(water.exclusionRows[i * 3 + 2], p));
+        if (any(lessThan(q, vec3(0.0))) || any(greaterThan(q, vec3(1.0))))
+            continue;
+
+        vec4 shape = water.exclusionShapes[i];
+        if (shape.x < 0.5)
+            return true;
+        if (shape.x < 1.5){
+            if (dot(q - 0.5, q - 0.5) <= 0.25)
+                return true;
+        }else{
+            vec4 hull = textureLod(sampler2DArray(u_waterExclusionMaps, u_waterExclusionMaps_smp), vec3(q.xz, shape.y), 0.0);
+            if (q.y >= hull.r && q.y <= hull.g && hull.b <= 0.5)
+                return true;
+        }
+    }
+    return false;
 }
 
 void main(){
@@ -481,6 +510,11 @@ void main(){
         // the scene seen through was fogged when it was drawn, the water fogs only its own share
         color = getFogColor(color) - getFogColor(vec3(0.0)) * (1.0 - coverage);
     #endif
+
+    // after the derivatives, which a discarded neighbor would spoil
+    if (isExcluded(v_position)){
+        discard;
+    }
 
     g_finalColor = vec4(linearTosRGB(color + transmitted), alpha);
 }

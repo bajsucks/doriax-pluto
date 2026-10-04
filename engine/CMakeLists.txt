@@ -822,6 +822,7 @@ set(DORIAX_SRCS
     core/object/environment/ReflectionProbe.cpp
     core/object/environment/SkyBox.cpp
     core/object/environment/Water.cpp
+    core/object/environment/WaterExclusion.cpp
     core/object/ui/Button.cpp
     core/object/ui/Container.cpp
     core/object/ui/Image.cpp

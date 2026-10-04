@@ -7,6 +7,7 @@
 #include "SubSystem.h"
 #include "math/Vector2.h"
 #include "math/Vector3.h"
+#include "math/Vector4.h"
 #include "math/Quaternion.h"
 #ifdef DORIAX_PHYSICS_2D
 #include "component/Body2DComponent.h"
@@ -29,8 +30,10 @@
 #include "Jolt/Physics/Collision/ObjectLayerPairFilterMask.h"
 #endif
 
+#include <cstdint>
 #include <string>
 #include <unordered_set>
+#include <vector>
 
 namespace doriax{
 
@@ -196,6 +199,12 @@ namespace doriax{
 		void updateTransformFromBody2D(Entity entity, Vector2 position, float angle);
 #endif
 		void updateTransformFromBody3D(Entity entity, Vector3 position, Quaternion rotation);
+
+		// Geometry of the entity's meshes, or of its model's mesh nodes when it has none.
+		// The signature changes with it, so what is built from it knows when to rebuild.
+		static uint64_t getMeshSignature(Scene* scene, Entity entity);
+		// in the entity's local space: planes xyz = outward normal and w = distance; needs 3D physics
+		static bool getMeshConvexHull(Scene* scene, Entity entity, std::vector<Vector4>& planes, std::vector<Vector3>& points);
 
 #ifdef DORIAX_PHYSICS_3D
 		JPH::Quat toValidatedJoltRotation(const Quaternion& rotation, Entity entity, int shapeIndex);

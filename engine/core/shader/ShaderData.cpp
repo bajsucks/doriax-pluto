@@ -358,6 +358,8 @@ std::pair<int, int> ShaderData::getTextureIndex(TextureShaderType type){
         texstr = "u_reflectionTexture";
     }else if (type == TextureShaderType::WATERREFRACTION){
         texstr = "u_refractionTexture";
+    }else if (type == TextureShaderType::WATEREXCLUSION){
+        texstr = "u_waterExclusionMaps";
     }
 
     if (texstr.empty()){

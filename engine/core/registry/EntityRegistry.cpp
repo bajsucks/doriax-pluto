@@ -63,6 +63,7 @@ EntityRegistry::EntityRegistry() {
     registerComponent<BundleComponent>();
     registerComponent<ReflectionProbeComponent>();
     registerComponent<WaterComponent>();
+    registerComponent<WaterExclusionComponent>();
 }
 
 EntityRegistry::EntityRegistry(EntityPool defaultPool) : EntityRegistry() {

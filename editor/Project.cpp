@@ -5669,6 +5669,8 @@ AABB editor::Project::getEntityWorldAABB(Scene* scene, Entity entity, Scene* mai
         aabb = scene->getComponent<MeshComponent>(entity).worldAABB;
     }else if (signature.test(scene->getComponentId<WaterComponent>())){
         aabb = scene->getComponent<WaterComponent>(entity).worldAABB;
+    }else if (signature.test(scene->getComponentId<WaterExclusionComponent>())){
+        aabb = scene->getComponent<WaterExclusionComponent>(entity).worldAABB;
     }else if (signature.test(scene->getComponentId<UIComponent>())){
         aabb = scene->getComponent<UIComponent>(entity).worldAABB;
         if (!signature.test(scene->getComponentId<PolygonComponent>()) && signature.test(scene->getComponentId<UILayoutComponent>())){
@@ -5774,6 +5776,8 @@ AABB editor::Project::getEntityLocalAABB(Scene* scene, Entity entity) const{
         aabb = SceneRender::getMeshLocalAABB(scene->getComponent<MeshComponent>(entity));
     }else if (signature.test(scene->getComponentId<WaterComponent>())){
         aabb = scene->getComponent<WaterComponent>(entity).aabb;
+    }else if (signature.test(scene->getComponentId<WaterExclusionComponent>())){
+        aabb = scene->getComponent<WaterExclusionComponent>(entity).aabb;
     }else if (signature.test(scene->getComponentId<UIComponent>())){
         aabb = scene->getComponent<UIComponent>(entity).aabb;
         if (!signature.test(scene->getComponentId<PolygonComponent>()) && signature.test(scene->getComponentId<UILayoutComponent>())){

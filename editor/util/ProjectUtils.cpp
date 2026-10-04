@@ -984,6 +984,13 @@ void editor::ProjectUtils::addEntityComponent(EntityRegistry* registry, Entity e
                 registry->addComponent<WaterComponent>(entity, Stream::decodeWaterComponent(componentNode));
             }
             break;
+        case ComponentType::WaterExclusionComponent:
+            if (!componentNode.IsDefined() || componentNode.IsNull()){
+                registry->addComponent<WaterExclusionComponent>(entity, {});
+            }else{
+                registry->addComponent<WaterExclusionComponent>(entity, Stream::decodeWaterExclusionComponent(componentNode));
+            }
+            break;
         case ComponentType::Light2DComponent:
             if (!componentNode.IsDefined() || componentNode.IsNull()){
                 registry->addComponent<Light2DComponent>(entity, {});
@@ -1439,6 +1446,12 @@ YAML::Node editor::ProjectUtils::removeEntityComponent(EntityRegistry* registry,
                 oldComponent = Stream::encodeWaterComponent(registry->getComponent<WaterComponent>(entity));
             }
             registry->removeComponent<WaterComponent>(entity);
+            break;
+        case ComponentType::WaterExclusionComponent:
+            if (encodeComponent){
+                oldComponent = Stream::encodeWaterExclusionComponent(registry->getComponent<WaterExclusionComponent>(entity));
+            }
+            registry->removeComponent<WaterExclusionComponent>(entity);
             break;
         case ComponentType::Light2DComponent:
             if (encodeComponent){
@@ -2044,6 +2057,7 @@ editor::ProjectUtils::EntityClassInfo editor::ProjectUtils::getEntityClassInfo(S
     if (signature.test(scene->getComponentId<LightComponent>()))       return objectClass("Light");
     if (signature.test(scene->getComponentId<CameraComponent>()))      return objectClass("Camera");
     if (signature.test(scene->getComponentId<ReflectionProbeComponent>())) return objectClass("ReflectionProbe");
+    if (signature.test(scene->getComponentId<WaterExclusionComponent>())) return objectClass("WaterExclusion");
     if (signature.test(scene->getComponentId<Body2DComponent>()))      return handleClass("Body2D");
     if (signature.test(scene->getComponentId<Body3DComponent>()))      return handleClass("Body3D");
     if (signature.test(scene->getComponentId<Joint2DComponent>()))     return handleClass("Joint2D");

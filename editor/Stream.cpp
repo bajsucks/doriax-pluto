@@ -3796,6 +3796,10 @@ YAML::Node editor::Stream::encodeComponents(const Entity entity, const EntityReg
         compNode[Catalog::getComponentName(ComponentType::WaterComponent, true)] = encodeWaterComponent(registry->getComponent<WaterComponent>(entity));
     }
 
+    if (signature.test(registry->getComponentId<WaterExclusionComponent>())) {
+        compNode[Catalog::getComponentName(ComponentType::WaterExclusionComponent, true)] = encodeWaterExclusionComponent(registry->getComponent<WaterExclusionComponent>(entity));
+    }
+
     if (signature.test(registry->getComponentId<ModelComponent>())) {
         ModelComponent model = registry->getComponent<ModelComponent>(entity);
         compNode[Catalog::getComponentName(ComponentType::ModelComponent, true)] = encodeModelComponent(model);
@@ -4281,6 +4285,19 @@ void editor::Stream::decodeComponents(Entity entity, Entity parent, EntityRegist
         }else{
             uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::WaterComponent, existing, &water);
             registry->getComponent<WaterComponent>(entity) = water;
+            Catalog::updateEntity(registry, entity, flags);
+        }
+    }
+
+    compName = Catalog::getComponentName(ComponentType::WaterExclusionComponent, true);
+    if (compNode[compName]) {
+        WaterExclusionComponent* existing = registry->findComponent<WaterExclusionComponent>(entity);
+        WaterExclusionComponent exclusion = decodeWaterExclusionComponent(compNode[compName], existing);
+        if (!signature.test(registry->getComponentId<WaterExclusionComponent>())){
+            registry->addComponent<WaterExclusionComponent>(entity, exclusion);
+        }else{
+            uint64_t flags = Catalog::getChangedUpdateFlags(ComponentType::WaterExclusionComponent, existing, &exclusion);
+            registry->getComponent<WaterExclusionComponent>(entity) = exclusion;
             Catalog::updateEntity(registry, entity, flags);
         }
     }
@@ -6386,6 +6403,36 @@ WaterComponent editor::Stream::decodeWaterComponent(const YAML::Node& node, cons
     water.needUpdateTexture = true;
 
     return water;
+}
+
+YAML::Node editor::Stream::encodeWaterExclusionComponent(const WaterExclusionComponent& exclusion) {
+    YAML::Node node;
+
+    switch (exclusion.shape) {
+        case WaterExclusionShape::BOX: node["shape"] = "box"; break;
+        case WaterExclusionShape::SPHERE: node["shape"] = "sphere"; break;
+        default: node["shape"] = "hull"; break;
+    }
+    node["center"] = encodeVector3(exclusion.center);
+    node["size"] = encodeVector3(exclusion.size);
+
+    return node;
+}
+
+WaterExclusionComponent editor::Stream::decodeWaterExclusionComponent(const YAML::Node& node, const WaterExclusionComponent* oldExclusion) {
+    WaterExclusionComponent exclusion;
+    if (oldExclusion) exclusion = *oldExclusion;
+
+    if (node["shape"]) {
+        const std::string value = node["shape"].as<std::string>();
+        if (value == "box") exclusion.shape = WaterExclusionShape::BOX;
+        else if (value == "sphere") exclusion.shape = WaterExclusionShape::SPHERE;
+        else exclusion.shape = WaterExclusionShape::HULL;
+    }
+    if (node["center"]) exclusion.center = decodeVector3(node["center"]);
+    if (node["size"]) exclusion.size = decodeVector3(node["size"]);
+
+    return exclusion;
 }
 
 // ==============================

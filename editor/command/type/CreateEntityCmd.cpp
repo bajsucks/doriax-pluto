@@ -653,6 +653,15 @@ bool editor::CreateEntityCmd::execute(){
         scene->addComponent<Transform>(entity, {});
         scene->addComponent<WaterComponent>(entity, {});
 
+    }else if (type == EntityCreationType::WATER_EXCLUSION){
+
+        // a hull needs meshes, which a new entity has none of
+        WaterExclusionComponent exclusion;
+        exclusion.shape = WaterExclusionShape::BOX;
+
+        scene->addComponent<Transform>(entity, {});
+        scene->addComponent<WaterExclusionComponent>(entity, exclusion);
+
     }
 
     scene->setEntityName(entity, entityName);

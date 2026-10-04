@@ -12,6 +12,7 @@
 #include "thread/ThreadPoolManager.h"
 
 #include "component/TerrainComponent.h"
+#include "component/WaterExclusionComponent.h"
 #include "pool/ShaderPool.h"
 #include "util/SHA1.h"
 #include "util/Util.h"
@@ -714,6 +715,9 @@ bool editor::ShaderBuilder::setupShaderArgs(shadercompiler::args_t& args, Shader
     }
     if (shaderType == ShaderType::MESH){
         args.defines.push_back({"MAX_LIGHTS_2D", std::to_string(MAX_LIGHTS_2D)});
+    }
+    if (shaderType == ShaderType::WATER){
+        args.defines.push_back({"MAX_WATER_EXCLUSIONS", std::to_string(MAX_WATER_EXCLUSIONS)});
     }
     if (shaderType == ShaderType::GBUFFER){
         // suppresses the terrain texture-coordinate varyings in the shared includes

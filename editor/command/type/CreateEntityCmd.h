@@ -67,7 +67,8 @@ namespace doriax::editor{
         MESH_POLYGON,
         TERRAIN,
         REFLECTION_PROBE,
-        WATER
+        WATER,
+        WATER_EXCLUSION
     };
 
     class CreateEntityCmd: public Command{

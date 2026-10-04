@@ -13,6 +13,7 @@
 #include "ReflectionProbe.h"
 #include "SkyBox.h"
 #include "Water.h"
+#include "WaterExclusion.h"
 #include "Object.h"
 #include "Camera.h"
 #include "Polygon.h"
@@ -466,6 +467,24 @@ void LuaBinding::registerObjectClasses(lua_State *L){
         .addFunction("removeShaderUniform", &Water::removeShaderUniform)
         .addFunction("getHeight", &Water::getHeight)
         .addFunction("getNormal", &Water::getNormal)
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
+        .beginNamespace("WaterExclusionShape")
+        .addVariable("BOX", WaterExclusionShape::BOX)
+        .addVariable("SPHERE", WaterExclusionShape::SPHERE)
+        .addVariable("HULL", WaterExclusionShape::HULL)
+        .endNamespace();
+
+    luabridge::getGlobalNamespace(L)
+        .deriveClass<WaterExclusion, Object>("WaterExclusion")
+        .addConstructor <void (*) (Scene*), void (*) (Scene*, Entity)> ()
+        .addProperty("shape", &WaterExclusion::getShape, &WaterExclusion::setShape)
+        .addProperty("center", &WaterExclusion::getCenter, (void(WaterExclusion::*)(Vector3))&WaterExclusion::setCenter)
+        .addFunction("setCenter", (void(WaterExclusion::*)(const float, const float, const float))&WaterExclusion::setCenter)
+        .addProperty("size", &WaterExclusion::getSize, (void(WaterExclusion::*)(Vector3))&WaterExclusion::setSize)
+        .addFunction("setSize", (void(WaterExclusion::*)(const float, const float, const float))&WaterExclusion::setSize)
+        .addFunction("contains", &WaterExclusion::contains)
         .endClass();
 
     luabridge::getGlobalNamespace(L)

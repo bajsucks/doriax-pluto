@@ -718,6 +718,11 @@ void editor::Structure::showNewEntityMenu(bool isScene, Entity parent, bool addT
         openParent = parent;
     }
 
+    if (ImGui::MenuItem(ICON_FA_DROPLET_SLASH"  Water Exclusion")){
+        CommandHandle::get(project->getSelectedSceneId())->addCommandNoMerge(new CreateEntityCmd(project, project->getSelectedSceneId(), "Water Exclusion", EntityCreationType::WATER_EXCLUSION, parent, addToBundle));
+        openParent = parent;
+    }
+
     ImGui::EndMenu();
 }
 
@@ -792,6 +797,8 @@ std::string editor::Structure::getObjectIcon(Signature signature, Scene* scene){
         return ICON_FA_SMOG;
     }else if (signature.test(scene->getComponentId<ReflectionProbeComponent>())){
         return ICON_FA_CUBE;
+    }else if (signature.test(scene->getComponentId<WaterExclusionComponent>())){
+        return ICON_FA_DROPLET_SLASH;
     }else if (signature.test(scene->getComponentId<UIContainerComponent>())){
         return ICON_FA_OBJECT_GROUP;
     }else if (signature.test(scene->getComponentId<ButtonComponent>())){

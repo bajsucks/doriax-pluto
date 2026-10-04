@@ -182,6 +182,12 @@ static std::vector<editor::EnumEntry> entriesReflectionProbeUpdateMode = {
     { (int)ReflectionProbeUpdateMode::MANUAL, "Manual" }
 };
 
+static std::vector<editor::EnumEntry> entriesWaterExclusionShape = {
+    { (int)WaterExclusionShape::BOX, "Box" },
+    { (int)WaterExclusionShape::SPHERE, "Sphere" },
+    { (int)WaterExclusionShape::HULL, "Hull" }
+};
+
 static std::vector<editor::EnumEntry> entriesCameraType = {
     { (int)CameraType::CAMERA_ORTHO, "Orthographic" },
     { (int)CameraType::CAMERA_PERSPECTIVE, "Perspective" }
@@ -8551,6 +8557,27 @@ void editor::Properties::drawWaterComponent(ComponentType cpType, SceneProject* 
     endTable();
 }
 
+void editor::Properties::drawWaterExclusionComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
+    WaterExclusionComponent& exclusion = sceneProject->scene->getComponent<WaterExclusionComponent>(entities[0]);
+
+    RowSettings shapeSettings;
+    shapeSettings.enumEntries = &entriesWaterExclusionShape;
+    shapeSettings.help = "Hull wraps the meshes of this entity, like a boat, and follows them when they change. Box and Sphere fill a volume of their own.";
+
+    beginTable(cpType, getLabelSize("Center"), "water_exclusion");
+    propertyRow(RowPropertyType::Enum, cpType, "shape", "Shape", sceneProject, entities, shapeSettings);
+    if (exclusion.shape != WaterExclusionShape::HULL){
+        propertyRow(RowPropertyType::Vector3, cpType, "center", "Center", sceneProject, entities);
+        propertyRow(RowPropertyType::Vector3, cpType, "size", "Size", sceneProject, entities);
+    }
+    endTable();
+
+    // after a build was tried
+    if (entities.size() == 1 && exclusion.shape == WaterExclusionShape::HULL && exclusion.hullSignature != 0 && exclusion.hullPlanes.empty()){
+        ImGui::TextDisabled("No mesh on this entity to wrap");
+    }
+}
+
 void editor::Properties::drawScriptComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
     if (entities.empty()) return;
 
@@ -13648,6 +13675,8 @@ void editor::Properties::show(){
                     drawAudioComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::WaterComponent){
                     drawWaterComponent(cpType, sceneProject, entities);
+                }else if (cpType == ComponentType::WaterExclusionComponent){
+                    drawWaterExclusionComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::SkyComponent){
                     drawSkyComponent(cpType, sceneProject, entities);
                 }else if (cpType == ComponentType::ScriptComponent){

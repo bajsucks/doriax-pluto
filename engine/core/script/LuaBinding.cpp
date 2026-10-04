@@ -31,6 +31,7 @@
 #include "object/environment/ReflectionProbe.h"
 #include "object/environment/SkyBox.h"
 #include "object/environment/Water.h"
+#include "object/environment/WaterExclusion.h"
 #include "object/sound/Sound.h"
 #include "object/ui/UILayout.h"
 #include "object/ui/Container.h"
@@ -560,6 +561,7 @@ bool LuaBinding::pushEntityHandleByType(lua_State* L, doriax::Scene* scene, dori
     DISPATCH_TYPE(SkyBox, "skybox");
     DISPATCH_TYPE(ReflectionProbe, "reflectionprobe");
     DISPATCH_TYPE(Water, "water");
+    DISPATCH_TYPE(WaterExclusion, "waterexclusion");
     DISPATCH_TYPE(Object, "object");
     DISPATCH_TYPE(Camera, "camera");
     DISPATCH_TYPE(Light, "light");
