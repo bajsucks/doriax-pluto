@@ -460,8 +460,9 @@ void collectProjectSources(const fs::path& projectPath, const std::unordered_set
 
 }
 
-editor::CodeEditor::CodeEditor(Project* project) : lastScriptWatchTime(0.0), isFileChangePopupOpen(false), windowFocused(false), lastFocused(nullptr) {
+editor::CodeEditor::CodeEditor(Project* project, GitMonitor* gitMonitor) : lastScriptWatchTime(0.0), isFileChangePopupOpen(false), windowFocused(false), lastFocused(nullptr) {
     this->project = project;
+    this->gitMonitor = gitMonitor;
 }
 
 editor::CodeEditor::~CodeEditor() {
@@ -1416,6 +1417,7 @@ bool editor::CodeEditor::save(EditorInstance& instance) {
         updateScriptProperties(instance);
         updateAllProjectSymbols();
         invalidateShadersForFile(instance);
+        gitMonitor->requestRefresh();
 
         return true;
     } catch (const std::exception&) {
@@ -1638,12 +1640,31 @@ void editor::CodeEditor::show() {
         lastScriptWatchTime = currentTime;
     }
 
+    std::vector<std::string> openFiles;
+    openFiles.reserve(editors.size());
+    for (const auto& [key, instance] : editors) {
+        openFiles.push_back(key);
+    }
+    gitMonitor->setFiles(openFiles);
+
     for (auto it = editors.begin(); it != editors.end();) {
         auto& instance = it->second;
 
         if (currentTime - instance.lastCheckTime >= 1.0) {
             checkFileChanges(instance);
             instance.lastCheckTime = currentTime;
+        }
+
+        // Change marks against the staged file
+        const GitFileBase* diffBase = gitMonitor->getFileBase(it->first);
+        const uint64_t diffBaseVersion = diffBase ? diffBase->version : 0;
+        if (diffBaseVersion != instance.diffBaseVersion) {
+            instance.diffBaseVersion = diffBaseVersion;
+            if (diffBase && diffBase->tracked) {
+                instance.editor->SetDiffBase(diffBase->content);
+            } else {
+                instance.editor->ClearDiffBase();
+            }
         }
 
         std::string windowTitle = getWindowTitle(instance);

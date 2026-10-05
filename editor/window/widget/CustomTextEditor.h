@@ -4,6 +4,7 @@
 #pragma once
 
 #include "imgui.h"
+#include "util/LineDiff.h"
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -11,6 +12,7 @@
 #include <functional>
 #include <memory>
 #include <chrono>
+#include <cstdint>
 
 namespace doriax::editor {
 
@@ -208,6 +210,10 @@ namespace doriax::editor {
         // Project symbols (scanned from sibling files at runtime)
         void UpdateProjectSymbols(const std::vector<ProjectSymbol>& symbols);
 
+        // Gutter marks for the lines that differ from text, with their diff on hover
+        void SetDiffBase(const std::string& text);
+        void ClearDiffBase();
+
         // Rendering
         void Render(const char* title, const ImVec2& size = ImVec2(0, 0), bool border = false);
 
@@ -315,6 +321,32 @@ namespace doriax::editor {
 
         FontZoomCallback onFontZoom;
 
+        // Changes against the base text, recomputed after edits
+        bool hasDiffBase;
+        std::vector<std::string> diffBaseLines;
+        std::vector<LineChange> diffChanges;
+        bool diffDirty;
+        double diffNextTime; // a slow diff waits, so typing stays smooth
+        uint64_t diffVersion;
+
+        // Popup with the diff of the change under the mouse
+        struct DiffPeekRow {
+            bool added;
+            std::string text;
+            std::vector<Token> tokens;
+            int changedStart; // bytes that differ from the paired line
+            int changedEnd;
+        };
+        int diffHoverChange;
+        double diffHoverStart;
+        int diffPeekChange; // -1 when closed
+        LineChange diffPeekKey;
+        double diffPeekLeaveTime; // < 0 while the mouse is on the marker or the popup
+        bool diffPeekHovered;
+        uint64_t diffPeekVersion; // diffVersion of the rows, 0 to rebuild them
+        std::vector<DiffPeekRow> diffPeekRows;
+        float diffPeekTextWidth;
+
         // Semantic suggestions engine
         std::unique_ptr<SemanticSuggestions> suggestions;
         std::vector<SuggestionItem> currentSuggestions;
@@ -341,6 +373,8 @@ namespace doriax::editor {
         // Class or Lua table the cursor is inside, what "this" and "self" resolve to
         std::string findEnclosingType(int lineIndex) const;
         void tokenizeLine(int lineIndex);
+        // inMultiLineComment carries a block comment from one line to the next
+        void tokenizeText(const std::string& line, bool& inMultiLineComment, std::vector<Token>& tokens) const;
         void tokenizeAll();
         TokenType classifyWord(const std::string& word) const;
 
@@ -379,10 +413,22 @@ namespace doriax::editor {
 
         void renderLineNumbers(ImDrawList* drawList, const ImVec2& origin, int startLine, int endLine);
         void renderText(ImDrawList* drawList, const ImVec2& origin, int startLine, int endLine);
+        void renderLineTokens(ImDrawList* drawList, ImVec2 pos, const std::string& line, const std::vector<Token>& tokens) const;
         void renderSelections(ImDrawList* drawList, const ImVec2& origin, int startLine, int endLine);
         void renderCursors(ImDrawList* drawList, const ImVec2& origin);
         void renderMatchingBrackets(ImDrawList* drawList, const ImVec2& origin);
         void renderSearchHighlights(ImDrawList* drawList, const ImVec2& origin, int startLine, int endLine);
+        void updateDiff();
+        float diffGutterX(const ImVec2& origin) const;
+        // Change whose marker is under the point, -1 for none
+        int diffChangeAt(const ImVec2& point, const ImVec2& origin) const;
+        void renderDiffGutter(ImDrawList* drawList, const ImVec2& origin, int startLine, int endLine);
+        void renderDiffOverview();
+        void updateDiffPeek(const ImVec2& origin);
+        void buildDiffPeekRows(const LineChange& change);
+        void renderDiffPeek(const ImVec2& origin);
+        // Puts the base lines back as one undo step
+        void revertDiffChange(const LineChange& change);
         void renderAutoComplete(const ImVec2& origin);
         void renderFindDialog(const ImVec2& editorPos, const ImVec2& editorSize);
         void renderContextMenu();

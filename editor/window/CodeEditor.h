@@ -6,6 +6,7 @@
 #include "widget/CustomTextEditor.h"
 #include "Project.h"
 #include "util/EntityPayload.h"
+#include "util/GitMonitor.h"
 #include "util/ScriptEvents.h"
 #include <string>
 #include <vector>
@@ -31,8 +32,9 @@ namespace doriax::editor {
         int savedUndoIndex;
         int propertyInsertUndoIndex; // undo index after a drag-drop insertion, -1 if none pending
         bool pendingWindowFocus; // focus the window when it is drawn next
+        uint64_t diffBaseVersion; // of the GitFileBase the change marks come from, 0 for none
 
-        EditorInstance() : isOpen(true), languageType(SyntaxLanguage::None), isModified(false), lastCheckTime(0.0), savedUndoIndex(0), propertyInsertUndoIndex(-1), pendingWindowFocus(false) {}
+        EditorInstance() : isOpen(true), languageType(SyntaxLanguage::None), isModified(false), lastCheckTime(0.0), savedUndoIndex(0), propertyInsertUndoIndex(-1), pendingWindowFocus(false), diffBaseVersion(0) {}
     };
 
     class CodeEditor {
@@ -43,6 +45,7 @@ namespace doriax::editor {
         };
 
         Project* project;
+        GitMonitor* gitMonitor;
 
         std::unordered_map<std::string, EditorInstance> editors;
         std::vector<PendingFileChange> changedFilesQueue;
@@ -98,7 +101,7 @@ namespace doriax::editor {
         void addScriptEvent(const std::string& filepath, size_t event);
 
     public:
-        CodeEditor(Project* project);
+        CodeEditor(Project* project, GitMonitor* gitMonitor);
         ~CodeEditor();
 
         std::vector<fs::path> getOpenPaths() const;

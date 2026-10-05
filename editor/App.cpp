@@ -99,7 +99,7 @@ editor::App::App(){
     sceneWindow = new SceneWindow(&project);
     propertiesWindow->setSceneWindow(sceneWindow);
     structureWindow = new Structure(&project, sceneWindow);
-    codeEditor = new CodeEditor(&project);
+    codeEditor = new CodeEditor(&project, &gitMonitor);
     imageViewerWindow = new ImageViewerWindow(&project);
     resourcesWindow = new ResourcesWindow(&project, codeEditor, imageViewerWindow);
     loadingWindow = new LoadingWindow();
@@ -824,6 +824,8 @@ void editor::App::showFooter(){
             return pressed;
         };
 
+        showFooterGit();
+
         // Left side: Status
         bool statusShown = false;
         if (isSaving || isAnySaving) {
@@ -940,6 +942,49 @@ void editor::App::showFooter(){
 
     // Reserve space from the viewport work area so dockspace doesn't overlap
     viewport->WorkSize.y -= footerHeight;
+}
+
+// Branch and sync state at the far left, like VSCode's status bar
+void editor::App::showFooterGit(){
+    const GitStatus& git = gitMonitor.getStatus();
+    if (!git.repository) {
+        return;
+    }
+
+    const char* icon = ICON_FA_CODE_BRANCH;
+    if (git.headType == GitHeadType::Tag) {
+        icon = ICON_FA_TAG;
+    } else if (git.headType == GitHeadType::Commit) {
+        icon = ICON_FA_CODE_COMMIT;
+    }
+
+    // VSCode's marks: * changes, + staged changes, ! merge, rebase or conflicts
+    std::string label = std::string(icon) + " " + git.head;
+    if (git.unstaged > 0) label += "*";
+    if (git.staged > 0) label += "+";
+    if (git.operationInProgress) label += "!";
+
+    ImGui::TextUnformatted(label.c_str());
+    if (ImGui::BeginItemTooltip()) {
+        ImGui::Text("%d staged, %d unstaged changes", git.staged, git.unstaged);
+        if (!git.upstream.empty()) {
+            ImGui::Text("Tracking %s", git.upstream.c_str());
+        }
+        if (git.operationInProgress) {
+            ImGui::TextUnformatted("Unfinished merge, rebase or conflicts");
+        }
+        ImGui::EndTooltip();
+    }
+
+    if (git.ahead > 0 || git.behind > 0) {
+        ImGui::SameLine();
+        ImGui::Text(ICON_FA_ARROWS_ROTATE " %d" ICON_FA_ARROW_DOWN_LONG " %d" ICON_FA_ARROW_UP_LONG, git.behind, git.ahead);
+        ImGui::SetItemTooltip("%d behind and %d ahead of %s", git.behind, git.ahead, git.upstream.c_str());
+    }
+
+    ImGui::SameLine();
+    ImGui::TextDisabled("|");
+    ImGui::SameLine();
 }
 
 void editor::App::showAlert(){
@@ -1700,6 +1745,8 @@ void editor::App::show(){
 
     dockspace_id = ImGui::GetID("MyDockspace");
 
+    gitMonitor.update(project.getProjectPath(), project.hasVersionControlMetadata());
+
     showMenu();
     showFooter();
 
@@ -2414,12 +2461,21 @@ void editor::App::setWakeCallback(std::function<void()> cb) {
     if (aiChatWindow) aiChatWindow->setWakeCallback(std::move(cb));
 }
 
+void editor::App::setWindowFocused(bool focused) {
+    // A panel dragged out into its own OS window counts too
+    for (const ImGuiViewport* viewport : ImGui::GetPlatformIO().Viewports) {
+        focused = focused || (viewport->Flags & ImGuiViewportFlags_IsFocused) != 0;
+    }
+    gitMonitor.setFocused(focused);
+}
+
 void editor::App::shutdownBackgroundWork() {
     loadingPump = nullptr;
     pendingProjectChange = nullptr;
     // Before glfwTerminate/SDL_Quit, or a late reply posts to a dead window system.
     if (aiChatWindow) aiChatWindow->shutdown();
     if (mcpServer) mcpServer->shutdown();
+    gitMonitor.shutdown();
     std::lock_guard<std::mutex> lock(mainThreadTaskMutex);
     wakeCallback = nullptr;
 }

@@ -1004,6 +1004,7 @@ int editor::Backend::init(int argc, char* argv[]) {
                     (backend->window.occlusionState &
                      NSWindowOcclusionStateVisible) != 0;
                 const bool focused = NSApp.active;
+                app.setWindowFocused(focused);
                 const bool playSessionActive =
                     activeProject->isPlaySessionActive();
                 const bool frameSync = app.isBenchmarkMode() ? false : (playSessionActive

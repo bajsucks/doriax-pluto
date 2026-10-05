@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "CustomTextEditor.h"
+#include "imgui_internal.h"
 #include "InputTextContextMenu.h"
 #include "SemanticSuggestions.h"
 #include "engine_api_suggestions.h"
@@ -83,6 +84,90 @@ bool isUtf8Continuation(unsigned char c) {
     return (c & 0xC0) == 0x80;
 }
 
+// Lines without their '\r', as the editor holds them
+void splitLines(const std::string& text, std::vector<std::string>& out) {
+    out.clear();
+
+    std::string line;
+    for (char c : text) {
+        if (c == '\n') {
+            out.push_back(line);
+            line.clear();
+        } else if (c != '\r') {
+            line += c;
+        }
+    }
+    out.push_back(line);
+}
+
+// VSCode's Dark Modern gutter colors
+constexpr ImU32 DIFF_ADDED_COLOR = IM_COL32(0x2E, 0xA0, 0x43, 0xFF);
+constexpr ImU32 DIFF_MODIFIED_COLOR = IM_COL32(0x00, 0x78, 0xD4, 0xFF);
+constexpr ImU32 DIFF_DELETED_COLOR = IM_COL32(0xF8, 0x51, 0x49, 0xFF);
+
+ImU32 diffColor(const LineChange& change) {
+    if (change.originalStart == change.originalEnd) return DIFF_ADDED_COLOR;
+    if (change.modifiedStart == change.modifiedEnd) return DIFF_DELETED_COLOR;
+    return DIFF_MODIFIED_COLOR;
+}
+
+// Modified lines get a striped bar
+void drawHatchedBar(ImDrawList* drawList, const ImVec2& min, const ImVec2& max, ImU32 color) {
+    // Only the visible part, a block can span thousands of lines
+    const float top = std::max(min.y, drawList->GetClipRectMin().y);
+    const float bottom = std::min(max.y, drawList->GetClipRectMax().y);
+    if (top >= bottom) return;
+
+    const float width = max.x - min.x;
+    const float thickness = width * 0.5f;
+
+    // Antialiasing would blur stripes this thin into a flat tint
+    const ImDrawListFlags flags = drawList->Flags;
+    drawList->Flags &= ~ImDrawListFlags_AntiAliasedFill;
+    drawList->PushClipRect(ImVec2(min.x, top), ImVec2(max.x, bottom), true);
+
+    // Anchored to the block, so they scroll with the text
+    for (float y = min.y + std::floor((top - min.y) / width) * width - 2.0f * width; y < bottom; y += width) {
+        drawList->AddQuadFilled(ImVec2(min.x, y + width), ImVec2(max.x, y),
+                                ImVec2(max.x, y + thickness), ImVec2(min.x, y + width + thickness), color);
+    }
+
+    drawList->PopClipRect();
+    drawList->Flags = flags;
+}
+
+// VSCode's diff tints, the changed part of a line gets a second one
+constexpr ImU32 DIFF_REMOVED_LINE_BG = IM_COL32(255, 0, 0, 51);
+constexpr ImU32 DIFF_ADDED_LINE_BG = IM_COL32(155, 185, 85, 51);
+constexpr ImU32 DIFF_REMOVED_TEXT_BG = IM_COL32(255, 0, 0, 51);
+constexpr ImU32 DIFF_ADDED_TEXT_BG = IM_COL32(156, 204, 44, 51);
+
+// Seconds on a marker to open its popup, and off both to close it
+constexpr double DIFF_PEEK_DELAY = 0.15;
+constexpr double DIFF_PEEK_GRACE = 0.3;
+
+// Bytes between the common prefix and suffix of two lines, cut at characters
+void changedBytes(const std::string& before, const std::string& after, int& start, int& beforeEnd, int& afterEnd) {
+    auto insideCharacter = [&](size_t i) {
+        return (i < before.size() && isUtf8Continuation(before[i])) || (i < after.size() && isUtf8Continuation(after[i]));
+    };
+
+    size_t prefix = 0;
+    while (prefix < before.size() && prefix < after.size() && before[prefix] == after[prefix]) prefix++;
+    while (prefix > 0 && insideCharacter(prefix)) prefix--;
+
+    size_t suffix = 0;
+    while (suffix < before.size() - prefix && suffix < after.size() - prefix &&
+           before[before.size() - 1 - suffix] == after[after.size() - 1 - suffix]) {
+        suffix++;
+    }
+    while (suffix > 0 && isUtf8Continuation(before[before.size() - suffix])) suffix--;
+
+    start = static_cast<int>(prefix);
+    beforeEnd = static_cast<int>(before.size() - suffix);
+    afterEnd = static_cast<int>(after.size() - suffix);
+}
+
 } // namespace
 
 CustomTextEditor::CustomTextEditor()
@@ -128,6 +213,18 @@ CustomTextEditor::CustomTextEditor()
     , measureFontSize(0)
     , maxLineWidth(0)
     , maxLineWidthDirty(true)
+    , hasDiffBase(false)
+    , diffDirty(false)
+    , diffNextTime(0.0)
+    , diffVersion(1)
+    , diffHoverChange(-1)
+    , diffHoverStart(0.0)
+    , diffPeekChange(-1)
+    , diffPeekKey{}
+    , diffPeekLeaveTime(-1.0)
+    , diffPeekHovered(false)
+    , diffPeekVersion(0)
+    , diffPeekTextWidth(0.0f)
     , suggestions(std::make_unique<SemanticSuggestions>())
     , scrollToSuggestion(false)
 {
@@ -428,18 +525,7 @@ const char* CustomTextEditor::GetLanguageName() const {
 }
 
 void CustomTextEditor::setLinesFromText(const std::string& text) {
-    lines.clear();
-
-    std::string line;
-    for (char c : text) {
-        if (c == '\n') {
-            lines.push_back(line);
-            line.clear();
-        } else if (c != '\r') {
-            line += c;
-        }
-    }
-    lines.push_back(line);
+    splitLines(text, lines);
 }
 
 void CustomTextEditor::SetText(const std::string& text) {
@@ -558,12 +644,8 @@ void CustomTextEditor::tokenizeLine(int lineIndex) {
     }
 
     lineTokens[lineIndex].clear();
-    const std::string& line = lines[lineIndex];
+    if (lines[lineIndex].empty()) return;
 
-    if (line.empty()) return;
-
-    int i = 0;
-    int len = static_cast<int>(line.size());
     bool inMultiLineComment = false;
 
     // Check if previous line ends in multi-line comment
@@ -588,6 +670,16 @@ void CustomTextEditor::tokenizeLine(int lineIndex) {
         }
     }
 
+    tokenizeText(lines[lineIndex], inMultiLineComment, lineTokens[lineIndex]);
+}
+
+void CustomTextEditor::tokenizeText(const std::string& line, bool& inMultiLineComment, std::vector<Token>& tokens) const {
+    tokens.clear();
+    if (line.empty()) return;
+
+    int i = 0;
+    int len = static_cast<int>(line.size());
+
     while (i < len) {
         if (std::isspace(static_cast<unsigned char>(line[i]))) {
             ++i;
@@ -604,7 +696,7 @@ void CustomTextEditor::tokenizeLine(int lineIndex) {
             } else {
                 i = len;
             }
-            lineTokens[lineIndex].push_back({start, i - start, TokenType::MultiLineComment});
+            tokens.push_back({start, i - start, TokenType::MultiLineComment});
             continue;
         }
 
@@ -613,14 +705,14 @@ void CustomTextEditor::tokenizeLine(int lineIndex) {
             line.compare(i, languageDef.preprocessorPrefix.size(), languageDef.preprocessorPrefix) == 0) {
             int start = i;
             i = len;
-            lineTokens[lineIndex].push_back({start, i - start, TokenType::Preprocessor});
+            tokens.push_back({start, i - start, TokenType::Preprocessor});
             continue;
         }
 
         // Single-line comment
         if (!languageDef.singleLineComment.empty() &&
             line.compare(i, languageDef.singleLineComment.size(), languageDef.singleLineComment) == 0) {
-            lineTokens[lineIndex].push_back({i, len - i, TokenType::Comment});
+            tokens.push_back({i, len - i, TokenType::Comment});
             break;
         }
 
@@ -636,7 +728,7 @@ void CustomTextEditor::tokenizeLine(int lineIndex) {
                 i = len;
                 inMultiLineComment = true;
             }
-            lineTokens[lineIndex].push_back({start, i - start, TokenType::MultiLineComment});
+            tokens.push_back({start, i - start, TokenType::MultiLineComment});
             continue;
         }
 
@@ -652,7 +744,7 @@ void CustomTextEditor::tokenizeLine(int lineIndex) {
                 }
             }
             if (i < len) ++i;
-            lineTokens[lineIndex].push_back({start, i - start, TokenType::String});
+            tokens.push_back({start, i - start, TokenType::String});
             continue;
         }
 
@@ -666,7 +758,7 @@ void CustomTextEditor::tokenizeLine(int lineIndex) {
             } else {
                 i = len;
             }
-            lineTokens[lineIndex].push_back({start, i - start, TokenType::String});
+            tokens.push_back({start, i - start, TokenType::String});
             continue;
         }
 
@@ -699,7 +791,7 @@ void CustomTextEditor::tokenizeLine(int lineIndex) {
                     }
                 }
             }
-            lineTokens[lineIndex].push_back({start, i - start, TokenType::Number});
+            tokens.push_back({start, i - start, TokenType::Number});
             continue;
         }
 
@@ -718,7 +810,7 @@ void CustomTextEditor::tokenizeLine(int lineIndex) {
                 type = TokenType::Function;
             }
 
-            lineTokens[lineIndex].push_back({start, i - start, type});
+            tokens.push_back({start, i - start, type});
             continue;
         }
 
@@ -729,12 +821,12 @@ void CustomTextEditor::tokenizeLine(int lineIndex) {
         if (std::strchr(operators, line[i])) {
             int start = i++;
             while (i < len && std::strchr(operators, line[i])) ++i;
-            lineTokens[lineIndex].push_back({start, i - start, TokenType::Operator});
+            tokens.push_back({start, i - start, TokenType::Operator});
             continue;
         }
 
         if (std::strchr(punctuation, line[i])) {
-            lineTokens[lineIndex].push_back({i, 1, TokenType::Punctuation});
+            tokens.push_back({i, 1, TokenType::Punctuation});
             ++i;
             continue;
         }
@@ -743,18 +835,19 @@ void CustomTextEditor::tokenizeLine(int lineIndex) {
         if (static_cast<unsigned char>(line[i]) >= 0x80) {
             int start = i;
             while (i < len && static_cast<unsigned char>(line[i]) >= 0x80) ++i;
-            lineTokens[lineIndex].push_back({start, i - start, TokenType::Default});
+            tokens.push_back({start, i - start, TokenType::Default});
             continue;
         }
 
-        lineTokens[lineIndex].push_back({i, 1, TokenType::Default});
+        tokens.push_back({i, 1, TokenType::Default});
         ++i;
     }
 }
 
 void CustomTextEditor::tokenizeAll() {
-    // Every edit retokenizes, so this is also where cached widths expire
+    // Every edit retokenizes, so this is also where cached widths and the diff expire
     maxLineWidthDirty = true;
+    if (hasDiffBase) diffDirty = true;
     lineTokens.clear();
     lineTokens.resize(lines.size());
     for (int i = 0; i < static_cast<int>(lines.size()); ++i) {
@@ -2600,6 +2693,42 @@ void CustomTextEditor::UpdateProjectSymbols(const std::vector<ProjectSymbol>& sy
     }
 }
 
+void CustomTextEditor::SetDiffBase(const std::string& text) {
+    splitLines(text, diffBaseLines);
+    hasDiffBase = true;
+    diffDirty = true;
+    diffNextTime = 0.0;
+}
+
+void CustomTextEditor::ClearDiffBase() {
+    hasDiffBase = false;
+    diffBaseLines.clear();
+    diffChanges.clear();
+    diffDirty = false;
+    diffVersion++;
+    diffPeekChange = -1;
+}
+
+void CustomTextEditor::updateDiff() {
+    if (!diffDirty) return;
+
+    const double now = ImGui::GetTime();
+    if (now < diffNextTime) {
+        // The loop may be idling
+        Backend::getApp().requestFrame();
+        return;
+    }
+
+    const auto start = std::chrono::steady_clock::now();
+    diffChanges = LineDiff::compute(diffBaseLines, lines);
+    diffVersion++;
+    const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+
+    // A slow diff runs at most 5% of the time
+    diffNextTime = now + seconds * 20.0;
+    diffDirty = false;
+}
+
 bool CustomTextEditor::isInCommentOrString(const TextPosition& pos) const {
     if (pos.line < 0 || pos.line >= static_cast<int>(lineTokens.size())) return false;
 
@@ -3473,6 +3602,379 @@ void CustomTextEditor::renderLineNumbers(ImDrawList* drawList, const ImVec2& ori
     }
 }
 
+float CustomTextEditor::diffGutterX(const ImVec2& origin) const {
+    const float numbersEnd = showLineNumbers ? leftMargin + lineNumberDigits * charWidth : 0.0f;
+    return std::round(origin.x + numbersEnd + leftMargin * 0.5f);
+}
+
+int CustomTextEditor::diffChangeAt(const ImVec2& point, const ImVec2& origin) const {
+    const float x = diffGutterX(origin);
+    const float barWidth = std::round(Theme::dpi(3.0f));
+    // The bar alone is hard to hit
+    const float reach = Theme::dpi(3.0f);
+    if (point.x < x - reach || point.x > x + barWidth + reach) return -1;
+
+    const float triangleSize = std::round(Theme::dpi(4.0f));
+    for (int i = 0; i < static_cast<int>(diffChanges.size()); i++) {
+        const LineChange& change = diffChanges[i];
+        float top = origin.y + change.modifiedStart * lineHeight;
+        float bottom = origin.y + change.modifiedEnd * lineHeight;
+        if (change.modifiedStart == change.modifiedEnd) {
+            const float y = std::max(top, origin.y + triangleSize);
+            top = y - triangleSize;
+            bottom = y + triangleSize;
+        }
+        if (point.y >= top && point.y < bottom) return i;
+    }
+    return -1;
+}
+
+void CustomTextEditor::renderDiffGutter(ImDrawList* drawList, const ImVec2& origin, int startLine, int endLine) {
+    if (diffChanges.empty()) return;
+
+    // VSCode's 3px bars and 4px triangles, twice as large under the mouse
+    const float x = diffGutterX(origin);
+    for (int i = 0; i < static_cast<int>(diffChanges.size()); i++) {
+        const LineChange& change = diffChanges[i];
+        if (change.modifiedEnd < startLine) continue;
+        if (change.modifiedStart > endLine + 1) break;
+
+        const float scale = (i == diffHoverChange || i == diffPeekChange) ? 2.0f : 1.0f;
+        const float top = origin.y + change.modifiedStart * lineHeight;
+
+        if (change.modifiedStart == change.modifiedEnd) {
+            // On the edge where lines were removed
+            const float size = std::round(Theme::dpi(4.0f) * scale);
+            const float y = std::max(top, origin.y + size);
+            drawList->AddTriangleFilled(ImVec2(x, y - size), ImVec2(x + size, y), ImVec2(x, y + size), DIFF_DELETED_COLOR);
+            continue;
+        }
+
+        const ImVec2 min(x, top);
+        const ImVec2 max(x + std::round(Theme::dpi(3.0f) * scale), origin.y + change.modifiedEnd * lineHeight);
+        if (change.originalStart == change.originalEnd) {
+            drawList->AddRectFilled(min, max, DIFF_ADDED_COLOR);
+        } else {
+            drawHatchedBar(drawList, min, max, DIFF_MODIFIED_COLOR);
+        }
+    }
+}
+
+void CustomTextEditor::renderDiffOverview() {
+    if (diffChanges.empty()) return;
+
+    ImGuiWindow* window = ImGui::GetCurrentWindow();
+    if (!window->ScrollbarY) return;
+
+    // The scrollbar doubles as an overview ruler, the changes in its left third
+    const ImRect bar = ImGui::GetWindowScrollbarRect(window, ImGuiAxis_Y);
+    const float contentHeight = window->ContentSize.y + window->WindowPadding.y * 2.0f;
+    if (contentHeight <= 0.0f || bar.GetHeight() <= 0.0f) return;
+
+    const float scale = bar.GetHeight() / contentHeight;
+    const float laneEnd = bar.Min.x + std::round(bar.GetWidth() / 3.0f);
+    const float minHeight = Theme::dpi(2.0f);
+
+    // The content clip rect leaves the scrollbar out
+    ImRect clip = bar;
+    clip.ClipWithFull(window->OuterRectClipped);
+    if (clip.GetWidth() <= 0.0f || clip.GetHeight() <= 0.0f) return;
+
+    ImDrawList* drawList = window->DrawList;
+    drawList->PushClipRect(clip.Min, clip.Max, false);
+    for (const LineChange& change : diffChanges) {
+        float top = bar.Min.y + change.modifiedStart * lineHeight * scale;
+        float bottom = bar.Min.y + change.modifiedEnd * lineHeight * scale;
+        if (bottom - top < minHeight) {
+            const float center = (top + bottom) * 0.5f;
+            top = center - minHeight * 0.5f;
+            bottom = center + minHeight * 0.5f;
+        }
+
+        // 60% opaque, as in VSCode
+        const ImU32 color = (diffColor(change) & ~IM_COL32_A_MASK) | (0x99u << IM_COL32_A_SHIFT);
+        drawList->AddRectFilled(ImVec2(bar.Min.x, top), ImVec2(laneEnd, bottom), color);
+    }
+    drawList->PopClipRect();
+}
+
+void CustomTextEditor::updateDiffPeek(const ImVec2& origin) {
+    // An edit that moved the change closes its popup
+    if (diffPeekChange >= 0 && (diffPeekChange >= static_cast<int>(diffChanges.size()) || diffChanges[diffPeekChange] != diffPeekKey)) {
+        diffPeekChange = -1;
+    }
+
+    const double now = ImGui::GetTime();
+    const bool overEditor = ImGui::IsWindowHovered() && !suggestionsHovered && !showContextMenu;
+    const int hovered = overEditor ? diffChangeAt(ImGui::GetIO().MousePos, origin) : -1;
+    if (hovered >= 0) {
+        ImGui::SetMouseCursor(ImGuiMouseCursor_Arrow);
+    }
+
+    if (hovered != diffHoverChange) {
+        diffHoverChange = hovered;
+        diffHoverStart = now;
+    }
+
+    // A mouse just crossing the gutter opens nothing
+    const bool dragging = isDragging || isDraggingText || isMiddleDragging || ImGui::IsAnyMouseDown();
+    if (hovered >= 0 && hovered != diffPeekChange && !dragging && now - diffHoverStart >= DIFF_PEEK_DELAY) {
+        diffPeekChange = hovered;
+        diffPeekKey = diffChanges[hovered];
+        diffPeekVersion = 0;
+        diffPeekHovered = false;
+        diffPeekLeaveTime = -1.0;
+    }
+
+    // Open while the mouse is on the marker or the popup, with time to go from one to the other
+    if (diffPeekChange >= 0) {
+        if (hovered == diffPeekChange || diffPeekHovered) {
+            diffPeekLeaveTime = -1.0;
+        } else if (diffPeekLeaveTime < 0.0) {
+            diffPeekLeaveTime = now;
+        } else if (now - diffPeekLeaveTime > DIFF_PEEK_GRACE) {
+            diffPeekChange = -1;
+        }
+    }
+
+    // The loop may be idling while a wait runs out
+    if ((hovered >= 0 && hovered != diffPeekChange) || (diffPeekChange >= 0 && diffPeekLeaveTime >= 0.0)) {
+        Backend::getApp().requestFrame();
+    }
+}
+
+void CustomTextEditor::buildDiffPeekRows(const LineChange& change) {
+    diffPeekRows.clear();
+
+    // The base lines need tokens of their own
+    bool inMultiLineComment = false;
+    for (int i = change.originalStart; i < change.originalEnd && i < static_cast<int>(diffBaseLines.size()); i++) {
+        DiffPeekRow row{false, diffBaseLines[i], {}, 0, 0};
+        tokenizeText(row.text, inMultiLineComment, row.tokens);
+        diffPeekRows.push_back(std::move(row));
+    }
+    const int removed = static_cast<int>(diffPeekRows.size());
+
+    for (int i = change.modifiedStart; i < change.modifiedEnd && i < static_cast<int>(lines.size()); i++) {
+        diffPeekRows.push_back({true, lines[i], i < static_cast<int>(lineTokens.size()) ? lineTokens[i] : std::vector<Token>(), 0, 0});
+    }
+    const int added = static_cast<int>(diffPeekRows.size()) - removed;
+
+    // Paired lines mark what changed between them
+    for (int i = 0; i < std::min(removed, added); i++) {
+        DiffPeekRow& before = diffPeekRows[i];
+        DiffPeekRow& after = diffPeekRows[removed + i];
+        changedBytes(before.text, after.text, before.changedStart, before.changedEnd, after.changedEnd);
+        after.changedStart = before.changedStart;
+    }
+
+    diffPeekTextWidth = 0.0f;
+    for (const DiffPeekRow& row : diffPeekRows) {
+        diffPeekTextWidth = std::max(diffPeekTextWidth, measureText(row.text.c_str(), row.text.c_str() + row.text.size()));
+    }
+}
+
+void CustomTextEditor::renderDiffPeek(const ImVec2& origin) {
+    if (diffPeekChange < 0 || diffPeekChange >= static_cast<int>(diffChanges.size())) {
+        diffPeekHovered = false;
+        return;
+    }
+
+    const LineChange change = diffChanges[diffPeekChange];
+    if (diffPeekVersion != diffVersion) {
+        buildDiffPeekRows(change);
+        diffPeekVersion = diffVersion;
+    }
+
+    const int removed = change.originalEnd - change.originalStart;
+    const int added = change.modifiedEnd - change.modifiedStart;
+    auto lineRange = [](int start, int end) {
+        return end - start == 1 ? "line " + std::to_string(start + 1)
+                                 : "lines " + std::to_string(start + 1) + "-" + std::to_string(end);
+    };
+    std::string title;
+    if (removed == 0) {
+        title = "Added " + lineRange(change.modifiedStart, change.modifiedEnd);
+    } else if (added == 0) {
+        title = "Removed " + std::to_string(removed) + (removed == 1 ? " line" : " lines");
+    } else {
+        title = "Changed " + lineRange(change.modifiedStart, change.modifiedEnd);
+    }
+    const char* revertLabel = ICON_FA_ROTATE_LEFT;
+
+    const ImRect editorRect = ImGui::GetCurrentWindow()->InnerRect;
+
+    // Whole pixels, ImGui truncates window sizes and a lost fraction shows scrollbars
+    const float spacing = std::round(Theme::dpi(6.0f));
+    const float spacingY = std::round(Theme::dpi(3.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(spacing, spacingY));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(spacing, spacingY));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, Theme::dpi(4.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarSize, std::round(Theme::dpi(10.0f)));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.3f, 0.3f, 0.3f, 0.8f));
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, backgroundColor);
+
+    const ImGuiStyle& style = ImGui::GetStyle();
+
+    ImGui::PushFont(ImGui::GetIO().FontDefault);
+    const float headerHeight = std::ceil(readOnly ? ImGui::GetTextLineHeight() : ImGui::GetFrameHeight());
+    const float revertWidth = readOnly ? 0.0f : ImGui::CalcTextSize(revertLabel).x + 4.0f;
+    const float headerWidth = ImGui::CalcTextSize(title.c_str()).x + style.ItemSpacing.x * 4.0f + revertWidth;
+    ImGui::PopFont();
+
+    const float signWidth = charWidth * 2.0f;
+    const float contentWidth = std::ceil(signWidth + diffPeekTextWidth + charWidth);
+    const float contentHeight = diffPeekRows.size() * lineHeight;
+    const float maxBodyWidth = std::floor(std::max(Theme::dpi(240.0f), editorRect.GetWidth() - Theme::dpi(8.0f)) - spacing * 2.0f);
+
+    float bodyHeight = std::min(contentHeight, std::floor(std::max(lineHeight * 3.0f, editorRect.GetHeight() * 0.45f)));
+    float bodyWidth = std::ceil(std::max(contentWidth + (contentHeight > bodyHeight ? style.ScrollbarSize : 0.0f), headerWidth));
+    if (bodyWidth > maxBodyWidth) {
+        bodyWidth = maxBodyWidth;
+        bodyHeight += style.ScrollbarSize;
+    }
+    const float width = bodyWidth + spacing * 2.0f;
+    const float height = headerHeight + bodyHeight + spacingY * 3.0f;
+
+    float top = origin.y + change.modifiedStart * lineHeight;
+    float bottom = origin.y + change.modifiedEnd * lineHeight;
+    if (added == 0) {
+        const float triangleSize = std::round(Theme::dpi(4.0f));
+        const float y = std::max(top, origin.y + triangleSize);
+        top = y - triangleSize;
+        bottom = y + triangleSize;
+    }
+
+    // Below the change, above it when there is no room
+    ImVec2 pos(diffGutterX(origin), bottom);
+    if (pos.y + height > editorRect.Max.y) {
+        pos.y = top - height;
+        if (pos.y < editorRect.Min.y) pos.y = std::max(editorRect.Min.y, editorRect.Max.y - height);
+    }
+    pos.x = std::max(editorRect.Min.x, std::min(pos.x, editorRect.Max.x - width));
+
+    ImGui::SetNextWindowPos(pos);
+    ImGui::SetNextWindowSize(ImVec2(width, height));
+
+    const ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                                   ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
+                                   ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse |
+                                   ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoDocking;
+
+    // One per editor, two can show side by side
+    char windowName[48];
+    snprintf(windowName, sizeof(windowName), "##DiffPeek%p", static_cast<void*>(this));
+
+    bool revert = false;
+    if (ImGui::Begin(windowName, nullptr, flags)) {
+        diffPeekHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
+
+        ImGui::PushFont(ImGui::GetIO().FontDefault);
+        if (!readOnly) {
+            ImGui::AlignTextToFramePadding();
+        }
+        ImGui::TextUnformatted(title.c_str());
+        if (!readOnly) {
+            // Same arrow as the reset to default buttons of the Properties
+            ImGui::SameLine(ImGui::GetContentRegionMax().x - revertWidth);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, style.FramePadding.y));
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+            ImGui::PushStyleColor(ImGuiCol_Text, style.Colors[ImGuiCol_TextDisabled]);
+            revert = ImGui::Button(revertLabel);
+            ImGui::PopStyleColor(2);
+            ImGui::PopStyleVar(2);
+            ImGui::SetItemTooltip("Revert to the staged lines");
+        }
+        ImGui::PopFont();
+
+        if (ImGui::BeginChild("##DiffPeekBody", ImVec2(bodyWidth, bodyHeight), ImGuiChildFlags_None,
+                              ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoNav)) {
+            ImDrawList* drawList = ImGui::GetWindowDrawList();
+            const ImVec2 start = ImGui::GetCursorScreenPos();
+            const float rowWidth = std::max(contentWidth, ImGui::GetContentRegionAvail().x);
+            ImGui::Dummy(ImVec2(contentWidth, contentHeight));
+
+            // Removed lines first, then what replaced them
+            const int first = std::max(0, static_cast<int>(ImGui::GetScrollY() / lineHeight));
+            const int last = std::min(static_cast<int>(diffPeekRows.size()), first + static_cast<int>(bodyHeight / lineHeight) + 2);
+            for (int i = first; i < last; i++) {
+                const DiffPeekRow& row = diffPeekRows[i];
+                const float y = start.y + i * lineHeight;
+                const float textX = start.x + signWidth;
+
+                drawList->AddRectFilled(ImVec2(start.x, y), ImVec2(start.x + rowWidth, y + lineHeight),
+                                        row.added ? DIFF_ADDED_LINE_BG : DIFF_REMOVED_LINE_BG);
+                if (row.changedEnd > row.changedStart) {
+                    const char* text = row.text.c_str();
+                    drawList->AddRectFilled(ImVec2(textX + measureText(text, text + row.changedStart), y),
+                                            ImVec2(textX + measureText(text, text + row.changedEnd), y + lineHeight),
+                                            row.added ? DIFF_ADDED_TEXT_BG : DIFF_REMOVED_TEXT_BG);
+                }
+                drawList->AddText(ImVec2(start.x + charWidth * 0.5f, y + textOffsetY),
+                                  row.added ? DIFF_ADDED_COLOR : DIFF_DELETED_COLOR, row.added ? "+" : "-");
+                renderLineTokens(drawList, ImVec2(textX, y + textOffsetY), row.text, row.tokens);
+            }
+        }
+        ImGui::EndChild();
+
+        // A click here gives the keyboard back to the editor
+        if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::IsAnyMouseDown()) {
+            pendingFocus = true;
+        }
+    }
+    ImGui::End();
+
+    ImGui::PopStyleColor(3);
+    ImGui::PopStyleVar(4);
+
+    if (revert) {
+        revertDiffChange(change);
+    }
+}
+
+void CustomTextEditor::revertDiffChange(const LineChange& change) {
+    // A diff that has not caught up with the last edit has stale ranges
+    if (readOnly || diffDirty || change.modifiedEnd > static_cast<int>(lines.size()) ||
+        change.originalEnd > static_cast<int>(diffBaseLines.size())) {
+        return;
+    }
+
+    if (showParamHint) closeParamHint();
+    CloseAutoComplete();
+
+    std::vector<std::string> reverted(lines.begin(), lines.begin() + change.modifiedStart);
+    reverted.insert(reverted.end(), diffBaseLines.begin() + change.originalStart, diffBaseLines.begin() + change.originalEnd);
+    reverted.insert(reverted.end(), lines.begin() + change.modifiedEnd, lines.end());
+
+    addUndoRecord();
+    lines = std::move(reverted);
+
+    // Carets below the change follow their text, those inside go to its first line
+    const int shift = (change.originalEnd - change.originalStart) - (change.modifiedEnd - change.modifiedStart);
+    auto follow = [&](TextPosition& pos) {
+        if (pos.line >= change.modifiedEnd) {
+            pos.line += shift;
+        } else if (pos.line >= change.modifiedStart) {
+            pos = TextPosition(change.modifiedStart, 0);
+        }
+    };
+    for (Cursor& cursor : cursors) {
+        follow(cursor.position);
+        follow(cursor.selection.start);
+        follow(cursor.selection.end);
+    }
+    ensureValidCursors();
+    mergeCursors();
+
+    tokenizeAll();
+    finalizeUndoRecord();
+
+    diffPeekChange = -1;
+    pendingFocus = true;
+}
+
 void CustomTextEditor::renderSelections(ImDrawList* drawList, const ImVec2& origin, int startLine, int endLine) {
     ImU32 selColor = ImGui::ColorConvertFloat4ToU32(selectionColor);
 
@@ -3527,39 +4029,29 @@ void CustomTextEditor::renderText(ImDrawList* drawList, const ImVec2& origin, in
     static const std::vector<Token> noTokens;
 
     for (int i = startLine; i <= endLine && i < static_cast<int>(lines.size()); ++i) {
-        float y = origin.y + i * lineHeight + textOffsetY;
-        float x = origin.x + textStartX;
-
-        const std::string& line = lines[i];
         const auto& tokens = (i < static_cast<int>(lineTokens.size())) ? lineTokens[i] : noTokens;
+        renderLineTokens(drawList, ImVec2(origin.x + textStartX, origin.y + i * lineHeight + textOffsetY), lines[i], tokens);
+    }
+}
 
-        if (tokens.empty()) {
-            ImU32 color = ImGui::ColorConvertFloat4ToU32(palette[static_cast<int>(TokenType::Default)]);
-            drawList->AddText(ImVec2(x, y), color, line.c_str());
-        } else {
-            int lastEnd = 0;
-            for (const auto& token : tokens) {
-                if (token.start > lastEnd) {
-                    std::string gap = line.substr(lastEnd, token.start - lastEnd);
-                    ImU32 color = ImGui::ColorConvertFloat4ToU32(palette[static_cast<int>(TokenType::Default)]);
-                    drawList->AddText(ImVec2(x, y), color, gap.c_str());
-                    x += measureText(line.c_str() + lastEnd, line.c_str() + token.start);
-                }
+void CustomTextEditor::renderLineTokens(ImDrawList* drawList, ImVec2 pos, const std::string& line, const std::vector<Token>& tokens) const {
+    const ImU32 defaultColor = ImGui::ColorConvertFloat4ToU32(palette[static_cast<int>(TokenType::Default)]);
+    const char* text = line.c_str();
 
-                std::string tokenText = line.substr(token.start, token.length);
-                ImU32 color = ImGui::ColorConvertFloat4ToU32(palette[static_cast<int>(token.type)]);
-                drawList->AddText(ImVec2(x, y), color, tokenText.c_str());
-
-                lastEnd = token.start + token.length;
-                x += measureText(line.c_str() + token.start, line.c_str() + lastEnd);
-            }
-
-            if (lastEnd < static_cast<int>(line.size())) {
-                std::string remaining = line.substr(lastEnd);
-                ImU32 color = ImGui::ColorConvertFloat4ToU32(palette[static_cast<int>(TokenType::Default)]);
-                drawList->AddText(ImVec2(x, y), color, remaining.c_str());
-            }
+    int lastEnd = 0;
+    for (const auto& token : tokens) {
+        if (token.start > lastEnd) {
+            drawList->AddText(pos, defaultColor, text + lastEnd, text + token.start);
+            pos.x += measureText(text + lastEnd, text + token.start);
         }
+
+        lastEnd = token.start + token.length;
+        drawList->AddText(pos, ImGui::ColorConvertFloat4ToU32(palette[static_cast<int>(token.type)]), text + token.start, text + lastEnd);
+        pos.x += measureText(text + token.start, text + lastEnd);
+    }
+
+    if (lastEnd < static_cast<int>(line.size())) {
+        drawList->AddText(pos, defaultColor, text + lastEnd, text + line.size());
     }
 }
 
@@ -4053,6 +4545,7 @@ void CustomTextEditor::Render(const char* title, const ImVec2& size, bool border
             measureFont = font;
             measureFontSize = fontSize;
             maxLineWidthDirty = true;
+            diffPeekVersion = 0;
         }
         charWidth = font->CalcTextSizeA(fontSize, FLT_MAX, -1.0f, "X").x;
         lineHeight = std::round(fontSize * lineHeightFactor);
@@ -4075,6 +4568,7 @@ void CustomTextEditor::Render(const char* title, const ImVec2& size, bool border
             maxLineWidth = computeMaxLineWidth();
             maxLineWidthDirty = false;
         }
+        updateDiff();
         float totalWidth = textStartX + maxLineWidth + 50.0f;
         float totalHeight = lines.size() * lineHeight + lineHeight;
 
@@ -4135,6 +4629,8 @@ void CustomTextEditor::Render(const char* title, const ImVec2& size, bool border
             ImGui::SetMouseCursor((overVScrollbar || overHScrollbar) ? ImGuiMouseCursor_Arrow : ImGuiMouseCursor_TextInput);
         }
 
+        updateDiffPeek(origin);
+
         int startLine = static_cast<int>(scrollY / lineHeight);
         int endLine = startLine + static_cast<int>(contentSize.y / lineHeight) + 2;
 
@@ -4152,8 +4648,11 @@ void CustomTextEditor::Render(const char* title, const ImVec2& size, bool border
         renderSelections(drawList, origin, startLine, endLine);
         renderMatchingBrackets(drawList, origin);
         renderLineNumbers(drawList, origin, startLine, endLine);
+        renderDiffGutter(drawList, origin, startLine, endLine);
         renderText(drawList, origin, startLine, endLine);
         renderCursors(drawList, origin);
+        renderDiffOverview();
+        renderDiffPeek(origin);
 
         ImGui::PushFont(ImGui::GetIO().FontDefault);
         renderFindDialog(ImGui::GetWindowPos(), contentSize);

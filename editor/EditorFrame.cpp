@@ -74,6 +74,7 @@ bool EditorFrame::detectActivity(bool& redrawRequested){
 
 bool EditorFrame::run(EditorFrameState& state){
     Project* project = app->getProject();
+    app->setWindowFocused(state.focused);
     const bool playSessionActive = project->isPlaySessionActive();
 
     // Hand the cursor back to the editor while a play session isn't actively

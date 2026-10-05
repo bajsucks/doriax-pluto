@@ -1081,7 +1081,9 @@ void ProjectSettingsWindow::drawGeneralSettings() {
             ImGui::Checkbox("##VersionControlMetadata", &m_versionControlMetadata);
             endSettingsRow("Keep .gitignore and .gitattributes in the project up to date, so the editor's "
                 "working directory, this machine's build settings and each developer's own layout stay out "
-                "of the repository. A file the editor did not generate is never replaced.");
+                "of the repository. A file the editor did not generate is never replaced. In a Git "
+                "repository, the footer also shows the branch and the code editor marks the lines "
+                "that differ from the staged file.");
 
             ImGui::EndTable();
         }

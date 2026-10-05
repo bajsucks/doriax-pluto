@@ -32,6 +32,7 @@
 #include "window/dialog/ScenesWindow.h"
 
 #include "render/SceneRender.h"
+#include "util/GitMonitor.h"
 
 #include <chrono>
 #include <filesystem>
@@ -100,6 +101,9 @@ namespace doriax::editor{
         bool renderedScenePrevFrame = false;
         float footerFramerate = 0.0f;
         float footerDeltaMs = 0.0f;
+
+        // Branch in the footer and change marks in the code editor
+        GitMonitor gitMonitor;
 
         bool benchmarkEnabled = false;
         bool benchmarkExit = false;
@@ -208,6 +212,7 @@ namespace doriax::editor{
         void showMenu();
         void showAlert();
         void showFooter();
+        void showFooterGit();
         void showStyleEditor();
         void buildDockspace(bool resetLayout = false);
         void buildDefaultLayout();
@@ -304,6 +309,9 @@ namespace doriax::editor{
 
         // Stops background work outliving the main loop; run before backend teardown.
         void shutdownBackgroundWork();
+
+        // Each frame, from the backend loop
+        void setWindowFocused(bool focused);
 
         static std::filesystem::path getUserCacheBaseDir();
         static std::filesystem::path getUserShaderCacheDir();
