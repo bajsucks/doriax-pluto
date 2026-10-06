@@ -698,7 +698,7 @@ void PhysicsSystem::updateTransformFromBody3D(Entity entity, Vector3 position, Q
 }
 
 #ifdef DORIAX_PHYSICS_2D
-void PhysicsSystem::updateBody2DPosition(Signature signature, Entity entity, Body2DComponent& body){
+void PhysicsSystem::updateBody2DPosition(Signature signature, Entity entity, Body2DComponent& body, float stepTime){
     if (signature.test(scene->getComponentId<Transform>())){
         Transform& transform = scene->getComponent<Transform>(entity);
         if (b2Body_IsValid(body.body)){
@@ -711,10 +711,26 @@ void PhysicsSystem::updateBody2DPosition(Signature signature, Entity entity, Bod
             float bNewAngle = Angle::defaultToRad(transform.worldRotation.getRoll());
 
             b2Transform bTransform = b2Body_GetTransform(body.body);
+            float bAngle = b2Rot_GetAngle(bTransform.q);
+            bool moved = bTransform.p != bNewPosition || bAngle != bNewAngle;
 
-            if (bTransform.p != bNewPosition || b2Rot_GetAngle(bTransform.q) != bNewAngle){
-                b2Body_SetTransform(body.body, bNewPosition, b2MakeRot(bNewAngle));
+            if (moved && stepTime > 0.0f && body.type == BodyType::KINEMATIC && !body.newBody){
+                // a velocity carries and pushes other bodies, spread over the steps left in the frame
+                float duration = stepTime * Engine::getFixedStepsLeft();
+                b2Body_SetLinearVelocity(body.body, (bNewPosition - bTransform.p) * (1.0f / duration));
+                b2Body_SetAngularVelocity(body.body, b2UnwindAngle(bNewAngle - bAngle) / duration);
                 b2Body_SetAwake(body.body, true);
+                body.followingTransform = true;
+            }else{
+                if (moved){
+                    b2Body_SetTransform(body.body, bNewPosition, b2MakeRot(bNewAngle));
+                    b2Body_SetAwake(body.body, true);
+                }
+                if (body.followingTransform){
+                    b2Body_SetLinearVelocity(body.body, b2Vec2_zero);
+                    b2Body_SetAngularVelocity(body.body, 0.0f);
+                    body.followingTransform = false;
+                }
             }
         }
     }
@@ -722,7 +738,7 @@ void PhysicsSystem::updateBody2DPosition(Signature signature, Entity entity, Bod
 #endif
 
 #ifdef DORIAX_PHYSICS_3D
-void PhysicsSystem::updateBody3DPosition(Signature signature, Entity entity, Body3DComponent& body){
+void PhysicsSystem::updateBody3DPosition(Signature signature, Entity entity, Body3DComponent& body, float stepTime){
     if (signature.test(scene->getComponentId<Transform>())){
         Transform& transform = scene->getComponent<Transform>(entity);
         if (!body.body.IsInvalid()){
@@ -739,9 +755,23 @@ void PhysicsSystem::updateBody3DPosition(Signature signature, Entity entity, Bod
             JPH::Vec3 jPosition;
             JPH::Quat jQuat;
             body_interface.GetPositionAndRotation(body.body, jPosition, jQuat);
+            bool moved = jPosition != jNewPosition || jQuat != jNewQuat;
 
-            if (jPosition != jNewPosition || jQuat != jNewQuat){
-                body_interface.SetPositionAndRotation(body.body, jNewPosition, jNewQuat, JPH::EActivation::Activate);
+            if (moved && stepTime > 0.0f && body.type == BodyType::KINEMATIC && !body.newBody){
+                // a velocity carries and pushes other bodies, spread over the steps left in the frame
+                float fraction = 1.0f / Engine::getFixedStepsLeft();
+                JPH::Vec3 stepPosition = jPosition + (jNewPosition - jPosition) * fraction;
+                JPH::Quat stepRotation = jQuat.SLERP(jNewQuat, fraction).Normalized();
+                body_interface.MoveKinematic(body.body, stepPosition, stepRotation, stepTime);
+                body.followingTransform = true;
+            }else{
+                if (moved){
+                    body_interface.SetPositionAndRotation(body.body, jNewPosition, jNewQuat, JPH::EActivation::Activate);
+                }
+                if (body.followingTransform){
+                    body_interface.SetLinearAndAngularVelocity(body.body, JPH::Vec3::sZero(), JPH::Vec3::sZero());
+                    body.followingTransform = false;
+                }
             }
         }
     }
@@ -2914,7 +2944,7 @@ void PhysicsSystem::fixedUpdate(double dt){
         }
 
         if (b2Body_IsValid(body.body)){
-            updateBody2DPosition(signature, entity, body);
+            updateBody2DPosition(signature, entity, body, fixedStep);
 
             body.newBody = false;
         }
@@ -2944,6 +2974,15 @@ void PhysicsSystem::fixedUpdate(double dt){
 
             Entity entity = reinterpret_cast<uintptr_t>(event->userData);
             Signature signature = scene->getSignature(entity);
+
+            // a following body is on its way to the Transform, the last step of the frame puts it there
+            Body2DComponent* body = scene->findComponent<Body2DComponent>(entity);
+            if (body && body->followingTransform){
+                if (Engine::getFixedStepsLeft() == 1){
+                    updateBody2DPosition(signature, entity, *body);
+                }
+                continue;
+            }
 
             b2Transform bTransform = event->transform;
             if (signature.test(scene->getComponentId<Transform>())){
@@ -2990,7 +3029,7 @@ void PhysicsSystem::fixedUpdate(double dt){
         }
 
         if (!body.body.IsInvalid()){
-            updateBody3DPosition(signature, entity, body);
+            updateBody3DPosition(signature, entity, body, fixedStep);
 
             body.newBody = false;
         }
@@ -3028,6 +3067,14 @@ void PhysicsSystem::fixedUpdate(double dt){
 		Body3DComponent& body = bodies3d->getComponentFromIndex(i);
 		Entity entity = bodies3d->getEntity(i);
 		Signature signature = scene->getSignature(entity);
+
+        // a following body is on its way to the Transform, the last step of the frame puts it there
+        if (body.followingTransform){
+            if (Engine::getFixedStepsLeft() == 1){
+                updateBody3DPosition(signature, entity, body);
+            }
+            continue;
+        }
 
         if (!body.body.IsInvalid()){
             JPH::BodyInterface &body_interface = world3D.GetBodyInterfaceNoLock();

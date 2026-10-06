@@ -485,14 +485,15 @@ void ActionSystem::animationUpdate(double dt, Entity entity, ActionComponent& ac
     }
 
     bool actionsPassed = totalActionsPassed == animcomp.actions.size();
-    bool durationPassed = animcomp.duration >= 0 && action.timecount >= (animcomp.duration / action.speed);
+    // timecount already runs at the action's speed
+    bool durationPassed = animcomp.duration >= 0 && action.timecount >= animcomp.duration;
 
     if (actionsPassed || durationPassed) {
         if (!animcomp.loop) {
             actionStop(entity);
             //onFinish.call(object);
         }else{
-            float loopDuration = durationPassed ? (animcomp.duration / action.speed) : actionsEnd;
+            float loopDuration = durationPassed ? animcomp.duration : actionsEnd;
 
             // keep the overshoot, or the cycle gets longer at lower frame rates
             if (loopDuration > 0 && action.timecount >= loopDuration){
@@ -620,7 +621,8 @@ void ActionSystem::timedActionUpdate(double dt, Entity entity, ActionComponent& 
         actionStop(entity);
         //onFinish.call(object);
     } else {
-        float duration = timedaction.duration / action.speed;
+        // timecount already runs at the action's speed
+        float duration = timedaction.duration;
 
         if (duration > 0) {
 
@@ -630,6 +632,9 @@ void ActionSystem::timedActionUpdate(double dt, Entity entity, ActionComponent& 
                 }else{
                     action.timecount -= duration;
                 }
+            }else if (action.timecount < 0){
+                // a negative speed plays it back to the start
+                action.timecount = 0;
             }
 
             timedaction.time = action.timecount / duration;

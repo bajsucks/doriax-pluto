@@ -4771,13 +4771,19 @@ YAML::Node editor::Stream::encodeMeshComponent(const MeshComponent& mesh, bool e
     node["normAdjustJoint"] = mesh.normAdjustJoint;
     node["normAdjustWeight"] = mesh.normAdjustWeight;
 
-    // Encode morph weights array
-    YAML::Node morphWeightsNode;
-    morphWeightsNode.SetStyle(YAML::EmitterStyle::Flow);
-    for(int i = 0; i < MAX_MORPHTARGETS; i++) {
-        morphWeightsNode.push_back(mesh.morphWeights[i]);
+    // Encode morph weights array, only used by meshes with morph targets
+    bool hasMorphTargets = false;
+    for (unsigned int i = 0; i < mesh.numSubmeshes; i++) {
+        if (mesh.submeshes[i].hasMorphTarget) hasMorphTargets = true;
     }
-    node["morphWeights"] = morphWeightsNode;
+    if (hasMorphTargets) {
+        YAML::Node morphWeightsNode;
+        morphWeightsNode.SetStyle(YAML::EmitterStyle::Flow);
+        for(int i = 0; i < MAX_MORPHTARGETS; i++) {
+            morphWeightsNode.push_back(mesh.morphWeights[i]);
+        }
+        node["morphWeights"] = morphWeightsNode;
+    }
 
     // Encode AABBs
     node["aabb"] = encodeAABB(mesh.aabb);

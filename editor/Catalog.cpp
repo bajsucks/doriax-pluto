@@ -2264,14 +2264,16 @@ namespace {
 
         enumerateFromDescriptors(compRef, ps, kAnimationProperties);
 
-        size_t actionCount = compRef ? comp->actions.size() : 0;
-        static size_t defActionCount = 0;
-        ps["actionFrameCount"] = {PropertyType::UInt, UpdateFlags_None, (void*)&defActionCount, compRef ? (void*)&actionCount : nullptr};
-
         if (compRef) {
             static Entity defEntity = NULL_ENTITY;
+            static float defTime = 0;
+            static uint32_t defTrack = 0;
             for (size_t i = 0; i < comp->actions.size(); i++) {
-                ps["actions[" + std::to_string(i) + "].action"] = {PropertyType::Entity, UpdateFlags_None, (void*)&defEntity, (void*)&comp->actions[i].action};
+                std::string frame = "actions[" + std::to_string(i) + "]";
+                ps[frame + ".action"] = {PropertyType::Entity, UpdateFlags_None, (void*)&defEntity, (void*)&comp->actions[i].action};
+                ps[frame + ".startTime"] = {PropertyType::Float, UpdateFlags_None, (void*)&defTime, (void*)&comp->actions[i].startTime};
+                ps[frame + ".duration"] = {PropertyType::Float, UpdateFlags_None, (void*)&defTime, (void*)&comp->actions[i].duration};
+                ps[frame + ".track"] = {PropertyType::UInt, UpdateFlags_None, (void*)&defTrack, (void*)&comp->actions[i].track};
             }
         }
     }

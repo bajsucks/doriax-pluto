@@ -74,6 +74,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cfloat>
 #include <cmath>
 #include <fstream>
 #include <memory>
@@ -424,6 +425,48 @@ bool parseQuaternion(const Json& value, Quaternion& out) {
     if (value.contains("x") && value["x"].is_number()) out.x = value["x"].get<float>();
     if (value.contains("y") && value["y"].is_number()) out.y = value["y"].get<float>();
     if (value.contains("z") && value["z"].is_number()) out.z = value["z"].get<float>();
+    return true;
+}
+
+// Strict ease-name parse: Stream::stringToEaseType maps unknown names to LINEAR,
+// so accept LINEAR results only when the input really spells "linear".
+bool parseEaseName(const std::string& name, EaseType& out) {
+    out = Stream::stringToEaseType(name);
+    if (out != EaseType::LINEAR) return true;
+
+    std::string normalized;
+    normalized.reserve(name.size());
+    for (char ch : name) {
+        normalized.push_back(ch == '-' ? '_' : static_cast<char>(std::toupper(static_cast<unsigned char>(ch))));
+    }
+    return normalized == "LINEAR";
+}
+
+// One {x, y, z} object per key, missing fields keep the fallback
+bool parseKeyVectors(const Json& list, size_t keys, const Vector3& fallback, std::vector<Vector3>& values) {
+    if (!list.is_array() || list.size() != keys) return false;
+    for (const Json& item : list) {
+        Vector3 value = fallback;
+        if (!parseVector3(item, value)) return false;
+        values.push_back(value);
+    }
+    return true;
+}
+
+// One quaternion or Euler angles (degrees) object per key
+bool parseKeyRotations(const Json& list, size_t keys, bool euler, std::vector<Quaternion>& values) {
+    if (!list.is_array() || list.size() != keys) return false;
+    for (const Json& item : list) {
+        Quaternion value;
+        if (euler) {
+            Vector3 angles;
+            if (!parseVector3(item, angles)) return false;
+            value = Quaternion(angles.x, angles.y, angles.z);
+        } else if (!parseQuaternion(item, value) || value.norm() <= FLT_EPSILON) {
+            return false;
+        }
+        values.push_back(value.normalized());
+    }
     return true;
 }
 
@@ -811,6 +854,9 @@ bool parseEntityType(const std::string& typeName, EntityCreationType& type) {
         {"scale_action", EntityCreationType::SCALE_ACTION},
         {"color_action", EntityCreationType::COLOR_ACTION},
         {"alpha_action", EntityCreationType::ALPHA_ACTION},
+        {"translate_tracks", EntityCreationType::TRANSLATE_TRACKS},
+        {"rotate_tracks", EntityCreationType::ROTATE_TRACKS},
+        {"scale_tracks", EntityCreationType::SCALE_TRACKS},
         {"model", EntityCreationType::MODEL},
         {"particles", EntityCreationType::PARTICLES},
         {"points", EntityCreationType::POINTS},
@@ -1283,8 +1329,9 @@ Json propertyValueToJson(Project* project, const std::string& propertyName, cons
             return quaternionJson(*static_cast<Quaternion*>(property.ref));
         case PropertyType::Int:
         case PropertyType::Enum:
-        case PropertyType::Ease:
             return *static_cast<int*>(property.ref);
+        case PropertyType::Ease:
+            return Stream::easeTypeToString(static_cast<Ease*>(property.ref)->getType());
         case PropertyType::UInt:
             return *static_cast<unsigned int*>(property.ref);
         case PropertyType::Font: {
@@ -1606,12 +1653,20 @@ Command* buildPropertyCommand(Project* project, uint32_t sceneId, Entity entity,
         }
         case PropertyType::Int:
         case PropertyType::Enum:
-        case PropertyType::Ease:
             if (!valueFieldPresent(args, "int_value") || !args["int_value"].is_number_integer()) {
                 error = "Property requires int_value.";
                 return nullptr;
             }
             return new PropertyCmd<int>(project, sceneId, entity, component, propertyName, args["int_value"].get<int>(), onChanged);
+        case PropertyType::Ease: {
+            EaseType type;
+            if (!valueFieldPresent(args, "string_value") || !args["string_value"].is_string() ||
+                    !parseEaseName(args["string_value"].get<std::string>(), type) || type == EaseType::CUSTOM) {
+                error = "Property requires string_value with an ease name, e.g. SINE_IN_OUT.";
+                return nullptr;
+            }
+            return new PropertyCmd<Ease>(project, sceneId, entity, component, propertyName, Ease(type), onChanged);
+        }
         case PropertyType::UInt:
             if (!valueFieldPresent(args, "int_value") || !args["int_value"].is_number_integer()) {
                 error = "Property requires int_value.";
@@ -2289,6 +2344,7 @@ ActionResult EditorActionExecutor::dispatch(const std::string& name,
     if (name == "remove_animation_action") return removeAnimationAction(arguments);
     if (name == "set_keyframe_times") return setKeyframeTimes(arguments);
     if (name == "set_keyframe_easing") return setKeyframeEasing(arguments);
+    if (name == "set_keyframe_track") return setKeyframeTrack(arguments);
     if (name == "undo_editor") return undoEditor(arguments);
     if (name == "redo_editor") return redoEditor(arguments);
 
@@ -5971,20 +6027,6 @@ ActionResult EditorActionExecutor::setKeyframeTimes(const Json& arguments) {
                     Json{{"scene_id", sceneId}, {"entity_id", entity}, {"count", times.size()}});
 }
 
-// Strict ease-name parse: Stream::stringToEaseType maps unknown names to LINEAR,
-// so accept LINEAR results only when the input really spells "linear".
-static bool parseEaseName(const std::string& name, EaseType& out) {
-    out = Stream::stringToEaseType(name);
-    if (out != EaseType::LINEAR) return true;
-
-    std::string normalized;
-    normalized.reserve(name.size());
-    for (char ch : name) {
-        normalized.push_back(ch == '-' ? '_' : static_cast<char>(std::toupper(static_cast<unsigned char>(ch))));
-    }
-    return normalized == "LINEAR";
-}
-
 ActionResult EditorActionExecutor::setKeyframeEasing(const Json& arguments) {
     uint32_t sceneId = resolveSceneId(project, arguments);
     SceneProject* sceneProject = project->getScene(sceneId);
@@ -6045,6 +6087,107 @@ ActionResult EditorActionExecutor::setKeyframeEasing(const Json& arguments) {
     for (EaseType e : newEasings) easingsJson.push_back(Stream::easeTypeToString(e));
     return okResult("Set keyframe easing through the command history.",
                     Json{{"scene_id", sceneId}, {"entity_id", entity}, {"segments", segments}, {"easings", easingsJson}});
+}
+
+ActionResult EditorActionExecutor::setKeyframeTrack(const Json& arguments) {
+    uint32_t sceneId = resolveSceneId(project, arguments);
+    SceneProject* sceneProject = project->getScene(sceneId);
+    if (!sceneProject || !sceneProject->scene) return failResult("Scene not found.");
+    Scene* scene = sceneProject->scene;
+
+    Entity entity = resolveEntity(sceneProject, arguments);
+    if (entity == NULL_ENTITY) return failResult("Entity not found.");
+
+    KeyframeTracksComponent* keyframes = scene->findComponent<KeyframeTracksComponent>(entity);
+    if (!keyframes) return failResult("Entity has no KeyframeTracks component.");
+
+    std::vector<float> times;
+    if (arguments.contains("times") && arguments["times"].is_array()) {
+        for (const Json& value : arguments["times"]) {
+            if (!value.is_number() || (!times.empty() && value.get<float>() < times.back())) {
+                return failResult("times must be numbers in ascending order.");
+            }
+            times.push_back(value.get<float>());
+        }
+    }
+    if (times.empty()) return failResult("times needs at least one key.");
+
+    std::vector<Vector3> positions;
+    std::vector<Quaternion> rotations;
+    std::vector<Vector3> scales;
+    bool euler = valueFieldPresent(arguments, "rotations_euler");
+    const char* rotationsKey = euler ? "rotations_euler" : "rotations";
+    if (euler && valueFieldPresent(arguments, "rotations")) return failResult("Pass rotations or rotations_euler, not both.");
+
+    if (valueFieldPresent(arguments, "positions") && !parseKeyVectors(arguments["positions"], times.size(), Vector3::ZERO, positions)) {
+        return failResult("positions needs one {x, y, z} object per time.");
+    }
+    if (valueFieldPresent(arguments, rotationsKey) && !parseKeyRotations(arguments[rotationsKey], times.size(), euler, rotations)) {
+        return failResult(std::string(rotationsKey) + " needs one rotation object per time.");
+    }
+    if (valueFieldPresent(arguments, "scales") && !parseKeyVectors(arguments["scales"], times.size(), Vector3::UNIT_SCALE, scales)) {
+        return failResult("scales needs one {x, y, z} object per time.");
+    }
+    if (positions.empty() && rotations.empty() && scales.empty()) {
+        return failResult("Pass positions, rotations, rotations_euler or scales.");
+    }
+
+    TranslateTracksComponent* translate = scene->findComponent<TranslateTracksComponent>(entity);
+    RotateTracksComponent* rotate = scene->findComponent<RotateTracksComponent>(entity);
+    ScaleTracksComponent* scale = scene->findComponent<ScaleTracksComponent>(entity);
+    if ((!positions.empty() && !translate) || (!rotations.empty() && !rotate) || (!scales.empty() && !scale)) {
+        return failResult("Entity has no track component for some of the values.");
+    }
+    // a track left as it is freezes with a different number of keys
+    if ((translate && positions.empty() && translate->values.size() != times.size()) ||
+        (rotate && rotations.empty() && rotate->values.size() != times.size()) ||
+        (scale && scales.empty() && scale->values.size() != times.size())) {
+        return failResult("Every track of the entity needs one value per time.");
+    }
+
+    size_t segments = times.size() - 1;
+    std::vector<EaseType> easings = keyframes->easings;
+    if (valueFieldPresent(arguments, "easings")) {
+        if (!arguments["easings"].is_array() || arguments["easings"].size() > segments) {
+            return failResult("easings takes at most one ease name per segment (key i to key i+1).");
+        }
+        easings.clear();
+        for (const Json& value : arguments["easings"]) {
+            EaseType ease;
+            if (!value.is_string() || !parseEaseName(value.get<std::string>(), ease)) {
+                return failResult("Unknown ease name in easings (use names like LINEAR, SINE_IN_OUT, BOUNCE_OUT).");
+            }
+            easings.push_back(ease == EaseType::CUSTOM ? EaseType::LINEAR : ease);
+        }
+    }
+    if (easings.size() > segments) easings.resize(segments);
+    if (std::all_of(easings.begin(), easings.end(), [](EaseType e){ return e == EaseType::LINEAR; })) {
+        easings.clear();
+    }
+
+    MultiPropertyCmd* multiCmd = new MultiPropertyCmd();
+    multiCmd->addPropertyCmd<std::vector<float>>(
+        project, sceneId, entity, ComponentType::KeyframeTracksComponent, "times", times);
+    if (easings != keyframes->easings) {
+        multiCmd->addPropertyCmd<std::vector<EaseType>>(
+            project, sceneId, entity, ComponentType::KeyframeTracksComponent, "easings", easings);
+    }
+
+    // the Hermite tangents of GLTF cubic clips belong to the old keys
+    auto setValues = [&](ComponentType type, const auto& values) {
+        using Values = std::decay_t<decltype(values)>;
+        multiCmd->addPropertyCmd<Values>(project, sceneId, entity, type, "values", values);
+        multiCmd->addPropertyCmd<Values>(project, sceneId, entity, type, "inTangents", Values());
+        multiCmd->addPropertyCmd<Values>(project, sceneId, entity, type, "outTangents", Values());
+    };
+    if (!positions.empty()) setValues(ComponentType::TranslateTracksComponent, positions);
+    if (!rotations.empty()) setValues(ComponentType::RotateTracksComponent, rotations);
+    if (!scales.empty()) setValues(ComponentType::ScaleTracksComponent, scales);
+
+    multiCmd->setNoMerge();
+    CommandHandle::get(sceneId)->addCommand(multiCmd);
+    return okResult("Set keyframe track through the command history.",
+                    Json{{"scene_id", sceneId}, {"entity_id", entity}, {"count", times.size()}});
 }
 
 ActionResult EditorActionExecutor::undoEditor(const Json& arguments) {

@@ -121,7 +121,7 @@ Json propertyValueFields(std::initializer_list<std::pair<const char*, Json>> ext
         {"bool_value", boolSchema("Boolean property value")},
         {"int_value", integerSchema("Integer/enum property value")},
         {"number_value", numberSchema("Float/double property value")},
-        {"string_value", stringSchema("String property value. The asset-path property filename takes a project-relative path inside the assets directory (get_project_summary reports it as assets_dir), or an empty string to clear it. On a Font property it sets the main font and keeps the fallbacks")},
+        {"string_value", stringSchema("String property value. The asset-path property filename takes a project-relative path inside the assets directory (get_project_summary reports it as assets_dir), or an empty string to clear it. On a Font property it sets the main font and keeps the fallbacks. An Ease property takes an ease name such as SINE_IN_OUT")},
         {"font_paths", {
             {"type", "array"},
             {"description", "Font property value: project-relative font paths inside the assets directory, main font first and fallback fonts after it. Slots not listed are cleared"},
@@ -211,8 +211,8 @@ const std::vector<ToolDefinition>& cachedTools() {
             objectSchema({
                 {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
                 {"name", stringSchema("Entity display name")},
-                {"type", stringSchema("Allowed type: empty, object, box, plane, wall, mirror, sphere, cylinder, capsule, torus, image, sprite, tilemap, text, button, scrollbar, progressbar, textedit, panel, polygon, container, point_light, directional_light, spot_light, light_2d, occluder_2d, joint2d, joint3d, body2d, body3d, sky, fog, camera, sound, sound_3d, animation, sprite_animation, position_action, rotation_action, scale_action, color_action, alpha_action, model, particles, points, lines, mesh_polygon, terrain, reflection_probe, water, water_exclusion. light_2d = 2D radius-falloff light (Light2DComponent); occluder_2d = 2D shadow caster (Occluder2DComponent); water_exclusion = box volume keeping water out (WaterExclusionComponent). To keep water out of a boat, add a WaterExclusion component to the boat itself instead: its default Hull shape wraps the boat's mesh.")},
-                {"parent_id", integerSchema("Optional parent entity id for transform entities")},
+                {"type", stringSchema("Allowed type: empty, object, box, plane, wall, mirror, sphere, cylinder, capsule, torus, image, sprite, tilemap, text, button, scrollbar, progressbar, textedit, panel, polygon, container, point_light, directional_light, spot_light, light_2d, occluder_2d, joint2d, joint3d, body2d, body3d, sky, fog, camera, sound, sound_3d, animation, sprite_animation, position_action, rotation_action, scale_action, color_action, alpha_action, translate_tracks, rotate_tracks, scale_tracks, model, particles, points, lines, mesh_polygon, terrain, reflection_probe, water, water_exclusion. light_2d = 2D radius-falloff light (Light2DComponent); occluder_2d = 2D shadow caster (Occluder2DComponent); water_exclusion = box volume keeping water out (WaterExclusionComponent). To keep water out of a boat, add a WaterExclusion component to the boat itself instead: its default Hull shape wraps the boat's mesh.")},
+                {"parent_id", integerSchema("Optional parent entity id for transform entities. For animation and action types it is the entity they animate")},
                 {"position", vector3Schema("Optional local position")}
             }, {"name", "type"}),
             false
@@ -1210,6 +1210,46 @@ const std::vector<ToolDefinition>& cachedTools() {
             false
         },
         {
+            "set_keyframe_track",
+            "Replace every key of a keyframe track entity in one undo step: its times, one value per time for its Translate/Rotate/Scale tracks and optional per-segment easings. Values are the target's local position, rotation and scale.",
+            objectSchema({
+                {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
+                {"entity_id", integerSchema("Track entity id with KeyframeTracksComponent")},
+                {"entity_name", stringSchema("Track entity name, used only when entity_id is omitted")},
+                {"times", {
+                    {"type", "array"},
+                    {"description", "Key times in seconds, ascending"},
+                    {"items", {{"type", "number"}}}
+                }},
+                {"positions", {
+                    {"type", "array"},
+                    {"description", "TranslateTracks values, one local position per time"},
+                    {"items", vector3Schema("Local position")}
+                }},
+                {"rotations", {
+                    {"type", "array"},
+                    {"description", "RotateTracks values as quaternions, one per time"},
+                    {"items", quaternionSchema("Local rotation")}
+                }},
+                {"rotations_euler", {
+                    {"type", "array"},
+                    {"description", "RotateTracks values as Euler angles in degrees, one per time. Keys turn the shortest way, so a full turn needs at least three segments (0, 120, 240, 360)"},
+                    {"items", vector3Schema("Local rotation in degrees")}
+                }},
+                {"scales", {
+                    {"type", "array"},
+                    {"description", "ScaleTracks values, one local scale per time"},
+                    {"items", vector3Schema("Local scale")}
+                }},
+                {"easings", {
+                    {"type", "array"},
+                    {"description", "Ease name per segment (key i to key i+1), e.g. SINE_IN_OUT. Missing entries are LINEAR, omit it to keep the current easings"},
+                    {"items", {{"type", "string"}}}
+                }}
+            }, {"times"}),
+            false
+        },
+        {
             "undo_editor",
             "Undo the last editor command in scene or project scope.",
             objectSchema({
@@ -1327,6 +1367,7 @@ std::string EditorActionRegistry::guidance() {
         << "For requested 2D physics or collisions on an existing sprite, tilemap, or 2D mesh, inspect the entity and use add_body2d_shape. It adds Body2DComponent and its Shape2D to that SAME entity atomically; never create a separate body entity unless explicitly requested. A Body2DComponent without a shape does not collide. Use dynamic for actors and static for ground/platforms, and use the requested primitive or polygon/chain points in entity-local 2D units. As in 3D these are mesh-local and the engine multiplies them by the entity scale, so never pre-divide a size to compensate; read mesh_bounds.local_size from inspect_entity instead of guessing. Do not confuse Body2D with Body3D or claim transform-only movement is physics.\n"
         << "Box2D reports begin/end contacts (PhysicsSystem beginContact2D/endContact2D) only for pairs where at least one shape has contactEvents on, and it is off by default: set shapes[i].contactEvents with set_component_property first.\n"
         << "UI entities (text, image, button, ...) are laid out in their scene's camera space: the canvas in a 2D or UI scene, but the world in a 3D scene. A 3D game's HUD therefore goes in a UI scene attached with add_child_scene.\n"
+        << "Prefer native animations to per-frame script code for repeated motion such as spinning, bobbing, patrols and fades, so they show in the Properties panel and the Animation window. Create one with create_entity animation and add its frames with add_animation_action; each frame points at an action entity: position/rotation/scale/color/alpha_action, or translate/rotate/scale_tracks keyed with set_keyframe_track, whose target is create_entity's parent_id. Values are the target's absolute local values, so to move something wherever it is placed animate a child of it (a bundle's entities sit at the origin under each instance root); anchored UI is laid out every frame, so animate an unanchored child. AnimationComponent.loop repeats an animation and ActionComponent.state 0 (Running) starts it with the scene; scripts reach one through a doriax::Animation* property. A kinematic body moved by an animation carries and pushes other bodies.\n"
         << "For external assets, use curated sources only and preserve license/author/source attribution.\n"
         << "For scripts and engine API code, the Doriax engine source under the editor's engine/ directory (read it with search_engine_source and read_engine_source) is the ONLY source of truth. Use ONLY classes, methods, properties, enums, macros, and constructor overloads you have confirmed exist in that source; if a symbol is not present there it does not exist in Doriax, so do not use it. Never invent APIs or carry over names, macros, or patterns from other engines or frameworks (e.g. Godot GDCLASS, Unreal GENERATED_BODY/UPROPERTY, Qt Q_OBJECT). search_engine_api is only a quick index into that same source; when a symbol is unfamiliar or you are unsure of its exact spelling or overloads, confirm it in the source before writing it (e.g. key codes are Input.KEY_* in Lua but D_KEY_* macros in C++, and Quaternion's axis-angle constructor takes the angle first: Quaternion(angle, axis)).\n"
         << "A C++ method existing on a class does NOT mean Lua can call it. LuaBridge binds many accessors as properties instead of methods, and calling the accessor from Lua fails at runtime with \"attempt to call a nil value (method 'x')\". search_engine_api marks this: kind 'Method' with a ':' in the detail (Body2D:getMass()) is Lua-callable, while kind 'CppMethod' with '::' in the detail (Object::getPosition(), Body3D::setLinearVelocity()) is C++ only and carries lua_callable=false plus a lua_note naming the property to use (object.position, body.linearVelocity). In Lua, read and assign those properties (self.sphere.position = p, body.linearVelocity = Vector3(0,0,0)); never translate a CppMethod into obj:getX()/obj:setX(). If a class has no bound property for what you need either, check the LuaBridge binding source under engine/core/script/binding/ before writing the call.\n"
@@ -1816,6 +1857,10 @@ ValidationResult EditorActionRegistry::validate(const std::string& name, const J
         if (arguments.contains("segment") && arguments.contains("ease")) return ok();
         return fail("set_keyframe_easing requires easings array or segment + ease.");
     }
+    if (name == "set_keyframe_track") {
+        if (!hasEntitySelector(arguments)) return fail("set_keyframe_track requires entity_id or entity_name.");
+        return arguments.contains("times") && arguments["times"].is_array() ? ok() : fail("set_keyframe_track requires a times array.");
+    }
     if (name == "undo_editor" || name == "redo_editor") {
         return ok();
     }
@@ -2162,6 +2207,9 @@ std::string EditorActionRegistry::describe(const std::string& name, const Json& 
     }
     if (name == "set_keyframe_easing") {
         return "Set keyframe easing";
+    }
+    if (name == "set_keyframe_track") {
+        return "Set keyframe track";
     }
     if (name == "undo_editor") {
         return "Undo " + arguments.value("scope", "scene") + " command";

@@ -82,14 +82,14 @@ namespace doriax{
 
 #ifdef DORIAX_PHYSICS_2D
 		void ensureWorld2D();
-		void updateBody2DPosition(Signature signature, Entity entity, Body2DComponent& body);
+		void updateBody2DPosition(Signature signature, Entity entity, Body2DComponent& body, float stepTime = 0.0f);
 		bool loadJoint2D(Entity entity, Joint2DComponent& joint);
 		bool syncBody2DShapes(Entity entity, Body2DComponent& body);
 		static Vector2 absScale2D(const Vector2& scale);
 		static float maxScaleXY(const Vector2& scale);
 #endif
 #ifdef DORIAX_PHYSICS_3D
-		void updateBody3DPosition(Signature signature, Entity entity, Body3DComponent& body);
+		void updateBody3DPosition(Signature signature, Entity entity, Body3DComponent& body, float stepTime = 0.0f);
 		void applyBuoyancy3D(float dt);
 		bool loadJoint3D(Entity entity, Joint3DComponent& joint);
 		bool syncBody3DShapes(Entity entity, Body3DComponent& body);

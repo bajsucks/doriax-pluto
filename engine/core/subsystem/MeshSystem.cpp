@@ -5174,8 +5174,9 @@ bool MeshSystem::loadGLTF(Entity entity, const std::string filename, bool asyncL
             }
 
             if (morphTargets) {
-                for (int w = 0; w < static_cast<int>(gltfmesh.weights.size()) && w < MAX_MORPHTARGETS; w++) {
-                    mesh.morphWeights[w] = gltfmesh.weights[w];
+                // glTF weights default to 0
+                for (int w = 0; w < MAX_MORPHTARGETS; w++) {
+                    mesh.morphWeights[w] = (w < static_cast<int>(gltfmesh.weights.size())) ? static_cast<float>(gltfmesh.weights[w]) : 0.0f;
                 }
                 if (gltfmesh.extras.Has("targetNames") && gltfmesh.extras.Get("targetNames").IsArray()) {
                     for (int t = 0; t < gltfmesh.extras.Get("targetNames").Size(); t++) {
