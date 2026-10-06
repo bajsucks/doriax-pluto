@@ -58,6 +58,15 @@ namespace doriax{
         void setColorDisabled(const float red, const float green, const float blue);
         Vector4 getColorDisabled() const;
 
+        void setScaleHovered(float scaleHovered);
+        float getScaleHovered() const;
+
+        void setScalePressed(float scalePressed);
+        float getScalePressed() const;
+
+        void setTransitionTime(float transitionTime);
+        float getTransitionTime() const;
+
         void setDisabled(bool disabled);
         bool getDisabled() const;
     };

@@ -1047,6 +1047,9 @@ void LuaBinding::registerObjectClasses(lua_State *L){
         .addFunction("setColorDisabled", 
             luabridge::overload<const float, const float, const float>(&Button::setColorDisabled),
             luabridge::overload<const float, const float, const float, const float>(&Button::setColorDisabled))
+        .addProperty("scaleHovered", &Button::getScaleHovered, &Button::setScaleHovered)
+        .addProperty("scalePressed", &Button::getScalePressed, &Button::setScalePressed)
+        .addProperty("transitionTime", &Button::getTransitionTime, &Button::setTransitionTime)
         .addProperty("disabled", &Button::getDisabled, &Button::setDisabled)
         .addFunction("getButtonComponent", &Button::getComponent<ButtonComponent>)
         .endClass();

@@ -18,8 +18,17 @@ namespace doriax{
         // the eased factor feeds the cubic curve, so leave this empty for
         // spec-faithful playback.
         std::vector<EaseType> easings;
+        bool loop = false; // starts over after the last key
+        // values add to the target's pose when the track starts: position plus value,
+        // rotation times value and scale times value
+        bool relative = false;
         int index = 0;
         float interpolation = 0;
+
+        bool hasBase = false; // the base was taken when the track started
+        Vector3 basePosition;
+        Quaternion baseRotation;
+        Vector3 baseScale = Vector3::UNIT_SCALE;
     };
 
 }

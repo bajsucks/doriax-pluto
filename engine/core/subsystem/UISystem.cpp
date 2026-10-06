@@ -612,31 +612,61 @@ void UISystem::createTextEditObjects(Entity entity, TextEditComponent& textedit)
     }
 }
 
-void UISystem::applyButtonVisual(ButtonComponent& button, UIComponent& ui){
-    Texture targetTexture;
-    Vector4 targetColor;
+void UISystem::applyButtonVisual(Entity entity, ButtonComponent& button, UIComponent& ui, bool transition){
+    Texture targetTexture = button.textureNormal;
 
     if (button.disabled){
         targetTexture = button.textureDisabled;
-        targetColor = button.colorDisabled;
     }else if (button.pressed){
         targetTexture = button.texturePressed;
-        targetColor = button.colorPressed;
     }else if (button.hovered){
         bool hasHoveredTexture = !button.textureHovered.empty() &&
             (!button.textureHovered.getId().empty() || button.textureHovered.isFramebuffer());
-        targetTexture = hasHoveredTexture ? button.textureHovered : button.textureNormal;
-        targetColor = button.colorHovered;
-    }else{
-        targetTexture = button.textureNormal;
-        targetColor = button.colorNormal;
+        if (hasHoveredTexture){
+            targetTexture = button.textureHovered;
+        }
     }
 
     if (ui.texture != targetTexture){
         ui.texture = targetTexture;
         ui.needUpdateTexture = true;
     }
-    ui.color = targetColor;
+
+    // the color and scale ease in update() when it is a transition
+    button.transitionLeft = transition ? button.transitionTime : 0.0f;
+    updateButtonTransition(0, entity, button, ui);
+}
+
+void UISystem::updateButtonTransition(double dt, Entity entity, ButtonComponent& button, UIComponent& ui){
+    Vector4 targetColor = button.colorNormal;
+    float targetScale = 1.0f;
+
+    if (button.disabled){
+        targetColor = button.colorDisabled;
+    }else if (button.pressed){
+        targetColor = button.colorPressed;
+        targetScale = button.scalePressed;
+    }else if (button.hovered){
+        targetColor = button.colorHovered;
+        targetScale = button.scaleHovered;
+    }
+
+    // a dt / timeLeft step each frame is linear in time
+    float t = (button.transitionLeft > dt) ? (float)(dt / button.transitionLeft) : 1.0f;
+    button.transitionLeft = std::max(0.0f, button.transitionLeft - (float)dt);
+
+    ui.color = (t < 1.0f) ? ui.color + (targetColor - ui.color) * t : targetColor;
+    float scale = (t < 1.0f) ? button.scale + (targetScale - button.scale) * t : targetScale;
+
+    Transform* transform = scene->findComponent<Transform>(entity);
+    if (transform && scale != button.scale){
+        if (button.scale == 1.0f){
+            button.restScale = transform->scale;
+        }
+        transform->scale = button.restScale * scale;
+        transform->needUpdate = true;
+        button.scale = scale;
+    }
 }
 
 void UISystem::updateButton(Entity entity, ButtonComponent& button, ImageComponent& img, UIComponent& ui, UILayoutComponent& layout){
@@ -664,7 +694,7 @@ void UISystem::updateButton(Entity entity, ButtonComponent& button, ImageCompone
     }
 
     if (button.label == NULL_ENTITY || !scene->findComponent<TextComponent>(button.label)){
-        applyButtonVisual(button, ui);
+        applyButtonVisual(entity, button, ui, false);
         return;
     }
 
@@ -675,7 +705,7 @@ void UISystem::updateButton(Entity entity, ButtonComponent& button, ImageCompone
     labeltext.needUpdateText = true;
     createOrUpdateText(labeltext, labelui, labellayout);
 
-    applyButtonVisual(button, ui);
+    applyButtonVisual(entity, button, ui, false);
 }
 
 void UISystem::updatePanel(Entity entity, PanelComponent& panel, ImageComponent& img, UIComponent& ui, UILayoutComponent& layout){
@@ -1522,6 +1552,26 @@ Vector3 UISystem::mapParentLocalPointToLayoutSpace(float posX, float posY, Entit
     }
 
     return layoutToWorld * worldPoint;
+}
+
+Vector2 UISystem::parentToLayoutSpace(Entity entity, const Vector2& point) const{
+    float x = point.x;
+    float y = point.y;
+    Transform* transform = scene->findComponent<Transform>(entity);
+    if (transform && transform->parent != NULL_ENTITY){
+        convertLocalParentSpaceToLayoutSpace(transform->parent, findNearestLayoutParent(transform->parent), x, y);
+    }
+    return Vector2(x, y);
+}
+
+Vector2 UISystem::layoutToParentSpace(Entity entity, const Vector2& point) const{
+    float x = point.x;
+    float y = point.y;
+    Transform* transform = scene->findComponent<Transform>(entity);
+    if (transform && transform->parent != NULL_ENTITY){
+        convertLayoutSpaceToLocalParentSpace(transform->parent, findNearestLayoutParent(transform->parent), x, y);
+    }
+    return Vector2(x, y);
 }
 
 void UISystem::convertLayoutSpaceToLocalParentSpace(Entity transformParent, Entity layoutParent, float& posX, float& posY) const{
@@ -2568,6 +2618,16 @@ void UISystem::update(double dt){
         }
     }
 
+    auto buttons = scene->getComponentArray<ButtonComponent>();
+    for (int i = 0; i < buttons->size(); i++){
+        ButtonComponent& button = buttons->getComponentFromIndex(i);
+        Entity entity = buttons->getEntity(i);
+        UIComponent* ui = scene->findComponent<UIComponent>(entity);
+        if (ui && button.transitionLeft > 0){
+            updateButtonTransition(dt, entity, button, *ui);
+        }
+    }
+
 }
 
 bool UISystem::hasPendingImages() const{
@@ -2600,7 +2660,7 @@ void UISystem::resetButtonStates() {
         button.pressed = false;
         if (signature.test(scene->getComponentId<UIComponent>())) {
             UIComponent& ui = scene->getComponent<UIComponent>(entity);
-            applyButtonVisual(button, ui);
+            applyButtonVisual(entity, button, ui, false);
         }
     }
 }
@@ -2671,7 +2731,7 @@ void UISystem::pointerDownOnUI(Entity entity, float x, float y){
         ButtonComponent* button = scene->findComponent<ButtonComponent>(entity);
         if (button && !button->disabled && !button->pressed){
             button->pressed = true;
-            applyButtonVisual(*button, *ui);
+            applyButtonVisual(entity, *button, *ui, true);
             button->onPress.call();
 
             ui = scene->findComponent<UIComponent>(entity);
@@ -2948,7 +3008,7 @@ bool UISystem::eventOnPointerUp(float x, float y){
             ButtonComponent* button = scene->findComponent<ButtonComponent>(entity);
             if (button && !button->disabled && button->pressed){
                 button->pressed = false;
-                applyButtonVisual(*button, *ui);
+                applyButtonVisual(entity, *button, *ui, true);
                 button->onRelease.call();
 
                 transform = scene->findComponent<Transform>(entity);
@@ -3272,7 +3332,7 @@ bool UISystem::eventOnPointerMove(float x, float y){
                     ButtonComponent* button = scene->findComponent<ButtonComponent>(lastUIFromPointerHover);
                     if (button){
                         button->hovered = false;
-                        applyButtonVisual(*button, *ui);
+                        applyButtonVisual(lastUIFromPointerHover, *button, *ui, true);
                     }
                 }
 
@@ -3289,7 +3349,7 @@ bool UISystem::eventOnPointerMove(float x, float y){
                     ButtonComponent* button = scene->findComponent<ButtonComponent>(currentUIFromPointerHover);
                     if (button){
                         button->hovered = true;
-                        applyButtonVisual(*button, *ui);
+                        applyButtonVisual(currentUIFromPointerHover, *button, *ui, true);
                     }
                 }
 

@@ -14,6 +14,7 @@ namespace doriax{
         RotationAction(Scene* scene, Entity entity);
 
         void setAction(Quaternion startRotation, Quaternion endRotation, float duration, bool loop=false);
+        void setSpinAction(Quaternion startRotation, Vector3 axis, float angle, float duration, bool loop=false);
     };
 }
 

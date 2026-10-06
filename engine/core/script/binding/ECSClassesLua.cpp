@@ -276,6 +276,8 @@ void LuaBinding::registerECSClasses(lua_State *L){
         .addProperty("state", &ActionComponent::state)
         .addProperty("timecount", &ActionComponent::timecount)
         .addProperty("speed", &ActionComponent::speed, &ActionComponent::speed)
+        .addProperty("startOffset", &ActionComponent::startOffset, &ActionComponent::startOffset)
+        .addProperty("randomStart", &ActionComponent::randomStart, &ActionComponent::randomStart)
         .addProperty("startTrigger", &ActionComponent::startTrigger, &ActionComponent::startTrigger)
         .addProperty("stopTrigger", &ActionComponent::stopTrigger, &ActionComponent::stopTrigger)
         .addProperty("pauseTrigger", &ActionComponent::pauseTrigger, &ActionComponent::pauseTrigger)
@@ -308,6 +310,7 @@ void LuaBinding::registerECSClasses(lua_State *L){
         .addProperty("value", &TimedActionComponent::value)
         .addProperty("duration", &TimedActionComponent::duration, &TimedActionComponent::duration)
         .addProperty("loop", &TimedActionComponent::loop, &TimedActionComponent::loop)
+        .addProperty("pingPong", &TimedActionComponent::pingPong, &TimedActionComponent::pingPong)
         .addProperty("function", [] (TimedActionComponent* self, lua_State* L) { return &self->function; }, [] (TimedActionComponent* self, lua_State* L) { self->function = L; })
         .endClass();
     
@@ -385,6 +388,9 @@ void LuaBinding::registerECSClasses(lua_State *L){
         .addProperty("colorHovered", &ButtonComponent::colorHovered, &ButtonComponent::colorHovered)
         .addProperty("colorPressed", &ButtonComponent::colorPressed, &ButtonComponent::colorPressed)
         .addProperty("colorDisabled", &ButtonComponent::colorDisabled, &ButtonComponent::colorDisabled)
+        .addProperty("scaleHovered", &ButtonComponent::scaleHovered, &ButtonComponent::scaleHovered)
+        .addProperty("scalePressed", &ButtonComponent::scalePressed, &ButtonComponent::scalePressed)
+        .addProperty("transitionTime", &ButtonComponent::transitionTime, &ButtonComponent::transitionTime)
         .addProperty("onPress", [] (ButtonComponent* self, lua_State* L) { return &self->onPress; }, [] (ButtonComponent* self, lua_State* L) { self->onPress = L; })
         .addProperty("onRelease", [] (ButtonComponent* self, lua_State* L) { return &self->onRelease; }, [] (ButtonComponent* self, lua_State* L) { self->onRelease = L; })
         .addProperty("pressed", &ButtonComponent::pressed)

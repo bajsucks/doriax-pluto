@@ -65,3 +65,15 @@ bool TimedAction::isLoop() const{
 
     return timedAction.loop;
 }
+
+void TimedAction::setPingPong(bool pingPong){
+    TimedActionComponent& timedAction = getComponent<TimedActionComponent>();
+
+    timedAction.pingPong = pingPong;
+}
+
+bool TimedAction::isPingPong() const{
+    TimedActionComponent& timedAction = getComponent<TimedActionComponent>();
+
+    return timedAction.pingPong;
+}

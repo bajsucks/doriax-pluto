@@ -93,6 +93,9 @@ public:
 
     static void removeDynamicInstmesh(Entity entity, const YAML::Node& savedComponents, EntityRegistry* registry);
 
+    // Keeps the action settings edited during a preview in its restore snapshot
+    static void updateActionPreviewSnapshot(Entity entity, YAML::Node& components, EntityRegistry* registry);
+
     // Fills a Texture with the editor built-in default skybox cubemap.
     static void setDefaultSkyTexture(Texture& outTexture);
 

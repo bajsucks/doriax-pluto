@@ -53,10 +53,28 @@ bool editor::MoveEntityOrderCmd::execute(){
         }
 
         if (targetBundlePath == sourceBundlePath){
-            bundleMoveRecovery = project->moveEntityFromBundle(sceneId, source, target, type, false);
+            EntityBundle* bundle = project->getEntityBundle(sourceBundlePath);
+            bool isSourceRoot = bundle && (bundle->getRootEntity(sceneId, source) == source);
+            bool sameInstance = bundle && (bundle->getInstanceId(sceneId, source) == bundle->getInstanceId(sceneId, target));
+
+            // an instance root has no registry entity, reordering it only changes this scene
+            if (!isSourceRoot || type == InsertionType::INTO){
+                // another copy of the same bundle holds the same registry entities
+                if (!sameInstance){
+                    Out::error("Cannot move bundle entity %u into another instance of its bundle", source);
+                    return false;
+                }
+                bundleMoveRecovery = project->moveEntityFromBundle(sceneId, source, target, type, false);
+            }
         }
     }
     ProjectUtils::moveEntityOrderByTarget(sceneProject->scene, sceneProject->entities, source, target, type, oldParent, oldIndex, hasTransform);
+
+    // a bundle registry has no current model matrices to keep the world transform with,
+    // so the bundle takes the local transform the entity got here
+    if (bundleMoveRecovery.size() > 0 && hasTransform){
+        project->bundlePropertyChanged(sceneId, source, ComponentType::Transform, {"position", "rotation", "scale"});
+    }
 
     sceneProject->isModified = true;
 
@@ -70,6 +88,10 @@ void editor::MoveEntityOrderCmd::undo(){
         project->undoMoveEntityInBundle(sceneId, source, target, bundleMoveRecovery, false);
     }
     ProjectUtils::moveEntityOrderByIndex(sceneProject->scene, sceneProject->entities, source, oldParent, oldIndex, hasTransform);
+
+    if (bundleMoveRecovery.size() > 0 && hasTransform){
+        project->bundlePropertyChanged(sceneId, source, ComponentType::Transform, {"position", "rotation", "scale"});
+    }
 
     sceneProject->isModified = wasModified;
 }

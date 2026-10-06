@@ -3,6 +3,8 @@
 
 #include "RotationAction.h"
 
+#include "util/Angle.h"
+
 using namespace doriax;
 
 RotationAction::RotationAction(Scene* scene): TimedAction(scene){
@@ -20,4 +22,16 @@ void RotationAction::setAction(Quaternion startRotation, Quaternion endRotation,
 
     rotAction.startRotation = startRotation;
     rotAction.endRotation = endRotation;
+    rotAction.spin = false;
+}
+
+void RotationAction::setSpinAction(Quaternion startRotation, Vector3 axis, float angle, float duration, bool loop){
+    TimedAction::setAction(duration, loop);
+
+    RotationActionComponent& rotAction = getComponent<RotationActionComponent>();
+
+    rotAction.startRotation = startRotation;
+    rotAction.spin = true;
+    rotAction.axis = axis;
+    rotAction.angle = Angle::defaultToDeg(angle);
 }

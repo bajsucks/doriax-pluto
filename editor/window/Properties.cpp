@@ -6392,6 +6392,11 @@ void editor::Properties::drawButtonComponent(ComponentType cpType, SceneProject*
         }
     };
 
+    RowSettings settingsScale;
+    settingsScale.stepSize = 0.01f;
+    settingsScale.secondColSize = 6 * ImGui::GetFontSize();
+    settingsScale.onValueChanged = settings.onValueChanged;
+
     beginTable(cpType, getLabelSize("Texture Disabled"));
     propertyRow(RowPropertyType::LocalEntity, cpType, "label", "Label", sceneProject, entities, settings);
     propertyRow(RowPropertyType::Bool, cpType, "disabled", "Disabled", sceneProject, entities, settings);
@@ -6403,6 +6408,9 @@ void editor::Properties::drawButtonComponent(ComponentType cpType, SceneProject*
     propertyRow(RowPropertyType::Color4L, cpType, "colorHovered", "Color Hovered", sceneProject, entities, settings);
     propertyRow(RowPropertyType::Color4L, cpType, "colorPressed", "Color Pressed", sceneProject, entities, settings);
     propertyRow(RowPropertyType::Color4L, cpType, "colorDisabled", "Color Disabled", sceneProject, entities, settings);
+    propertyRow(RowPropertyType::Float, cpType, "scaleHovered", "Scale Hovered", sceneProject, entities, settingsScale);
+    propertyRow(RowPropertyType::Float, cpType, "scalePressed", "Scale Pressed", sceneProject, entities, settingsScale);
+    propertyRow(RowPropertyType::FloatPositive, cpType, "transitionTime", "Transition Time", sceneProject, entities, settingsScale);
     endTable();
 }
 
@@ -11654,52 +11662,12 @@ void editor::Properties::stopActionPreviewIfActive() {
     actionPreviewSceneId = 0;
 }
 
-void editor::Properties::updateParticlePreviewSnapshot(YAML::Node& components, const ParticlesComponent& particles) {
-    const std::string componentName = Catalog::getComponentName(ComponentType::ParticlesComponent, true);
-
-    // Full re-encode so any future fields are automatically preserved.
-    YAML::Node encoded = Stream::encodeParticlesComponent(particles);
-
-    // "emitter" is mutated by the runtime (forced true on actionStart, forced false when a
-    // non-looping system runs out). Restoring the live runtime value would silently switch
-    // off an authored emitter. Keep the pre-preview authored value from the original snapshot.
-    const YAML::Node& originalNode = components[componentName];
-    if (originalNode && !originalNode.IsNull() && originalNode["emitter"]) {
-        encoded["emitter"] = originalNode["emitter"];
-    }
-
-    components[componentName] = encoded;
-}
-
 void editor::Properties::stopActionPreview(Scene* scene, SceneProject* sceneProject) {
     if (!actionPreviewing) return;
 
     // Update snapshots with current user-editable config values before restoring
     for (ActionPreviewState& state : actionPreviewStates) {
-        if (state.entity == NULL_ENTITY || !scene->isEntityCreated(state.entity) || !state.components || state.components.IsNull()) {
-            continue;
-        }
-        if (auto* comp = scene->findComponent<TimedActionComponent>(state.entity)) {
-            state.components[Catalog::getComponentName(ComponentType::TimedActionComponent, true)] = Stream::encodeTimedActionComponent(*comp);
-        }
-        if (auto* comp = scene->findComponent<PositionActionComponent>(state.entity)) {
-            state.components[Catalog::getComponentName(ComponentType::PositionActionComponent, true)] = Stream::encodePositionActionComponent(*comp);
-        }
-        if (auto* comp = scene->findComponent<RotationActionComponent>(state.entity)) {
-            state.components[Catalog::getComponentName(ComponentType::RotationActionComponent, true)] = Stream::encodeRotationActionComponent(*comp);
-        }
-        if (auto* comp = scene->findComponent<ScaleActionComponent>(state.entity)) {
-            state.components[Catalog::getComponentName(ComponentType::ScaleActionComponent, true)] = Stream::encodeScaleActionComponent(*comp);
-        }
-        if (auto* comp = scene->findComponent<ColorActionComponent>(state.entity)) {
-            state.components[Catalog::getComponentName(ComponentType::ColorActionComponent, true)] = Stream::encodeColorActionComponent(*comp);
-        }
-        if (auto* comp = scene->findComponent<AlphaActionComponent>(state.entity)) {
-            state.components[Catalog::getComponentName(ComponentType::AlphaActionComponent, true)] = Stream::encodeAlphaActionComponent(*comp);
-        }
-        if (auto* comp = scene->findComponent<ParticlesComponent>(state.entity)) {
-            updateParticlePreviewSnapshot(state.components, *comp);
-        }
+        ProjectUtils::updateActionPreviewSnapshot(state.entity, state.components, scene);
     }
 
     for (const ActionPreviewState& state : actionPreviewStates) {
@@ -11725,9 +11693,6 @@ void editor::Properties::stopActionPreview(Scene* scene, SceneProject* sceneProj
 }
 
 void editor::Properties::drawActionComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
-    RowSettings settingsState;
-    settingsState.enumEntries = &entriesActionState;
-
     ActionComponent* actionComp = nullptr;
     Entity entity = NULL_ENTITY;
     Scene* scene = sceneProject->scene;
@@ -11764,9 +11729,67 @@ void editor::Properties::drawActionComponent(ComponentType cpType, SceneProject*
         }
     }
 
-    beginTable(cpType, getLabelSize("Owned target"));
-    propertyRow(RowPropertyType::Enum, cpType, "state", "State", sceneProject, entities, settingsState);
+    RowSettings settingsRandom;
+    settingsRandom.help = "Starts at a random time of its duration, so copies do not move in sync";
+
+    beginTable(cpType, getLabelSize("Play on start"));
+
+    // a running state when saved is what starts the action with the scene
+    int state = (int)ActionState::Stopped;
+    bool dif = false;
+    for (size_t i = 0; i < entities.size(); i++){
+        ActionComponent* comp = scene->findComponent<ActionComponent>(entities[i]);
+        int entityState = comp ? (int)comp->state : (int)ActionState::Stopped;
+        dif = dif || (i > 0 && entityState != state);
+        state = entityState;
+    }
+
+    int newState = state;
+    bool stateChanged = false;
+    if (propertyHeader("Play on start", -1, state != (int)ActionState::Stopped, false)){
+        newState = (int)ActionState::Stopped;
+        stateChanged = true;
+    }
+
+    if (dif){
+        ImGui::PushStyleColor(ImGuiCol_CheckMark, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+    }
+    bool playOnStart = state != (int)ActionState::Stopped;
+    if (ImGui::Checkbox("##checkbox_playonstart", &playOnStart)){
+        newState = (int)(playOnStart ? ActionState::Running : ActionState::Stopped);
+        stateChanged = true;
+    }
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(-1);
+    int stateItem = 0;
+    std::vector<const char*> stateNames;
+    for (size_t i = 0; i < entriesActionState.size(); i++){
+        stateNames.push_back(entriesActionState[i].name);
+        if (entriesActionState[i].value == state){
+            stateItem = (int)i;
+        }
+    }
+    if (ImGui::Combo("##combo_state", &stateItem, stateNames.data(), (int)stateNames.size())){
+        newState = entriesActionState[stateItem].value;
+        stateChanged = true;
+    }
+    if (dif){
+        ImGui::PopStyleColor(2);
+    }
+
+    if (stateChanged){
+        MultiPropertyCmd* multiCmd = new MultiPropertyCmd();
+        for (Entity e : entities){
+            multiCmd->addPropertyCmd<int>(project, sceneProject->id, e, cpType, "state", newState);
+        }
+        multiCmd->setNoMerge();
+        CommandHandle::get(project->getSelectedSceneId())->addCommand(multiCmd);
+    }
+
     propertyRow(RowPropertyType::Float, cpType, "speed", "Speed", sceneProject, entities);
+    propertyRow(RowPropertyType::FloatPositive, cpType, "startOffset", "Start offset", sceneProject, entities);
+    propertyRow(RowPropertyType::Bool, cpType, "randomStart", "Random start", sceneProject, entities, settingsRandom);
     propertyRow(RowPropertyType::LocalEntity, cpType, "target", "Target", sceneProject, entities);
     //propertyRow(RowPropertyType::Bool, cpType, "ownedTarget", "Owned target", sceneProject, entities);
     endTable();
@@ -11936,9 +11959,10 @@ void editor::Properties::drawActionComponent(ComponentType cpType, SceneProject*
 }
 
 void editor::Properties::drawTimedActionComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
-    beginTable(cpType, getLabelSize("Duration"));
+    beginTable(cpType, getLabelSize("Ping-pong"));
     propertyRow(RowPropertyType::FloatPositive, cpType, "duration", "Duration", sceneProject, entities);
     propertyRow(RowPropertyType::Bool, cpType, "loop", "Loop", sceneProject, entities);
+    propertyRow(RowPropertyType::Bool, cpType, "pingPong", "Ping-pong", sceneProject, entities);
     propertyRow(RowPropertyType::Ease, cpType, "function", "Ease", sceneProject, entities);
     endTable();
 }
@@ -12014,6 +12038,17 @@ void editor::Properties::drawPositionActionComponent(ComponentType cpType, Scene
 void editor::Properties::drawRotationActionComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
     Scene* scene = sceneProject->scene;
 
+    bool spin = true;
+    for (Entity entity : entities){
+        RotationActionComponent* rotation = scene->findComponent<RotationActionComponent>(entity);
+        spin = spin && rotation && rotation->spin;
+    }
+
+    RowSettings settingsAngle;
+    settingsAngle.secondColSize = 6 * ImGui::GetFontSize();
+    settingsAngle.format = "%.1f°";
+    settingsAngle.help = "More than 360° turns more than once";
+
     beginTable(cpType, getLabelSize("Start rotation"));
 
     float buttonSize = ImGui::GetFrameHeight();
@@ -12045,6 +12080,15 @@ void editor::Properties::drawRotationActionComponent(ComponentType cpType, Scene
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
             ImGui::SetTooltip("Get current rotation from target");
         }
+    }
+
+    propertyRow(RowPropertyType::Bool, cpType, "spin", "Spin", sceneProject, entities);
+
+    if (spin) {
+        propertyRow(RowPropertyType::Vector3, cpType, "axis", "Axis", sceneProject, entities);
+        propertyRow(RowPropertyType::Float, cpType, "angle", "Angle", sceneProject, entities, settingsAngle);
+        endTable();
+        return;
     }
 
     propertyRow(RowPropertyType::Quat, cpType, "endRotation", "End rotation", sceneProject, entities, quatSettings);
@@ -12810,7 +12854,23 @@ void editor::Properties::drawBoneComponent(ComponentType cpType, SceneProject* s
 void editor::Properties::drawKeyframeTracksComponent(ComponentType cpType, SceneProject* sceneProject, std::vector<Entity> entities){
     KeyframeTracksComponent& comp = sceneProject->scene->getComponent<KeyframeTracksComponent>(entities[0]);
 
+    // relative only applies to the transform tracks
+    bool transformTracks = true;
+    for (Entity entity : entities){
+        Signature signature = sceneProject->scene->getSignature(entity);
+        transformTracks = transformTracks && (signature.test(sceneProject->scene->getComponentId<TranslateTracksComponent>()) ||
+            signature.test(sceneProject->scene->getComponentId<RotateTracksComponent>()) ||
+            signature.test(sceneProject->scene->getComponentId<ScaleTracksComponent>()));
+    }
+
+    RowSettings settingsRelative;
+    settingsRelative.help = "Keys are offsets from the pose the target has when the track starts";
+
     beginTable(cpType, getLabelSize("Interpolation"));
+    propertyRow(RowPropertyType::Bool, cpType, "loop", "Loop", sceneProject, entities);
+    if (transformTracks){
+        propertyRow(RowPropertyType::Bool, cpType, "relative", "Relative", sceneProject, entities, settingsRelative);
+    }
     propertyRow(RowPropertyType::Int, cpType, "index", "Index", sceneProject, entities);
     propertyRow(RowPropertyType::Float, cpType, "interpolation", "Interpolation", sceneProject, entities);
     endTable();

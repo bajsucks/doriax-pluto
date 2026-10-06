@@ -35,7 +35,18 @@ void Action::pause(){
 void Action::stop(){
     ActionComponent& action = getComponent<ActionComponent>();
 
+    action.startTrigger = false;
     action.stopTrigger = true;
+    action.pauseTrigger = false;
+}
+
+void Action::restart(){
+    ActionComponent& action = getComponent<ActionComponent>();
+
+    // the stop runs before the start in the same update
+    action.startTrigger = true;
+    action.stopTrigger = action.state != ActionState::Stopped;
+    action.pauseTrigger = false;
 }
 
 void Action::setOwnedTarget(bool ownedTarget){
@@ -94,6 +105,30 @@ float Action::getWeight() const{
     ActionComponent& action = getComponent<ActionComponent>();
 
     return action.weight;
+}
+
+void Action::setStartOffset(float startOffset){
+    ActionComponent& action = getComponent<ActionComponent>();
+
+    action.startOffset = startOffset;
+}
+
+float Action::getStartOffset() const{
+    ActionComponent& action = getComponent<ActionComponent>();
+
+    return action.startOffset;
+}
+
+void Action::setRandomStart(bool randomStart){
+    ActionComponent& action = getComponent<ActionComponent>();
+
+    action.randomStart = randomStart;
+}
+
+bool Action::isRandomStart() const{
+    ActionComponent& action = getComponent<ActionComponent>();
+
+    return action.randomStart;
 }
 
 bool Action::isRunning() const{

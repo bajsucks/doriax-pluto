@@ -17,6 +17,7 @@ namespace doriax{
         void start();
         void pause();
         void stop();
+        void restart();
 
         void setOwnedTarget(bool ownedTarget);
         bool getOwnedTarget() const;
@@ -30,6 +31,12 @@ namespace doriax{
 
         void setWeight(float weight);
         float getWeight() const;
+
+        void setStartOffset(float startOffset);
+        float getStartOffset() const;
+
+        void setRandomStart(bool randomStart);
+        bool isRandomStart() const;
 
         bool isRunning() const;
         bool isStopped() const;

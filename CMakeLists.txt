@@ -405,6 +405,7 @@ include_directories (SYSTEM ${DORIAX_ROOT}/libs/soloud/include)
 
 include_directories (${DORIAX_ROOT}/core)
 include_directories (${DORIAX_ROOT}/core/action)
+include_directories (${DORIAX_ROOT}/core/action/keyframe)
 include_directories (${DORIAX_ROOT}/core/buffer)
 include_directories (${DORIAX_ROOT}/core/component)
 include_directories (${DORIAX_ROOT}/core/ecs)

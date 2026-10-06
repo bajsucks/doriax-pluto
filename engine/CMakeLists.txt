@@ -667,6 +667,7 @@ include_directories(shaders)
 
 include_directories(core)
 include_directories(core/action)
+include_directories(core/action/keyframe)
 include_directories(core/buffer)
 include_directories(core/component)
 include_directories(core/ecs)
@@ -771,6 +772,7 @@ set(DORIAX_SRCS
     core/action/ScaleAction.cpp
     core/action/SpriteAnimation.cpp
     core/action/TimedAction.cpp
+    core/action/keyframe/KeyframeTracks.cpp
     core/action/keyframe/MorphTracks.cpp
     core/action/keyframe/RotateTracks.cpp
     core/action/keyframe/ScaleTracks.cpp

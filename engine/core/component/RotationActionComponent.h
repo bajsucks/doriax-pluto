@@ -13,6 +13,11 @@ namespace doriax{
         Quaternion startRotation;
 
         bool shortestPath = false;
+
+        // turns startRotation by angle (degrees, any size) around axis instead of reaching endRotation
+        bool spin = false;
+        Vector3 axis = Vector3(0, 1, 0);
+        float angle = 360;
     };
 
 }

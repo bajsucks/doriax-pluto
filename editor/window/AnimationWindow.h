@@ -123,7 +123,7 @@ namespace doriax::editor{
                              std::unordered_set<Entity>& visitedAnimations,
                              std::unordered_set<Entity>& collectedEntities) const;
         PreviewEntityState buildPreviewEntityState(Scene* scene, Entity entity) const;
-        void restorePreviewState(Scene* scene) const;
+        void restorePreviewState(Scene* scene);
         void applyPreviewModelBindPose(Scene* scene) const;
         float getAnimationDuration(const AnimationComponent& anim, Scene* scene) const;
         // Frame duration <= 0 means auto: resolved from the action's own duration.

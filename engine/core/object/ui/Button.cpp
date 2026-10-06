@@ -234,6 +234,38 @@ Vector4 Button::getColorDisabled() const{
     return Color::linearTosRGB(btcomp.colorDisabled);
 }
 
+void Button::setScaleHovered(float scaleHovered){
+    ButtonComponent& btcomp = getComponent<ButtonComponent>();
+    btcomp.scaleHovered = scaleHovered;
+    btcomp.needUpdateButton = true;
+}
+
+float Button::getScaleHovered() const{
+    ButtonComponent& btcomp = getComponent<ButtonComponent>();
+    return btcomp.scaleHovered;
+}
+
+void Button::setScalePressed(float scalePressed){
+    ButtonComponent& btcomp = getComponent<ButtonComponent>();
+    btcomp.scalePressed = scalePressed;
+    btcomp.needUpdateButton = true;
+}
+
+float Button::getScalePressed() const{
+    ButtonComponent& btcomp = getComponent<ButtonComponent>();
+    return btcomp.scalePressed;
+}
+
+void Button::setTransitionTime(float transitionTime){
+    ButtonComponent& btcomp = getComponent<ButtonComponent>();
+    btcomp.transitionTime = transitionTime;
+}
+
+float Button::getTransitionTime() const{
+    ButtonComponent& btcomp = getComponent<ButtonComponent>();
+    return btcomp.transitionTime;
+}
+
 void Button::setDisabled(bool disabled){
     ButtonComponent& btcomp = getComponent<ButtonComponent>();
     btcomp.disabled = disabled;

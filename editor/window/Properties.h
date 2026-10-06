@@ -198,7 +198,6 @@ namespace doriax::editor{
         void startActionPreview(Entity entity, Scene* scene, SceneProject* sceneProject);
         void stopActionPreview(Scene* scene, SceneProject* sceneProject);
         void stopActionPreviewIfActive();
-        void updateParticlePreviewSnapshot(YAML::Node& components, const ParticlesComponent& particles);
 
         // Dirty material helpers
         void markMaterialDirty(unsigned int sceneId, Entity entity, int submeshIndex, const std::string& relativePath);

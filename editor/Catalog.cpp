@@ -234,6 +234,9 @@ namespace {
         makeFastProperty<ButtonComponent, Vector4, &ButtonComponent::colorHovered>("colorHovered", PropertyType::Vector4, UpdateFlags_None),
         makeFastProperty<ButtonComponent, Vector4, &ButtonComponent::colorPressed>("colorPressed", PropertyType::Vector4, UpdateFlags_None),
         makeFastProperty<ButtonComponent, Vector4, &ButtonComponent::colorDisabled>("colorDisabled", PropertyType::Vector4, UpdateFlags_None),
+        makeFastProperty<ButtonComponent, float, &ButtonComponent::scaleHovered>("scaleHovered", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<ButtonComponent, float, &ButtonComponent::scalePressed>("scalePressed", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<ButtonComponent, float, &ButtonComponent::transitionTime>("transitionTime", PropertyType::Float, UpdateFlags_None),
         makeFastProperty<ButtonComponent, bool, &ButtonComponent::disabled>("disabled", PropertyType::Bool, UpdateFlags_None),
     };
 
@@ -331,6 +334,8 @@ namespace {
     static const FastPropertyDescriptor kActionProperties[] = {
         makeFastPropertyNoDefault<ActionComponent, ActionState, &ActionComponent::state>("state", PropertyType::Enum, UpdateFlags_None),
         makeFastProperty<ActionComponent, float, &ActionComponent::speed>("speed", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<ActionComponent, float, &ActionComponent::startOffset>("startOffset", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<ActionComponent, bool, &ActionComponent::randomStart>("randomStart", PropertyType::Bool, UpdateFlags_None),
         makeFastProperty<ActionComponent, Entity, &ActionComponent::target>("target", PropertyType::Entity, UpdateFlags_None),
         makeFastProperty<ActionComponent, bool, &ActionComponent::ownedTarget>("ownedTarget", PropertyType::Bool, UpdateFlags_None),
     };
@@ -338,6 +343,7 @@ namespace {
     static const FastPropertyDescriptor kTimedActionProperties[] = {
         makeFastProperty<TimedActionComponent, float, &TimedActionComponent::duration>("duration", PropertyType::Float, UpdateFlags_None),
         makeFastProperty<TimedActionComponent, bool, &TimedActionComponent::loop>("loop", PropertyType::Bool, UpdateFlags_None),
+        makeFastProperty<TimedActionComponent, bool, &TimedActionComponent::pingPong>("pingPong", PropertyType::Bool, UpdateFlags_None),
         makeFastProperty<TimedActionComponent, Ease, &TimedActionComponent::function>("function", PropertyType::Ease, UpdateFlags_None),
     };
 
@@ -350,6 +356,9 @@ namespace {
         makeFastPropertyNoDefault<RotationActionComponent, Quaternion, &RotationActionComponent::endRotation>("endRotation", PropertyType::Quat, UpdateFlags_None),
         makeFastPropertyNoDefault<RotationActionComponent, Quaternion, &RotationActionComponent::startRotation>("startRotation", PropertyType::Quat, UpdateFlags_None),
         makeFastProperty<RotationActionComponent, bool, &RotationActionComponent::shortestPath>("shortestPath", PropertyType::Bool, UpdateFlags_None),
+        makeFastProperty<RotationActionComponent, bool, &RotationActionComponent::spin>("spin", PropertyType::Bool, UpdateFlags_None),
+        makeFastProperty<RotationActionComponent, Vector3, &RotationActionComponent::axis>("axis", PropertyType::Vector3, UpdateFlags_None),
+        makeFastProperty<RotationActionComponent, float, &RotationActionComponent::angle>("angle", PropertyType::Float, UpdateFlags_None),
     };
 
     static const FastPropertyDescriptor kScaleActionProperties[] = {
@@ -384,6 +393,8 @@ namespace {
     static const FastPropertyDescriptor kKeyframeTracksProperties[] = {
         makeFastPropertyNoDefault<KeyframeTracksComponent, int, &KeyframeTracksComponent::index>("index", PropertyType::Int, UpdateFlags_None),
         makeFastProperty<KeyframeTracksComponent, float, &KeyframeTracksComponent::interpolation>("interpolation", PropertyType::Float, UpdateFlags_None),
+        makeFastProperty<KeyframeTracksComponent, bool, &KeyframeTracksComponent::loop>("loop", PropertyType::Bool, UpdateFlags_None),
+        makeFastProperty<KeyframeTracksComponent, bool, &KeyframeTracksComponent::relative>("relative", PropertyType::Bool, UpdateFlags_None),
     };
 
     static const FastPropertyDescriptor kSpriteAnimationProperties[] = {
@@ -2255,8 +2266,20 @@ namespace {
         }
     }
 
-    void enumerateSpriteAnimationProperties(void* comp, std::map<std::string, PropertyData>& ps) {
-        enumerateFromDescriptors(comp, ps, kSpriteAnimationProperties);
+    void enumerateSpriteAnimationProperties(void* compRef, std::map<std::string, PropertyData>& ps) {
+        enumerateFromDescriptors(compRef, ps, kSpriteAnimationProperties);
+
+        // the frame lists, as far as their sizes go
+        if (SpriteAnimationComponent* comp = static_cast<SpriteAnimationComponent*>(compRef)) {
+            for (unsigned int i = 0; i < comp->framesSize && i < MAX_SPRITE_FRAMES; i++) {
+                std::string name = "frames[" + std::to_string(i) + "]";
+                ps[name] = resolveSpriteAnimationPropertyFast(compRef, name);
+            }
+            for (unsigned int i = 0; i < comp->framesTimeSize && i < MAX_SPRITE_FRAMES; i++) {
+                std::string name = "framesTime[" + std::to_string(i) + "]";
+                ps[name] = resolveSpriteAnimationPropertyFast(compRef, name);
+            }
+        }
     }
 
     void enumerateAnimationProperties(void* compRef, std::map<std::string, PropertyData>& ps) {
@@ -4768,6 +4791,13 @@ void editor::Catalog::copyPropertyValue(EntityRegistry* sourceRegistry, Entity s
     // The override bit travels with the value, or the target keeps it only until its model loads.
     uint32_t propertyFields = 0;
     if (uint32_t* source = getSubmeshOverrideMask(sourceRegistry, sourceEntity, compType, property, propertyFields)) {
+        // a model that never loaded (a bundle registry's) has no submeshes, so count this one
+        // in to save it; the next load puts it over the model's
+        size_t submeshIndex = 0;
+        MeshComponent* targetMesh = targetRegistry->findComponent<MeshComponent>(targetEntity);
+        if (targetMesh && parseSubmeshOverrideProperty(property, submeshIndex, propertyFields) && submeshIndex >= targetMesh->numSubmeshes) {
+            targetMesh->numSubmeshes = submeshIndex + 1;
+        }
         if (uint32_t* target = getSubmeshOverrideMask(targetRegistry, targetEntity, compType, property, propertyFields)) {
             *target = (*target & ~propertyFields) | (*source & propertyFields);
         }

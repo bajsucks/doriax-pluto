@@ -27,6 +27,9 @@ namespace doriax{
 
         void setLoop(bool loop);
         bool isLoop() const;
+
+        void setPingPong(bool pingPong);
+        bool isPingPong() const;
     };
 }
 

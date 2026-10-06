@@ -5014,6 +5014,9 @@ YAML::Node editor::Stream::encodeButtonComponent(const ButtonComponent& button) 
     node["colorHovered"] = encodeVector4(button.colorHovered);
     node["colorPressed"] = encodeVector4(button.colorPressed);
     node["colorDisabled"] = encodeVector4(button.colorDisabled);
+    node["scaleHovered"] = button.scaleHovered;
+    node["scalePressed"] = button.scalePressed;
+    node["transitionTime"] = button.transitionTime;
     node["disabled"] = button.disabled;
     return node;
 }
@@ -5025,6 +5028,10 @@ ButtonComponent editor::Stream::decodeButtonComponent(const YAML::Node& node, co
         button = *oldButton;
     }
 
+    // a decoded transform is at its rest scale
+    button.scale = 1.0f;
+    button.transitionLeft = 0.0f;
+
     if (node["label"]) button.label = node["label"].as<Entity>();
     if (node["textureNormal"]) button.textureNormal = decodeTexture(node["textureNormal"]);
     if (node["textureHovered"]) button.textureHovered = decodeTexture(node["textureHovered"]);
@@ -5034,6 +5041,9 @@ ButtonComponent editor::Stream::decodeButtonComponent(const YAML::Node& node, co
     if (node["colorHovered"]) button.colorHovered = decodeVector4(node["colorHovered"]);
     if (node["colorPressed"]) button.colorPressed = decodeVector4(node["colorPressed"]);
     if (node["colorDisabled"]) button.colorDisabled = decodeVector4(node["colorDisabled"]);
+    if (node["scaleHovered"]) button.scaleHovered = node["scaleHovered"].as<float>();
+    if (node["scalePressed"]) button.scalePressed = node["scalePressed"].as<float>();
+    if (node["transitionTime"]) button.transitionTime = node["transitionTime"].as<float>();
     if (node["disabled"]) button.disabled = node["disabled"].as<bool>();
 
     return button;
@@ -7115,6 +7125,8 @@ YAML::Node editor::Stream::encodeActionComponent(const ActionComponent& action) 
 
     node["state"] = actionStateToString(action.state);
     node["speed"] = action.speed;
+    node["startOffset"] = action.startOffset;
+    node["randomStart"] = action.randomStart;
     node["target"] = action.target;
     node["ownedTarget"] = action.ownedTarget;
 
@@ -7135,6 +7147,8 @@ ActionComponent editor::Stream::decodeActionComponent(const YAML::Node& node, co
 
     if (node["state"]) action.state = stringToActionState(node["state"].as<std::string>());
     if (node["speed"]) action.speed = node["speed"].as<float>();
+    if (node["startOffset"]) action.startOffset = node["startOffset"].as<float>();
+    if (node["randomStart"]) action.randomStart = node["randomStart"].as<bool>();
     if (node["target"]) action.target = node["target"].as<Entity>();
     if (node["ownedTarget"]) action.ownedTarget = node["ownedTarget"].as<bool>();
 
@@ -7148,6 +7162,7 @@ YAML::Node editor::Stream::encodeTimedActionComponent(const TimedActionComponent
 
     node["duration"] = timed.duration;
     node["loop"] = timed.loop;
+    node["pingPong"] = timed.pingPong;
     node["function"] = encodeEase(timed.function);
 
     return node;
@@ -7165,6 +7180,7 @@ TimedActionComponent editor::Stream::decodeTimedActionComponent(const YAML::Node
 
     if (node["duration"]) timed.duration = node["duration"].as<float>();
     if (node["loop"]) timed.loop = node["loop"].as<bool>();
+    if (node["pingPong"]) timed.pingPong = node["pingPong"].as<bool>();
     if (node["function"]) timed.function = decodeEase(node["function"], oldTimed ? &oldTimed->function : nullptr);
 
     return timed;
@@ -7202,6 +7218,9 @@ YAML::Node editor::Stream::encodeRotationActionComponent(const RotationActionCom
     node["endRotation"] = encodeQuaternion(rotAction.endRotation);
     node["startRotation"] = encodeQuaternion(rotAction.startRotation);
     node["shortestPath"] = rotAction.shortestPath;
+    node["spin"] = rotAction.spin;
+    node["axis"] = encodeVector3(rotAction.axis);
+    node["angle"] = rotAction.angle;
 
     return node;
 }
@@ -7216,6 +7235,9 @@ RotationActionComponent editor::Stream::decodeRotationActionComponent(const YAML
     if (node["endRotation"]) rotAction.endRotation = decodeQuaternion(node["endRotation"]);
     if (node["startRotation"]) rotAction.startRotation = decodeQuaternion(node["startRotation"]);
     if (node["shortestPath"]) rotAction.shortestPath = node["shortestPath"].as<bool>();
+    if (node["spin"]) rotAction.spin = node["spin"].as<bool>();
+    if (node["axis"]) rotAction.axis = decodeVector3(node["axis"]);
+    if (node["angle"]) rotAction.angle = node["angle"].as<float>();
 
     return rotAction;
 }
@@ -7436,6 +7458,8 @@ YAML::Node editor::Stream::encodeKeyframeTracksComponent(const KeyframeTracksCom
 
     node["index"] = tracks.index;
     node["interpolation"] = tracks.interpolation;
+    node["loop"] = tracks.loop;
+    node["relative"] = tracks.relative;
 
     YAML::Node timesNode;
     for (float t : tracks.times) {
@@ -7463,8 +7487,13 @@ KeyframeTracksComponent editor::Stream::decodeKeyframeTracksComponent(const YAML
         tracks = *oldTracks;
     }
 
+    // a decoded track takes its base again when it starts
+    tracks.hasBase = false;
+
     if (node["index"]) tracks.index = node["index"].as<int>();
     if (node["interpolation"]) tracks.interpolation = node["interpolation"].as<float>();
+    if (node["loop"]) tracks.loop = node["loop"].as<bool>();
+    if (node["relative"]) tracks.relative = node["relative"].as<bool>();
 
     if (node["times"]) {
         tracks.times.clear();

@@ -13,6 +13,7 @@ namespace doriax{
         float duration = 0; // <= 0 means auto: resolved from the action's own duration
         Entity action = NULL_ENTITY;
         uint32_t track = 0; // Used for editor timeline organization
+        bool started = false; // the action already started in this run of the animation
     };
 
     struct DORIAX_API AnimationComponent{
