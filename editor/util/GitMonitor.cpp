@@ -269,7 +269,8 @@ std::string fileStamp(const fs::path& path) {
     const auto time = fs::last_write_time(path, ec);
     if (ec) return "-";
     const auto size = fs::file_size(path, ec);
-    return std::to_string(time.time_since_epoch().count()) + ":" + std::to_string(ec ? 0 : size);
+    // libc++ file_time_type ticks are __int128, which has no to_string overload
+    return std::to_string(static_cast<long long>(time.time_since_epoch().count())) + ":" + std::to_string(ec ? 0 : size);
 }
 
 // git status --porcelain=v2 --branch, commit is the one HEAD is at
