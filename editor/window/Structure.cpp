@@ -2009,7 +2009,11 @@ void editor::Structure::showTreeNode(editor::TreeNode& node) {
     }
 
     if (node.separator){
+        // starts under the row icons, past the arrow column
+        float labelOffset = ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.x * 2.0f;
+        ImGui::Indent(labelOffset);
         ImGui::Separator();
+        ImGui::Unindent(labelOffset);
     }
 
     popNodeImGuiId(node);
