@@ -3479,7 +3479,7 @@ editor::ComponentType editor::Catalog::getComponentType(const std::string& compo
         return ComponentType::AlphaActionComponent;
     }else if(normalizedName == "animation"){
         return ComponentType::AnimationComponent;
-    }else if(normalizedName == "audio"){
+    }else if(normalizedName == "sound" || normalizedName == "audio"){ // Backward compatibility: "audio" is the old name, remove it in a future release
         return ComponentType::SoundComponent;
     }else if(normalizedName == "body2d"){
         return ComponentType::Body2DComponent;
@@ -4267,6 +4267,18 @@ void editor::Catalog::updateEntity(EntityRegistry* registry, Entity entity, uint
     }
 }
 
+// Decoded over the target as Stream::decodeComponents does, so the GPU or physics handles it
+// holds are released by the reload its update flags ask for, instead of being overwritten
+template<typename T>
+static void decodeOverTarget(EntityRegistry* registry, Entity entity, editor::ComponentType compType,
+                             T (*decode)(const YAML::Node&, const T*), const YAML::Node& encoded, uint64_t reloadFlags = 0) {
+    T& target = registry->getComponent<T>(entity);
+    T component = decode(encoded, &target);
+    uint64_t flags = editor::Catalog::getChangedUpdateFlags(compType, &target, &component) | reloadFlags;
+    target = component;
+    editor::Catalog::updateEntity(registry, entity, flags);
+}
+
 void editor::Catalog::copyComponent(EntityRegistry* sourceRegistry, Entity sourceEntity,
                                    EntityRegistry* targetRegistry, Entity targetEntity,
                                    ComponentType compType) {
@@ -4281,14 +4293,28 @@ void editor::Catalog::copyComponent(EntityRegistry* sourceRegistry, Entity sourc
         }
 
         case ComponentType::MeshComponent: {
-            YAML::Node encoded = Stream::encodeMeshComponent(sourceRegistry->getComponent<MeshComponent>(sourceEntity));
-            targetRegistry->getComponent<MeshComponent>(targetEntity) = Stream::decodeMeshComponent(encoded);
+            // Encoded as a save does, so geometry built from a model or another component
+            // stays the target's own
+            Signature signature = sourceRegistry->getSignature(sourceEntity);
+            bool model = Stream::isModelBackedMesh(sourceEntity, sourceRegistry, signature);
+            bool generated = model || Stream::isGeneratedMesh(sourceRegistry, signature);
+            decodeOverTarget(targetRegistry, targetEntity, compType, &Stream::decodeMeshComponent,
+                Stream::encodeMeshComponent(sourceRegistry->getComponent<MeshComponent>(sourceEntity), !generated, !model, !generated), UpdateFlags_Mesh_Reload);
+            // The model builds its submeshes again, with the overrides just copied
+            ModelComponent* targetModel = targetRegistry->findComponent<ModelComponent>(targetEntity);
+            if (model && targetModel) {
+                targetModel->loadedFilename.clear();
+                targetModel->needUpdateModel = true;
+            }
             break;
         }
 
         case ComponentType::UIComponent: {
-            YAML::Node encoded = Stream::encodeUIComponent(sourceRegistry->getComponent<UIComponent>(sourceEntity));
-            targetRegistry->getComponent<UIComponent>(targetEntity) = Stream::decodeUIComponent(encoded);
+            Signature signature = sourceRegistry->getSignature(sourceEntity);
+            bool generated = Stream::isGeneratedUI(sourceRegistry, signature);
+            bool text = signature.test(sourceRegistry->getComponentId<TextComponent>());
+            decodeOverTarget(targetRegistry, targetEntity, compType, &Stream::decodeUIComponent,
+                Stream::encodeUIComponent(sourceRegistry->getComponent<UIComponent>(sourceEntity), !generated, !text), UpdateFlags_UI_Reload);
             break;
         }
 
@@ -4346,11 +4372,10 @@ void editor::Catalog::copyComponent(EntityRegistry* sourceRegistry, Entity sourc
             break;
         }
 
-        case ComponentType::TextComponent: {
-            YAML::Node encoded = Stream::encodeTextComponent(sourceRegistry->getComponent<TextComponent>(sourceEntity));
-            targetRegistry->getComponent<TextComponent>(targetEntity) = Stream::decodeTextComponent(encoded);
+        case ComponentType::TextComponent:
+            decodeOverTarget(targetRegistry, targetEntity, compType, &Stream::decodeTextComponent,
+                Stream::encodeTextComponent(sourceRegistry->getComponent<TextComponent>(sourceEntity)));
             break;
-        }
 
         case ComponentType::SpriteComponent: {
             YAML::Node encoded = Stream::encodeSpriteComponent(sourceRegistry->getComponent<SpriteComponent>(sourceEntity));
@@ -4364,23 +4389,20 @@ void editor::Catalog::copyComponent(EntityRegistry* sourceRegistry, Entity sourc
             break;
         }
 
-        case ComponentType::TerrainComponent: {
-            YAML::Node encoded = Stream::encodeTerrainComponent(sourceRegistry->getComponent<TerrainComponent>(sourceEntity));
-            targetRegistry->getComponent<TerrainComponent>(targetEntity) = Stream::decodeTerrainComponent(encoded);
+        case ComponentType::TerrainComponent:
+            decodeOverTarget(targetRegistry, targetEntity, compType, &Stream::decodeTerrainComponent,
+                Stream::encodeTerrainComponent(sourceRegistry->getComponent<TerrainComponent>(sourceEntity)));
             break;
-        }
 
-        case ComponentType::LightComponent: {
-            YAML::Node encoded = Stream::encodeLightComponent(sourceRegistry->getComponent<LightComponent>(sourceEntity));
-            targetRegistry->getComponent<LightComponent>(targetEntity) = Stream::decodeLightComponent(encoded);
+        case ComponentType::LightComponent:
+            decodeOverTarget(targetRegistry, targetEntity, compType, &Stream::decodeLightComponent,
+                Stream::encodeLightComponent(sourceRegistry->getComponent<LightComponent>(sourceEntity)));
             break;
-        }
 
-        case ComponentType::LinesComponent: {
-            YAML::Node encoded = Stream::encodeLinesComponent(sourceRegistry->getComponent<LinesComponent>(sourceEntity));
-            targetRegistry->getComponent<LinesComponent>(targetEntity) = Stream::decodeLinesComponent(encoded);
+        case ComponentType::LinesComponent:
+            decodeOverTarget(targetRegistry, targetEntity, compType, &Stream::decodeLinesComponent,
+                Stream::encodeLinesComponent(sourceRegistry->getComponent<LinesComponent>(sourceEntity)));
             break;
-        }
 
         case ComponentType::PolygonComponent: {
             YAML::Node encoded = Stream::encodePolygonComponent(sourceRegistry->getComponent<PolygonComponent>(sourceEntity));
@@ -4424,29 +4446,25 @@ void editor::Catalog::copyComponent(EntityRegistry* sourceRegistry, Entity sourc
             break;
         }
 
-        case ComponentType::CameraComponent: {
-            YAML::Node encoded = Stream::encodeCameraComponent(sourceRegistry->getComponent<CameraComponent>(sourceEntity));
-            targetRegistry->getComponent<CameraComponent>(targetEntity) = Stream::decodeCameraComponent(encoded);
+        case ComponentType::CameraComponent:
+            decodeOverTarget(targetRegistry, targetEntity, compType, &Stream::decodeCameraComponent,
+                Stream::encodeCameraComponent(sourceRegistry->getComponent<CameraComponent>(sourceEntity)));
             break;
-        }
 
-        case ComponentType::SoundComponent: {
-            YAML::Node encoded = Stream::encodeSoundComponent(sourceRegistry->getComponent<SoundComponent>(sourceEntity));
-            targetRegistry->getComponent<SoundComponent>(targetEntity) = Stream::decodeSoundComponent(encoded);
+        case ComponentType::SoundComponent:
+            decodeOverTarget(targetRegistry, targetEntity, compType, &Stream::decodeSoundComponent,
+                Stream::encodeSoundComponent(sourceRegistry->getComponent<SoundComponent>(sourceEntity)));
             break;
-        }
 
-        case ComponentType::SkyComponent: {
-            YAML::Node encoded = Stream::encodeSkyComponent(sourceRegistry->getComponent<SkyComponent>(sourceEntity));
-            targetRegistry->getComponent<SkyComponent>(targetEntity) = Stream::decodeSkyComponent(encoded);
+        case ComponentType::SkyComponent:
+            decodeOverTarget(targetRegistry, targetEntity, compType, &Stream::decodeSkyComponent,
+                Stream::encodeSkyComponent(sourceRegistry->getComponent<SkyComponent>(sourceEntity)));
             break;
-        }
 
-        case ComponentType::WaterComponent: {
-            YAML::Node encoded = Stream::encodeWaterComponent(sourceRegistry->getComponent<WaterComponent>(sourceEntity));
-            targetRegistry->getComponent<WaterComponent>(targetEntity) = Stream::decodeWaterComponent(encoded);
+        case ComponentType::WaterComponent:
+            decodeOverTarget(targetRegistry, targetEntity, compType, &Stream::decodeWaterComponent,
+                Stream::encodeWaterComponent(sourceRegistry->getComponent<WaterComponent>(sourceEntity)));
             break;
-        }
 
         case ComponentType::WaterExclusionComponent: {
             YAML::Node encoded = Stream::encodeWaterExclusionComponent(sourceRegistry->getComponent<WaterExclusionComponent>(sourceEntity));
@@ -4460,17 +4478,15 @@ void editor::Catalog::copyComponent(EntityRegistry* sourceRegistry, Entity sourc
             break;
         }
 
-        case ComponentType::Joint2DComponent: {
-            YAML::Node encoded = Stream::encodeJoint2DComponent(sourceRegistry->getComponent<Joint2DComponent>(sourceEntity));
-            targetRegistry->getComponent<Joint2DComponent>(targetEntity) = Stream::decodeJoint2DComponent(encoded);
+        case ComponentType::Joint2DComponent:
+            decodeOverTarget(targetRegistry, targetEntity, compType, &Stream::decodeJoint2DComponent,
+                Stream::encodeJoint2DComponent(sourceRegistry->getComponent<Joint2DComponent>(sourceEntity)));
             break;
-        }
 
-        case ComponentType::Joint3DComponent: {
-            YAML::Node encoded = Stream::encodeJoint3DComponent(sourceRegistry->getComponent<Joint3DComponent>(sourceEntity));
-            targetRegistry->getComponent<Joint3DComponent>(targetEntity) = Stream::decodeJoint3DComponent(encoded);
+        case ComponentType::Joint3DComponent:
+            decodeOverTarget(targetRegistry, targetEntity, compType, &Stream::decodeJoint3DComponent,
+                Stream::encodeJoint3DComponent(sourceRegistry->getComponent<Joint3DComponent>(sourceEntity)));
             break;
-        }
 
         case ComponentType::BoneComponent: {
             YAML::Node encoded = Stream::encodeBoneComponent(sourceRegistry->getComponent<BoneComponent>(sourceEntity));
@@ -4549,6 +4565,54 @@ void editor::Catalog::copyComponent(EntityRegistry* sourceRegistry, Entity sourc
             targetRegistry->getComponent<ParticlesComponent>(targetEntity) = Stream::decodeParticlesComponent(encoded);
             break;
         }
+
+        case ComponentType::ModelComponent:
+            // A bundle shares only the file, each loaded copy keeps its own nodes
+            decodeOverTarget(targetRegistry, targetEntity, compType, &Stream::decodeModelComponent,
+                Stream::encodeModelComponent(sourceRegistry->getComponent<ModelComponent>(sourceEntity), true));
+            break;
+
+        case ComponentType::Body2DComponent:
+            decodeOverTarget(targetRegistry, targetEntity, compType, &Stream::decodeBody2DComponent,
+                Stream::encodeBody2DComponent(sourceRegistry->getComponent<Body2DComponent>(sourceEntity)), UpdateFlags_Body2D);
+            break;
+
+        case ComponentType::Body3DComponent: {
+            Body3DComponent& target = targetRegistry->getComponent<Body3DComponent>(targetEntity);
+            YAML::Node encoded = Stream::encodeBody3DComponent(sourceRegistry->getComponent<Body3DComponent>(sourceEntity));
+            target = Stream::decodeBody3DComponent(encoded, &target);
+            updateEntity(targetRegistry, targetEntity, UpdateFlags_Body3D);
+            break;
+        }
+
+        case ComponentType::AnimationComponent: {
+            YAML::Node encoded = Stream::encodeAnimationComponent(sourceRegistry->getComponent<AnimationComponent>(sourceEntity));
+            targetRegistry->getComponent<AnimationComponent>(targetEntity) = Stream::decodeAnimationComponent(encoded);
+            break;
+        }
+
+        case ComponentType::ActionComponent: {
+            YAML::Node encoded = Stream::encodeActionComponent(sourceRegistry->getComponent<ActionComponent>(sourceEntity));
+            targetRegistry->getComponent<ActionComponent>(targetEntity) = Stream::decodeActionComponent(encoded);
+            break;
+        }
+
+        case ComponentType::SpriteAnimationComponent: {
+            YAML::Node encoded = Stream::encodeSpriteAnimationComponent(sourceRegistry->getComponent<SpriteAnimationComponent>(sourceEntity));
+            targetRegistry->getComponent<SpriteAnimationComponent>(targetEntity) = Stream::decodeSpriteAnimationComponent(encoded);
+            break;
+        }
+
+        case ComponentType::PointsComponent:
+            decodeOverTarget(targetRegistry, targetEntity, compType, &Stream::decodePointsComponent,
+                Stream::encodePointsComponent(sourceRegistry->getComponent<PointsComponent>(sourceEntity)));
+            break;
+
+        case ComponentType::InstancedMeshComponent:
+            // Its buffer layout is set only when the component is added
+            decodeOverTarget(targetRegistry, targetEntity, compType, &Stream::decodeInstancedMeshComponent,
+                Stream::encodeInstancedMeshComponent(sourceRegistry->getComponent<InstancedMeshComponent>(sourceEntity)));
+            break;
 
         default:
             printf("WARNING: Unsupported component type for copying: %s\n", getComponentName(compType).c_str());

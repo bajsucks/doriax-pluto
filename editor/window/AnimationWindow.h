@@ -129,8 +129,8 @@ namespace doriax::editor{
         // Frame duration <= 0 means auto: resolved from the action's own duration.
         float effectiveFrameDuration(const ActionFrame& frame, Scene* scene) const;
         // Re-lane frames when overlaps are found on one track (engine-created frames
-        // all default to track 0). Marks the scene modified if anything moved.
-        void autoAssignTracks(AnimationComponent& anim, SceneProject* sceneProject) const;
+        // all default to track 0). Marks the scene modified if a saved entity changed.
+        void autoAssignTracks(Entity entity, AnimationComponent& anim, SceneProject* sceneProject) const;
         // Seek clipEntity (NULL_ENTITY = the current timeline clip) to `time`,
         // collapsing any active transition preview to that single clip.
         void seekPreview(Scene* scene, SceneProject* sceneProject, float time, Entity clipEntity = NULL_ENTITY);

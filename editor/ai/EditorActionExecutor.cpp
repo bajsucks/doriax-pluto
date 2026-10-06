@@ -677,6 +677,10 @@ Json quaternionJson(const Quaternion& value) {
     return Json{{"w", value.w}, {"x", value.x}, {"y", value.y}, {"z", value.z}};
 }
 
+Json loadingSettingsJson(const LoadingSettings& loading) {
+    return Json{{"scene_id", loading.sceneId}, {"delay", loading.delay}, {"timeout", loading.timeout}, {"async_loading", loading.asyncLoading}};
+}
+
 // Measured local bounds of an entity's mesh. Colliders are authored in these same local units;
 // world_size is reported too so it is clear the engine applies the scale rather than the caller.
 void addMeshBounds(Json& data, Scene* scene, Entity entity) {
@@ -2307,6 +2311,7 @@ ActionResult EditorActionExecutor::getProjectSummary() {
     data["canvas"] = {{"width", project->getCanvasWidth()}, {"height", project->getCanvasHeight()}};
     data["scaling_mode"] = Stream::scalingModeToString(project->getScalingMode());
     data["window"] = {{"width", project->getWindowWidth()}, {"height", project->getWindowHeight()}};
+    data["loading"] = loadingSettingsJson(project->getLoadingSettings());
     data["standalone_bundles"] = Json::array();
     for (const fs::path& bundlePath : project->getStandaloneBundles()) {
         data["standalone_bundles"].push_back(bundlePath.generic_string());
@@ -5531,6 +5536,13 @@ ActionResult EditorActionExecutor::saveProject(const Json& arguments) {
 }
 
 ActionResult EditorActionExecutor::setProjectSettings(const Json& arguments) {
+    // Checked before anything changes, a rejected request keeps the project as it was
+    if (arguments.contains("loading_scene_id")) {
+        const uint32_t loadingSceneId = arguments["loading_scene_id"].get<uint32_t>();
+        if (loadingSceneId != NULL_PROJECT_SCENE && !project->getScene(loadingSceneId)) {
+            return failResult("loading_scene_id " + std::to_string(loadingSceneId) + " is not a scene of this project.");
+        }
+    }
     if (arguments.contains("scaling_mode") && arguments["scaling_mode"].is_string()) {
         const std::string mode = lower(arguments["scaling_mode"].get<std::string>());
         const Scaling scaling = Stream::stringToScalingMode(mode);
@@ -5547,6 +5559,17 @@ ActionResult EditorActionExecutor::setProjectSettings(const Json& arguments) {
         project->setWindowSize(arguments.value("window_width", project->getWindowWidth()),
                                arguments.value("window_height", project->getWindowHeight()));
     }
+
+    LoadingSettings& loading = project->getLoadingSettings();
+    if (arguments.contains("loading_scene_id")) loading.sceneId = arguments["loading_scene_id"].get<uint32_t>();
+    if (arguments.contains("loading_delay")) loading.delay = arguments["loading_delay"].get<float>();
+    if (arguments.contains("loading_timeout")) loading.timeout = arguments["loading_timeout"].get<float>();
+    if (arguments.contains("async_loading")) loading.asyncLoading = arguments["async_loading"].get<bool>();
+
+    WebProjectSettings& web = project->getWebProjectSettings();
+    if (arguments.contains("web_resize_canvas")) web.resizeCanvasToWindow = arguments["web_resize_canvas"].get<bool>();
+    if (arguments.contains("web_hide_emscripten_ui")) web.hideEmscriptenUI = arguments["web_hide_emscripten_ui"].get<bool>();
+
     if (!project->saveProjectFile()) {
         return failResult("Failed to save the project settings.");
     }
@@ -5554,7 +5577,9 @@ ActionResult EditorActionExecutor::setProjectSettings(const Json& arguments) {
     return okResult("Changed project settings.", Json{
         {"canvas", {{"width", project->getCanvasWidth()}, {"height", project->getCanvasHeight()}}},
         {"scaling_mode", Stream::scalingModeToString(project->getScalingMode())},
-        {"window", {{"width", project->getWindowWidth()}, {"height", project->getWindowHeight()}}}});
+        {"window", {{"width", project->getWindowWidth()}, {"height", project->getWindowHeight()}}},
+        {"loading", loadingSettingsJson(project->getLoadingSettings())},
+        {"web", {{"resize_canvas", web.resizeCanvasToWindow}, {"hide_emscripten_ui", web.hideEmscriptenUI}}}});
 }
 
 ActionResult EditorActionExecutor::createProject(const Json& arguments) {

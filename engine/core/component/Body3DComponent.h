@@ -97,7 +97,7 @@ namespace doriax{
 
         bool overrideMassProperties = false;
         Vector3 solidBoxSize;
-        float solidBoxDensity;
+        float solidBoxDensity = 1000.0f; // kg/m3
         
         BodyType type = BodyType::STATIC;
         Body3DMotionQuality motionQuality = Body3DMotionQuality::DISCRETE;

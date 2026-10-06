@@ -152,9 +152,7 @@ void editor::ModelLoadCmd::attachLocal(Scene* scene, Entity child, Entity parent
     transform.needUpdate = true;
 }
 
-void editor::ModelLoadCmd::recordArrangement(SceneProject* sceneProject, const ModelComponent& model) {
-    Scene* scene = sceneProject->scene;
-
+std::unordered_map<Entity, editor::ModelLoadCmd::NodeRef> editor::ModelLoadCmd::mapModelNodes(Scene* scene, const ModelComponent& model) {
     std::unordered_map<Entity, NodeRef> modelNodes;
     for (const auto& node : model.nodesIdMapping) {
         modelNodes.emplace(node.second, makeNodeRef(model, node.first, scene->findComponent<BoneComponent>(node.second) != nullptr));
@@ -165,10 +163,17 @@ void editor::ModelLoadCmd::recordArrangement(SceneProject* sceneProject, const M
     for (const auto& bone : model.bonesIdMapping) {
         modelNodes.emplace(bone.second, makeNodeRef(model, bone.first, true));
     }
+    return modelNodes;
+}
 
+std::vector<editor::ModelLoadCmd::ParkedEntity> editor::ModelLoadCmd::collectAttachments(SceneProject* sceneProject, Entity modelEntity, const ModelComponent& model) {
+    Scene* scene = sceneProject->scene;
+    std::unordered_map<Entity, NodeRef> modelNodes = mapModelNodes(scene, model);
+
+    std::vector<ParkedEntity> attachments;
     for (Entity candidate : sceneProject->entities) {
         Transform* transform = scene->findComponent<Transform>(candidate);
-        if (!transform || candidate == entity || modelNodes.count(candidate)) {
+        if (!transform || candidate == modelEntity || modelNodes.count(candidate)) {
             continue;
         }
         auto parent = modelNodes.find(transform->parent);
@@ -180,9 +185,19 @@ void editor::ModelLoadCmd::recordArrangement(SceneProject* sceneProject, const M
         parked.oldParent = transform->parent;
         parked.parent = parent->second;
         parked.pose = {transform->position, transform->rotation, transform->scale};
-        parkedEntities.push_back(parked);
+        attachments.push_back(parked);
+    }
+    return attachments;
+}
+
+void editor::ModelLoadCmd::recordArrangement(SceneProject* sceneProject, const ModelComponent& model, bool parts) {
+    parkedEntities = collectAttachments(sceneProject, entity, model);
+    if (!parts) {
+        return;
     }
 
+    Scene* scene = sceneProject->scene;
+    std::unordered_map<Entity, NodeRef> modelNodes = mapModelNodes(scene, model);
     std::map<int, Entity> defaults = scene->getSystem<MeshSystem>()->getModelNodeDefaultParents(entity, model);
     for (const auto& node : model.meshNodesMapping) {
         Transform* transform = scene->findComponent<Transform>(node.second);
@@ -203,26 +218,41 @@ void editor::ModelLoadCmd::recordArrangement(SceneProject* sceneProject, const M
     }
 }
 
-void editor::ModelLoadCmd::parkEntities(SceneProject* sceneProject) {
-    if (parkedEntities.empty()) return;
+void editor::ModelLoadCmd::parkEntities(SceneProject* sceneProject, Entity modelEntity, const std::vector<ParkedEntity>& parked) {
+    if (parked.empty()) return;
     Scene* scene = sceneProject->scene;
-    for (const ParkedEntity& parked : parkedEntities) {
-        if (scene->isEntityCreated(parked.entity)) {
-            scene->addEntityChild(entity, parked.entity, true);
+    for (const ParkedEntity& entry : parked) {
+        if (scene->isEntityCreated(entry.entity)) {
+            scene->addEntityChild(modelEntity, entry.entity, true);
         }
     }
     ProjectUtils::sortEntitiesByTransformOrder(scene, sceneProject->entities);
 }
 
-void editor::ModelLoadCmd::unparkEntities(SceneProject* sceneProject) {
-    if (parkedEntities.empty()) return;
+void editor::ModelLoadCmd::unparkEntities(SceneProject* sceneProject, const std::vector<ParkedEntity>& parked) {
+    if (parked.empty()) return;
     Scene* scene = sceneProject->scene;
-    for (const ParkedEntity& parked : parkedEntities) {
-        if (scene->isEntityCreated(parked.entity) && scene->isEntityCreated(parked.oldParent)) {
-            attachLocal(scene, parked.entity, parked.oldParent, parked.pose);
+    for (const ParkedEntity& entry : parked) {
+        if (scene->isEntityCreated(entry.entity) && scene->isEntityCreated(entry.oldParent)) {
+            attachLocal(scene, entry.entity, entry.oldParent, entry.pose);
         }
     }
     ProjectUtils::sortEntitiesByTransformOrder(scene, sceneProject->entities);
+}
+
+void editor::ModelLoadCmd::attachToNodes(Scene* scene, const ModelComponent& model, const std::vector<ParkedEntity>& parked) {
+    for (const ParkedEntity& entry : parked) {
+        if (!scene->isEntityCreated(entry.entity)) {
+            continue;
+        }
+        Entity parent = findModelNode(model, entry.parent);
+        if (parent == NULL_ENTITY) {
+            Log::warn("Node %d '%s' is no longer in '%s', '%s' was moved to the model", entry.parent.index,
+                entry.parent.name.c_str(), model.filename.c_str(), scene->getEntityName(entry.entity).c_str());
+            continue;
+        }
+        attachLocal(scene, entry.entity, parent, entry.pose);
+    }
 }
 
 void editor::ModelLoadCmd::restoreArrangement(SceneProject* sceneProject, const ModelComponent& model) {
@@ -230,18 +260,7 @@ void editor::ModelLoadCmd::restoreArrangement(SceneProject* sceneProject, const 
     Scene* scene = sceneProject->scene;
     std::shared_ptr<MeshSystem> meshSys = scene->getSystem<MeshSystem>();
 
-    for (const ParkedEntity& parked : parkedEntities) {
-        if (!scene->isEntityCreated(parked.entity)) {
-            continue;
-        }
-        Entity parent = findModelNode(model, parked.parent);
-        if (parent == NULL_ENTITY) {
-            Log::warn("Node %d '%s' is no longer in '%s', '%s' was moved to the model", parked.parent.index,
-                parked.parent.name.c_str(), model.filename.c_str(), scene->getEntityName(parked.entity).c_str());
-            continue;
-        }
-        attachLocal(scene, parked.entity, parent, parked.pose);
-    }
+    attachToNodes(scene, model, parkedEntities);
 
     // Validate against the complete new hierarchy before detaching any parts.
     struct Placement {
@@ -324,7 +343,9 @@ void editor::ModelLoadCmd::finalizeLoad(){
         }
     }
 
-    restoreArrangement(sceneProject, newModel);
+    if (sameModelFile) {
+        restoreArrangement(sceneProject, newModel);
+    }
 
     // Put back on whichever mesh the primitive ended up in, which a merge change moves.
     scene->getSystem<MeshSystem>()->applySubmeshOverrides(savedSubmeshOverrides, entity, newModel);
@@ -419,7 +440,7 @@ bool editor::ModelLoadCmd::execute(){
         : false;
     mergeStaticMeshesChanged = model.mergeStaticMeshes != requestedMergeStaticMeshes;
 
-    const bool sameModelFile = MeshSystem::getModelFilenameKey(model.filename) == MeshSystem::getModelFilenameKey(modelPath);
+    sameModelFile = MeshSystem::getModelFilenameKey(model.filename) == MeshSystem::getModelFilenameKey(modelPath);
 
     // Only a reload that would throw away a local arrangement keeps the mesh children and
     // refreshes their geometry in place. Everything else rebuilds, so node changes still apply.
@@ -445,11 +466,12 @@ bool editor::ModelLoadCmd::execute(){
     }
 
     // Rebuilt nodes get the user's arrangement back by node name. Only the first run has the
-    // parsed glTF to name the nodes; a redo reuses what it recorded.
-    if (firstExecution && sameModelFile && !reuseHierarchy) {
-        recordArrangement(sceneProject, model);
+    // parsed glTF to name the nodes; a redo reuses what it recorded. Runtime nodes have no delete
+    // snapshot, so the entities on them are also kept when the file changes.
+    if (firstExecution && !reuseHierarchy && (sameModelFile || !ProjectUtils::hasTrackedModelEntities(scene, model, sceneProject->entities))) {
+        recordArrangement(sceneProject, model, sameModelFile);
     }
-    parkEntities(sceneProject);
+    parkEntities(sceneProject, entity, parkedEntities);
 
     std::vector<Entity> oldSubEntityRoots;
     if (!reuseHierarchy) {
@@ -460,20 +482,15 @@ bool editor::ModelLoadCmd::execute(){
         if (!oldSubEntitiesDeleteCmd->execute()) {
             delete oldSubEntitiesDeleteCmd;
             oldSubEntitiesDeleteCmd = nullptr;
-            unparkEntities(sceneProject);
+            unparkEntities(sceneProject, parkedEntities);
             return false;
         }
     }
 
     // Clear stale model data before loading new model
+    oldRuntimeNodesDestroyed = false;
     if (!reuseHierarchy) {
-        model.skeleton = NULL_ENTITY;
-        model.bonesIdMapping.clear();
-        model.bonesNameMapping.clear();
-        model.animations.clear();
-        model.meshNodesMapping.clear();
-        model.nodesIdMapping.clear();
-        model.skinBindings.clear();
+        oldRuntimeNodesDestroyed = ProjectUtils::destroyModelNodes(scene, model);
     }
     model.mergeStaticMeshes = requestedMergeStaticMeshes;
 
@@ -499,11 +516,40 @@ bool editor::ModelLoadCmd::execute(){
         delete oldSubEntitiesDeleteCmd;
         oldSubEntitiesDeleteCmd = nullptr;
     }
-    unparkEntities(sceneProject);
+    rebuildRuntimeNodes(sceneProject);
+    unparkEntities(sceneProject, parkedEntities);
     if (createEntityCmd) {
         createEntityCmd->undo();
     }
     return false;
+}
+
+// Runtime nodes have no snapshot, the restored file builds them again
+void editor::ModelLoadCmd::rebuildRuntimeNodes(SceneProject* sceneProject){
+    if (!oldRuntimeNodesDestroyed) return;
+    oldRuntimeNodesDestroyed = false;
+
+    if (rebuildNodes(sceneProject->scene, entity)) {
+        restoreArrangement(sceneProject, sceneProject->scene->getComponent<ModelComponent>(entity));
+    }
+}
+
+bool editor::ModelLoadCmd::rebuildNodes(Scene* scene, Entity entity){
+    // The mapping points at the destroyed nodes, and the update retries a failed load
+    ModelComponent& model = scene->getComponent<ModelComponent>(entity);
+    ProjectUtils::clearModelNodes(model);
+    model.loadedFilename.clear();
+    model.needUpdateModel = true;
+
+    const std::string filename = model.filename;
+    std::shared_ptr<MeshSystem> meshSys = scene->getSystem<MeshSystem>();
+    const bool loaded = FileData::getFilePathExtension(filename) == "obj"
+        ? meshSys->loadOBJ(entity, filename)
+        : meshSys->loadGLTF(entity, filename, false, false, false);
+    if (loaded) {
+        scene->getComponent<ModelComponent>(entity).needUpdateModel = false;
+    }
+    return loaded;
 }
 
 void editor::ModelLoadCmd::undo(){
@@ -517,7 +563,7 @@ void editor::ModelLoadCmd::undo(){
         asyncPending = false;
     } else {
         // The attached entities sit on nodes this load created, which are removed below
-        parkEntities(sceneProject);
+        parkEntities(sceneProject, entity, parkedEntities);
 
         ModelComponent& model = scene->getComponent<ModelComponent>(entity);
         std::vector<Entity> newSubEntityRoots = collectModelDeleteRoots(scene, model);
@@ -544,7 +590,8 @@ void editor::ModelLoadCmd::undo(){
         delete oldSubEntitiesDeleteCmd;
         oldSubEntitiesDeleteCmd = nullptr;
     }
-    unparkEntities(sceneProject);
+    rebuildRuntimeNodes(sceneProject);
+    unparkEntities(sceneProject, parkedEntities);
 
     sceneProject->isModified = wasModified;
 

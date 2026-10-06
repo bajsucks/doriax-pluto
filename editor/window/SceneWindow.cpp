@@ -1065,6 +1065,8 @@ void editor::SceneWindow::sceneEventHandler(SceneProject* sceneProject) {
         // key-up events would never arrive, so release held keys explicitly.
         if (ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows)) {
             playKeysSceneId = sceneProject->id;
+            // ImGui navigation would take Escape to leave this window, and the game loses the keyboard
+            ImGui::SetKeyOwner(ImGuiKey_Escape, ImGui::GetCurrentWindow()->ID);
             forwardPlayKeyboardInput(io, mods);
         } else if (playKeysSceneId == sceneProject->id) {
             releasePlayKeys(mods);

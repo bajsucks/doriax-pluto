@@ -3969,6 +3969,10 @@ bool RenderSystem::drawMesh(Entity entity, MeshComponent& mesh, Transform& trans
                 }
             }
 
+            // the new texture is still loading and the old one may be released already
+            if (mesh.submeshes[i].needUpdateTexture)
+                continue;
+
             if (!render.beginDraw(pipType)){
                 mesh.needReload = true;
                 return false;
@@ -4140,6 +4144,9 @@ bool RenderSystem::drawMeshDepth(MeshComponent& mesh, Transform& transform, cons
             }else if (mesh.submeshes[i].needUpdateDepthTexture){
                 mesh.submeshes[i].needUpdateDepthTexture = false;
             }
+
+            if (mesh.submeshes[i].needUpdateDepthTexture)
+                continue;
 
             if (!depthRender.beginDraw(pipelineType)){
                 mesh.needReload = true;
@@ -4515,6 +4522,9 @@ bool RenderSystem::drawMeshGBuffer(Entity entity, MeshComponent& mesh, Transform
                 mesh.submeshes[i].needUpdateGBufferTexture = false;
             }
         }
+
+        if (mesh.submeshes[i].needUpdateGBufferTexture)
+            continue;
 
         if (!gbufferRender.beginDraw(PIP_GBUFFER)){
             mesh.needReload = true;
@@ -5457,6 +5467,9 @@ bool RenderSystem::drawUI(UIComponent& ui, Transform& transform, PipelineType pi
                     ui.render.addTexture(shaderData.getTextureIndex(TextureShaderType::UI), ShaderStageType::FRAGMENT, textureRender);
                     ui.needUpdateTexture = false;
                 }
+
+            if (ui.needUpdateTexture)
+                return true;
         }
 
         if (ui.needUpdateBuffer){
@@ -5754,6 +5767,9 @@ bool RenderSystem::drawPoints(PointsComponent& points, Transform& transform, Cam
                     points.needUpdateTexture = false;
                 }
             }
+
+            if (points.needUpdateTexture)
+                return true;
         }
 
         if (points.needUpdateBuffer){
@@ -5986,6 +6002,9 @@ bool RenderSystem::drawSky(SkyComponent& sky, PipelineType pipType){
                     sky.needUpdateTexture = false;
                 }
             }
+
+            if (sky.needUpdateTexture)
+                return true;
         }
 
         ObjectRender& render = sky.render;
@@ -6517,6 +6536,9 @@ bool RenderSystem::drawWater(Entity entity, WaterComponent& water, Transform& tr
             render.addTexture(shaderData.getTextureIndex(TextureShaderType::WATERNORMAL), ShaderStageType::FRAGMENT, normalRender);
             water.needUpdateTexture = false;
         }
+
+        if (water.needUpdateTexture)
+            return false;
     }
 
     if (!render.beginDraw(pipType)){

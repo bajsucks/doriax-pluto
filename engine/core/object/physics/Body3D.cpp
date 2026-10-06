@@ -530,13 +530,17 @@ void Body3D::setMass(float mass){
 
 void Body3D::setOverrideMassAndInertia(Vector3 solidBoxSize, float solidBoxDensity){
     Body3DComponent& body = getComponent<Body3DComponent>();
+    body.solidBoxSize = solidBoxSize;
+    body.solidBoxDensity = solidBoxDensity;
+    body.overrideMassProperties = true;
 
     if (!body.body.IsInvalid()){
-        body.solidBoxSize = solidBoxSize;
-        body.solidBoxDensity = solidBoxDensity;
-        body.overrideMassProperties = true;
-    }else{
-        Log::error("Cannot override mass and inertia of loaded body");
+        JPH::MotionProperties* motionProperties = getJoltBodyWrite().GetMotionPropertiesUnchecked();
+        if (motionProperties){
+            JPH::MassProperties massProperties;
+            massProperties.SetMassAndInertiaOfSolidBox(JPH::Vec3(solidBoxSize.x, solidBoxSize.y, solidBoxSize.z), solidBoxDensity);
+            motionProperties->SetMassProperties(motionProperties->GetAllowedDOFs(), massProperties);
+        }
     }
 }
 

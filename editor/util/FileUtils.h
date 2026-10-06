@@ -158,6 +158,24 @@ public:
         return ofs ? WriteResult::Written : WriteResult::Failed;
     }
 
+    // Writes a temporary file and renames it over the target, so a failed save keeps the old file
+    static bool writeFileReplacing(const std::filesystem::path& filePath, const std::string& content) {
+        const std::filesystem::path tempPath = filePath.parent_path() / ("." + pathToUtf8(filePath.filename()) + ".tmp");
+        std::ofstream ofs(tempPath, std::ios::out | std::ios::binary | std::ios::trunc);
+        ofs.write(content.data(), static_cast<std::streamsize>(content.size()));
+        ofs.close();
+
+        std::error_code ec;
+        if (ofs) {
+            std::filesystem::rename(tempPath, filePath, ec);
+            if (!ec) {
+                return true;
+            }
+        }
+        std::filesystem::remove(tempPath, ec);
+        return false;
+    }
+
     // True when the file holds newContent afterwards, written or already up to date.
     // Use writeFile() when a no-op has to be told apart from a failure.
     static bool writeIfChanged(const std::filesystem::path& filePath, const std::string& newContent) {

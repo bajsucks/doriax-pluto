@@ -474,7 +474,7 @@ float editor::AnimationWindow::getAnimationDuration(const AnimationComponent& an
     return duration;
 }
 
-void editor::AnimationWindow::autoAssignTracks(AnimationComponent& anim, SceneProject* sceneProject) const {
+void editor::AnimationWindow::autoAssignTracks(Entity entity, AnimationComponent& anim, SceneProject* sceneProject) const {
     Scene* scene = sceneProject->scene;
     // Overlap uses the same logical minimum as a 1x display. Drawing still
     // inflates short blocks by DPI, but packing must not depend on it or the
@@ -527,7 +527,10 @@ void editor::AnimationWindow::autoAssignTracks(AnimationComponent& anim, ScenePr
             }
             frame.track = (uint32_t)lane;
         }
-        sceneProject->isModified = true;
+        // A loaded model rebuilds its own animations, only saved ones dirty the scene
+        if (std::find(sceneProject->entities.begin(), sceneProject->entities.end(), entity) != sceneProject->entities.end()) {
+            sceneProject->isModified = true;
+        }
     }
 }
 
@@ -2625,7 +2628,7 @@ void editor::AnimationWindow::show() {
     AnimationComponent* animComp = &scene->getComponent<AnimationComponent>(selectedEntity);
 
     // Auto-assign tracks when overlapping frames are detected on the same track
-    autoAssignTracks(*animComp, sceneProject);
+    autoAssignTracks(selectedEntity, *animComp, sceneProject);
 
     bool sceneIsStopped = (sceneProject->playState == ScenePlayState::STOPPED);
     if (isPreviewing && !sceneIsStopped) {
@@ -2705,7 +2708,7 @@ void editor::AnimationWindow::show() {
         displayAnim = &scene->getComponent<AnimationComponent>(displayEntity);
         // The blend target may never have been selected here, so its frames (all
         // track 0 when created via the engine API) can still be stacked on one lane.
-        autoAssignTracks(*displayAnim, sceneProject);
+        autoAssignTracks(displayEntity, *displayAnim, sceneProject);
         ImGui::TextDisabled(ICON_FA_RIGHT_LEFT " Timeline: %s (transition preview)",
                             getAnimationEntityLabel(displayEntity, scene).c_str());
     }

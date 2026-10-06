@@ -1041,13 +1041,19 @@ const std::vector<ToolDefinition>& cachedTools() {
         },
         {
             "set_project_settings",
-            "Change project display settings; fields left out keep their value. The canvas is the game's coordinate space in points (2D scenes and UI are laid out on it) and scaling_mode fits it to the window: fitwidth, fitheight, letterbox (the whole canvas stays visible), crop, stretch, or native.",
+            "Change project display, loading and web page settings; fields left out keep their value. The canvas is the game's coordinate space in points (2D scenes and UI are laid out on it) and scaling_mode fits it to the window: fitwidth, fitheight, letterbox (the whole canvas stays visible), crop, stretch, or native. The loading scene is shown by SceneManager while loadScene switches scenes. The web fields shape the page of a web export.",
             objectSchema({
                 {"canvas_width", integerSchema("Canvas width in points")},
                 {"canvas_height", integerSchema("Canvas height in points")},
                 {"scaling_mode", stringSchema("fitwidth, fitheight, letterbox, crop, stretch, or native")},
                 {"window_width", integerSchema("Desktop window width in pixels")},
-                {"window_height", integerSchema("Desktop window height in pixels")}
+                {"window_height", integerSchema("Desktop window height in pixels")},
+                {"loading_scene_id", integerSchema("Scene shown while a scene loads, 0 for none")},
+                {"loading_delay", numberSchema("Seconds the loading scene covers the old scene before it is replaced")},
+                {"loading_timeout", numberSchema("Seconds without load progress before a load stops waiting")},
+                {"async_loading", boolSchema("Load files on worker threads while the loading scene is shown")},
+                {"web_resize_canvas", boolSchema("Web export: the canvas fills the browser window")},
+                {"web_hide_emscripten_ui", boolSchema("Web export: hide the Emscripten logo, status and console around the canvas")}
             }),
             false
         },
@@ -1737,6 +1743,19 @@ ValidationResult EditorActionRegistry::validate(const std::string& name, const J
         for (const char* key : {"canvas_width", "canvas_height", "window_width", "window_height"}) {
             if (arguments.contains(key) && (!arguments[key].is_number_integer() || arguments[key].get<int>() <= 0)) {
                 return fail(std::string("set_project_settings ") + key + " must be a positive integer.");
+            }
+        }
+        if (arguments.contains("loading_scene_id") && (!arguments["loading_scene_id"].is_number_integer() || arguments["loading_scene_id"].get<int64_t>() < 0)) {
+            return fail("set_project_settings loading_scene_id must be a scene id, or 0 for none.");
+        }
+        for (const char* key : {"loading_delay", "loading_timeout"}) {
+            if (arguments.contains(key) && (!arguments[key].is_number() || arguments[key].get<double>() < 0.0)) {
+                return fail(std::string("set_project_settings ") + key + " must be a non-negative number.");
+            }
+        }
+        for (const char* key : {"async_loading", "web_resize_canvas", "web_hide_emscripten_ui"}) {
+            if (arguments.contains(key) && !arguments[key].is_boolean()) {
+                return fail(std::string("set_project_settings ") + key + " must be a boolean.");
             }
         }
         return isWrongTypedString(arguments, "scaling_mode") ? fail("set_project_settings scaling_mode must be a string.") : ok();

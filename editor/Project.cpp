@@ -276,6 +276,11 @@ static std::vector<editor::ScriptPropertyInfo> toScriptPropertyInfos(const std::
 // instance: a cross-scene reference, or a local entity that is not one of the
 // instance's members. Such references cannot be shared through the registry.
 static bool componentHasExternalEntityRef(EntityRegistry* registry, Entity entity, editor::ComponentType componentType, const std::unordered_set<Entity>& memberLocals) {
+    // A model refers to the nodes its own load built, never to bundle members
+    if (componentType == editor::ComponentType::ModelComponent) {
+        return false;
+    }
+
     for (auto& [propertyName, property] : editor::Catalog::findEntityProperties(registry, entity, componentType)) {
         if (!property.ref) {
             continue;
@@ -321,6 +326,11 @@ void editor::Project::remapEntityProperties(EntityRegistry* registry, const std:
 }
 
 void editor::Project::remapEntityPropertiesInComponent(EntityRegistry* registry, Entity entity, ComponentType componentType, const std::vector<std::string>& properties, const std::unordered_map<Entity, Entity>& entityMap) {
+    // The references of a model are its own loaded nodes
+    if (componentType == ComponentType::ModelComponent) {
+        return;
+    }
+
     for (auto& [propertyName, property] : Catalog::findEntityProperties(registry, entity, componentType)) {
         // If specific properties were requested, only remap those.
         if (!properties.empty() && !propertyRequested(propertyName, properties)) {
@@ -4690,7 +4700,7 @@ void editor::Project::destroyPlayCreatedEntities(SceneProject* sceneProject) {
     }
 }
 
-void editor::Project::finalizeStop(SceneProject* mainSceneProject, std::vector<PlayRuntimeScene> runtimeScenes) {
+void editor::Project::finalizeStop(SceneProject* mainSceneProject, std::vector<PlayRuntimeScene> runtimeScenes, const std::map<uint32_t, std::set<ShaderKey>>& retiredShaderKeys) {
     bool saveMainOnStop = false;
     bool keepMainModified = false;
 
@@ -4717,6 +4727,10 @@ void editor::Project::finalizeStop(SceneProject* mainSceneProject, std::vector<P
         if (entry.sourceSceneId != NULL_PROJECT_SCENE) {
             std::set<ShaderKey> playKeys;
             collectSceneShaderKeys(sceneProject, playKeys);
+            auto retired = retiredShaderKeys.find(entry.sourceSceneId);
+            if (retired != retiredShaderKeys.end()) {
+                playKeys.insert(retired->second.begin(), retired->second.end());
+            }
             if (!playKeys.empty()) {
                 SceneProject* editorScene = entry.ownedRuntime ? getScene(entry.sourceSceneId) : sceneProject;
                 if (editorScene) {
@@ -4944,18 +4958,10 @@ bool editor::Project::saveProjectFile() {
 
     try {
         std::filesystem::path projectFile = projectPath / "project.yaml";
-        std::ofstream fout(projectFile.string());
-        if (!fout) {
-            Out::error("Failed to open project file for writing: %s", projectFile.string().c_str());
-            return false;
-        }
 
         // Trailing newline: git reports a file without one as changed as soon as
         // anything is appended to it
-        fout << YAML::Dump(Stream::encodeProject(this)) << "\n";
-        fout.close();
-
-        if (!fout) {
+        if (!FileUtils::writeFileReplacing(projectFile, YAML::Dump(Stream::encodeProject(this)) + "\n")) {
             Out::error("Failed to write project file: %s", projectFile.string().c_str());
             return false;
         }
@@ -5412,14 +5418,10 @@ bool editor::Project::saveSceneFile(SceneProject* sceneProject, const std::files
 
     try {
         YAML::Node root = Stream::encodeSceneProject(this, sceneProject);
-        std::ofstream fout(fullPath.string());
-        if (!fout) {
-            Out::error("Failed to open scene file for writing: %s", fullPath.string().c_str());
+        if (!FileUtils::writeFileReplacing(fullPath, YAML::Dump(root) + "\n")) {
+            Out::error("Failed to write scene file: %s", fullPath.string().c_str());
             return false;
         }
-
-        fout << YAML::Dump(root) << "\n";
-        fout.close();
 
         // Every id this file carries has reached disk and can no longer be reclaimed
         sceneProject->transientId = false;
@@ -7090,10 +7092,7 @@ void editor::Project::saveEntityBundleToDisk(const std::filesystem::path& filepa
     YAML::Node encodedNode = encodeEntityBundleNode(filepath);
     if (encodedNode && !encodedNode.IsNull()) {
         std::filesystem::path fullBundlePath = getProjectPath() / filepath;
-        std::ofstream fout(fullBundlePath.string());
-        if (fout.is_open()) {  // Check if file opened successfully
-            fout << YAML::Dump(encodedNode);
-            fout.close();
+        if (FileUtils::writeFileReplacing(fullBundlePath, YAML::Dump(encodedNode))) {
             bundle->isModified = false;
             markReferencedSceneIdsPersisted(bundle->registry.get());
         } else {
@@ -9222,6 +9221,71 @@ std::shared_ptr<editor::Project::PlaySession> editor::Project::buildRuntimeScene
     return session;
 }
 
+// Drops the session's copies of a stack about to load, so they are cloned again from their files
+void editor::Project::retireRuntimeStack(uint32_t sceneId) {
+    std::shared_ptr<PlaySession> session;
+    {
+        std::scoped_lock lock(playSessionMutex);
+        session = activePlaySession;
+    }
+    if (!session || session->cancelled.load(std::memory_order_acquire)) return;
+
+    std::vector<uint32_t> involvedSceneIds;
+    collectInvolvedScenes(sceneId, involvedSceneIds);
+
+    for (uint32_t invSceneId : involvedSceneIds) {
+        const SceneProject* sourceScene = getScene(invSceneId);
+        if (!sourceScene || sourceScene->filepath.empty()) continue;
+
+        size_t entryIndex = (size_t)-1;
+        {
+            std::scoped_lock lock(playSessionMutex);
+            auto it = std::find_if(session->runtimeScenes.begin(), session->runtimeScenes.end(),
+                [invSceneId](const PlayRuntimeScene& entry) {
+                    return entry.sourceSceneId == invSceneId;
+                });
+            if (it != session->runtimeScenes.end()) {
+                entryIndex = std::distance(session->runtimeScenes.begin(), it);
+            }
+        }
+        if (entryIndex == (size_t)-1) continue;
+
+        PlayRuntimeScene& entry = session->runtimeScenes[entryIndex];
+        // Still shown, like the loading scene
+        if (entry.initializing || !entry.runtime || !entry.runtime->scene || Engine::isSceneRunning(entry.runtime->scene)) continue;
+
+        Scene* scene = entry.runtime->scene;
+        if (entry.initialized) {
+            entry.initialized = false;
+            SceneManager::removeScenePtr(invSceneId);
+            scene->getSystem<AudioSystem>()->stopSceneSounds();
+
+            // No lock here, script destructors can call back into the editor
+            if (conector.isLibraryConnected()) {
+                conector.cleanup(scene);
+            } else {
+                LuaBinding::cleanupLuaScripts(scene);
+            }
+        }
+
+        // Read again, the destructors may have added entries and moved the vector
+        std::scoped_lock lock(playSessionMutex);
+        PlayRuntimeScene& retired = session->runtimeScenes[entryIndex];
+        collectSceneShaderKeys(retired.runtime, session->retiredShaderKeys[invSceneId]);
+        if (retired.ownedRuntime) {
+            SceneProject* runtime = retired.runtime;
+            session->runtimeScenes.erase(session->runtimeScenes.begin() + entryIndex);
+            editor::getEditorHost().enqueueMainThreadTask([this, runtime]() {
+                deleteSceneProject(runtime);
+                delete runtime;
+            });
+        } else {
+            // The scene open in the editor stays in the session, so Stop restores it
+            retired.sourceSceneId = NULL_PROJECT_SCENE;
+        }
+    }
+}
+
 void editor::Project::registerSceneManager() {
     SceneManager::clearAll();
     for (SceneProject& sceneProject : scenes) {
@@ -9229,6 +9293,9 @@ void editor::Project::registerSceneManager() {
         collectStartActiveScenes(sceneProject.id, stackSceneIds);
 
         SceneManager::registerScene(sceneProject.id, sceneProject.name, [this, sceneId = sceneProject.id]() {
+            // As in an exported game, a loaded stack starts again from its files
+            retireRuntimeStack(sceneId);
+
             std::vector<size_t> currentStackIndices;
             std::shared_ptr<PlaySession> session = buildRuntimeSceneStack(sceneId, currentStackIndices);
             if (!session) return;
@@ -9721,9 +9788,11 @@ void editor::Project::stop(uint32_t sceneId) {
             }
 
             std::vector<PlayRuntimeScene> runtimeScenes;
+            std::map<uint32_t, std::set<ShaderKey>> retiredShaderKeys;
             {
                 std::scoped_lock lock(playSessionMutex);
                 runtimeScenes = session->runtimeScenes;
+                retiredShaderKeys = session->retiredShaderKeys;
             }
 
             const bool libraryConnected = conector.isLibraryConnected();
@@ -9748,7 +9817,7 @@ void editor::Project::stop(uint32_t sceneId) {
             }
 
             if (startupSucceeded) {
-                finalizeStop(mainSceneProject, runtimeScenes);
+                finalizeStop(mainSceneProject, runtimeScenes, retiredShaderKeys);
             } else {
                 cleanupPlaySession(session);
                 SceneManager::clearAll();
@@ -9808,8 +9877,10 @@ void editor::Project::waitForPlaySessionToFinish() {
     }
 }
 
-std::vector<Scene*> editor::Project::getRunningRuntimeLayers(uint32_t sceneId) {
+std::vector<Scene*> editor::Project::getRunningRuntimeLayers(uint32_t sceneId, Scene*& mainScene) {
     std::vector<Scene*> runningLayers;
+    mainScene = nullptr;
+    const SceneProject* sceneProject = getScene(sceneId);
 
     std::scoped_lock lock(playSessionMutex);
     if (!activePlaySession || activePlaySession->mainSceneId != sceneId) {
@@ -9819,17 +9890,41 @@ std::vector<Scene*> editor::Project::getRunningRuntimeLayers(uint32_t sceneId) {
         return runningLayers;
     }
 
+    if (activePlaySession->hasStoredScenes) {
+        activePlaySession->hasStoredScenes = false;
+        std::swap(mainScene, activePlaySession->storedMainScene);
+        runningLayers.swap(activePlaySession->storedLayers);
+        return runningLayers;
+    }
+
+    Scene* engineMainScene = Engine::getMainScene();
     for (const auto& entry : activePlaySession->runtimeScenes) {
         SceneProject* runtimeProject = entry.runtime;
-        if (!runtimeProject || !runtimeProject->scene || entry.sourceSceneId == sceneId) {
+        // A reload of the played scene runs a copy of it, only the open scene itself is left out
+        if (!runtimeProject || !runtimeProject->scene || runtimeProject == sceneProject) {
             continue;
         }
-        if (Engine::isSceneRunning(runtimeProject->scene)) {
+        if (runtimeProject->scene == engineMainScene) {
+            mainScene = engineMainScene;
+        } else if (Engine::isSceneRunning(runtimeProject->scene)) {
             runningLayers.push_back(runtimeProject->scene);
         }
     }
 
     return runningLayers;
+}
+
+// Another viewport is about to take the engine, which drops the scenes Play shows
+void editor::Project::storeRuntimeScenes(uint32_t sceneId) {
+    Scene* mainScene = nullptr;
+    std::vector<Scene*> layers = getRunningRuntimeLayers(sceneId, mainScene);
+
+    std::scoped_lock lock(playSessionMutex);
+    if (activePlaySession && activePlaySession->mainSceneId == sceneId && (mainScene || !layers.empty())) {
+        activePlaySession->hasStoredScenes = true;
+        activePlaySession->storedMainScene = mainScene;
+        activePlaySession->storedLayers = std::move(layers);
+    }
 }
 
 void editor::Project::debugSceneHierarchy(){

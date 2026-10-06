@@ -4,6 +4,7 @@
 #include "ComponentToBundleSharedCmd.h"
 
 #include "Stream.h"
+#include "util/ProjectUtils.h"
 
 using namespace doriax;
 
@@ -17,6 +18,33 @@ editor::ComponentToBundleSharedCmd::ComponentToBundleSharedCmd(Project* project,
     entities.push_back(entityData);
 
     this->wasModified = project->getScene(sceneId)->isModified;
+}
+
+// The shared model builds its nodes when it loads, as in a fresh instance
+void editor::ComponentToBundleSharedCmd::rebuildModel(ComponentToBundleSharedData& entityData, const ModelComponent& shared) {
+    SceneProject* sceneProject = project->getScene(sceneId);
+    Scene* scene = sceneProject->scene;
+    const ModelComponent& model = scene->getComponent<ModelComponent>(entityData.entity);
+
+    // Tracked nodes would be saved with the scene and doubled by the next load
+    bool tracked = ProjectUtils::hasTrackedModelEntities(scene, model, sceneProject->entities);
+    if (!tracked && model.filename == shared.filename && model.mergeStaticMeshes == shared.mergeStaticMeshes) {
+        return;
+    }
+
+    // Entities hung on the old nodes move to the model, since the nodes the load builds are not saved
+    entityData.modelAttachments = ModelLoadCmd::collectAttachments(sceneProject, entityData.entity, model);
+    ModelLoadCmd::parkEntities(sceneProject, entityData.entity, entityData.modelAttachments);
+    if (tracked) {
+        entityData.modelNodesDeleteCmd = std::make_shared<DeleteEntityCmd>(project, sceneId, ModelLoadCmd::collectModelDeleteRoots(scene, model), true);
+        entityData.modelNodesDeleteCmd->execute();
+    }
+
+    ModelComponent& rebuilt = scene->getComponent<ModelComponent>(entityData.entity);
+    ProjectUtils::destroyModelNodes(scene, rebuilt);
+    rebuilt.loadedFilename.clear();
+    rebuilt.needUpdateModel = true;
+    entityData.modelRebuilt = true;
 }
 
 bool editor::ComponentToBundleSharedCmd::execute() {
@@ -39,6 +67,9 @@ bool editor::ComponentToBundleSharedCmd::execute() {
             bundle->clearComponentOverride(sceneProject->id, entityData.entity, componentType);
 
             Entity registryEntity = bundle->getRegistryEntity(sceneId, entityData.entity);
+            if (componentType == ComponentType::ModelComponent) {
+                rebuildModel(entityData, bundle->registry->getComponent<ModelComponent>(registryEntity));
+            }
             Catalog::copyComponent(bundle->registry.get(), registryEntity, sceneProject->scene, entityData.entity, componentType);
             std::unordered_map<Entity, Entity> registryToLocal;
             if (const EntityBundle::Instance* instance = bundle->getInstance(sceneId, entityData.entity)) {
@@ -72,7 +103,24 @@ void editor::ComponentToBundleSharedCmd::undo() {
                 parent = sceneProject->scene->getComponent<Transform>(entityData.entity).parent;
             }
 
+            // The nodes of the shared file go, the old ones come back below
+            if (entityData.modelRebuilt) {
+                ProjectUtils::destroyModelNodes(sceneProject->scene, sceneProject->scene->getComponent<ModelComponent>(entityData.entity));
+            }
+
             Stream::decodeComponents(entityData.entity, parent, sceneProject->scene, entityData.recovery);
+
+            if (entityData.modelNodesDeleteCmd) {
+                entityData.modelNodesDeleteCmd->undo();
+                entityData.modelNodesDeleteCmd.reset();
+                ModelLoadCmd::unparkEntities(sceneProject, entityData.modelAttachments);
+            } else if (entityData.modelRebuilt && ModelLoadCmd::rebuildNodes(sceneProject->scene, entityData.entity)) {
+                // Runtime nodes have no snapshot, the old file builds them again
+                ModelLoadCmd::attachToNodes(sceneProject->scene, sceneProject->scene->getComponent<ModelComponent>(entityData.entity), entityData.modelAttachments);
+                ProjectUtils::sortEntitiesByTransformOrder(sceneProject->scene, sceneProject->entities);
+            }
+            entityData.modelAttachments.clear();
+            entityData.modelRebuilt = false;
         }
 
     }

@@ -65,6 +65,11 @@ public:
     static void loadLuaScriptPropertiesFromString(ScriptEntry& entry, const std::string& scriptContent, const std::string& chunkName);
 
     static void collectModelEntities(Scene* scene, const ModelComponent& model, std::vector<Entity>& out);
+    // Also the runtime nodes of a bundle member, which DeleteEntityCmd cannot see
+    static bool destroyModelNodes(Scene* scene, ModelComponent& model);
+    static void clearModelNodes(ModelComponent& model);
+    // Nodes made in the editor are tracked and saved, a bundle member builds them when it loads
+    static bool hasTrackedModelEntities(Scene* scene, const ModelComponent& model, const std::vector<Entity>& entities);
 
     // True when a model root has no renderable submeshes of its own while its
     // generated model children do. Components that only render same-entity mesh

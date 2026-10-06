@@ -357,6 +357,12 @@ namespace doriax::editor{
         struct PlaySession {
             uint32_t mainSceneId = NULL_PROJECT_SCENE;
             std::vector<PlayRuntimeScene> runtimeScenes;
+            // What its viewport showed when another one took the engine
+            bool hasStoredScenes = false;
+            Scene* storedMainScene = nullptr;
+            std::vector<Scene*> storedLayers;
+            // Shader variants the copies retired by a reload loaded, recorded at Stop
+            std::map<uint32_t, std::set<ShaderKey>> retiredShaderKeys;
             std::atomic<bool> cancelled{false};
             std::atomic<bool> startupThreadDone{false};  // Set when connect thread exits
             std::atomic<bool> startupSucceeded{false};   // True only if finalizeStart was called
@@ -368,6 +374,7 @@ namespace doriax::editor{
         SceneProject* createRuntimeCloneFromSource(const SceneProject* source);
         void prepareRuntimeScene(PlayRuntimeScene& entry);
         std::shared_ptr<PlaySession> buildRuntimeSceneStack(uint32_t sceneId, std::vector<size_t>& stackIndices);
+        void retireRuntimeStack(uint32_t sceneId);
         Entity getSceneCamera(const SceneProject* sceneProject) const;
         void cleanupPlaySession(const std::shared_ptr<PlaySession>& session);
 
@@ -487,7 +494,7 @@ namespace doriax::editor{
 
         void destroyPlayCreatedEntities(SceneProject* sceneProject);
         void finalizeStart(SceneProject* mainSceneProject, std::vector<PlayRuntimeScene>& runtimeScenes);
-        void finalizeStop(SceneProject* mainSceneProject, std::vector<PlayRuntimeScene> runtimeScenes);
+        void finalizeStop(SceneProject* mainSceneProject, std::vector<PlayRuntimeScene> runtimeScenes, const std::map<uint32_t, std::set<ShaderKey>>& retiredShaderKeys);
         void runPlayStartup(const std::shared_ptr<PlaySession>& session, uint32_t sceneId, const LocalBuildSettings& buildSettings);
         void failPlayStartup(const std::shared_ptr<PlaySession>& session, uint32_t sceneId, const std::string& message,
                      const std::string& alertTitle = "", const std::string& alertMessage = "");
@@ -938,7 +945,9 @@ namespace doriax::editor{
         void toggleCameraDetached(uint32_t sceneId);
         void waitForPlaySessionToFinish();
 
-        std::vector<Scene*> getRunningRuntimeLayers(uint32_t sceneId);
+        // A runtime scene loaded in place of the played one comes back as mainScene
+        std::vector<Scene*> getRunningRuntimeLayers(uint32_t sceneId, Scene*& mainScene);
+        void storeRuntimeScenes(uint32_t sceneId);
 
         void debugSceneHierarchy();
     };

@@ -68,7 +68,7 @@ When you want a finished artifact instead, use **Desktop** export to build a rea
 - Optionally call on the built-in AI assistant to inspect the project, create entities, draft Lua and C++ scripts, and invoke builds, with preview-then-approve, auto-run-read-only, and full-agent modes deciding how much it may do on its own
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-crystal-peaks.png" alt="3D platformer level in the Doriax 3D editor" width="48%">
+  <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-lost-slime-3d.png" alt="3D platformer level in the Doriax 3D editor" width="48%">
   <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-2d-sprite.png" alt="Sprite and tilemap tools in the Doriax 2D editor" width="48%">
 </p>
 <p align="center">

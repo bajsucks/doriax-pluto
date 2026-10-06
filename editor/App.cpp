@@ -2167,9 +2167,14 @@ void editor::App::engineRender(){
             if (lastActivatedScene != sceneProject.id){
                 // Collected before activate(): it drops every engine layer, and a dropped
                 // layer no longer counts as running, so this would come back empty.
-                std::vector<Scene*> runtimeLayers = project.getRunningRuntimeLayers(sceneProject.id);
+                project.storeRuntimeScenes(lastActivatedScene);
+                Scene* runtimeMainScene = nullptr;
+                std::vector<Scene*> runtimeLayers = project.getRunningRuntimeLayers(sceneProject.id, runtimeMainScene);
                 sceneProject.sceneRender->activate();
 
+                if (runtimeMainScene) {
+                    Engine::setScene(runtimeMainScene);
+                }
                 for (Scene* runtimeLayer : runtimeLayers) {
                     Engine::addSceneLayer(runtimeLayer);
                 }

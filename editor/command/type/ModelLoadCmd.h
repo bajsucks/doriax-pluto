@@ -14,16 +14,40 @@
 
 #include <atomic>
 #include <memory>
+#include <unordered_map>
 
 namespace doriax::editor{
 
     class ModelLoadCmd: public Command{
+
+    public:
+        // A node hierarchy is rebuilt rather than refreshed, so what the user arranged on it is
+        // recorded and put back by node name once the new nodes exist.
+        struct NodeRef {
+            int index = -1;
+            std::string name;
+            bool bone = false; // a joint, which the flat skin path keeps apart from a mesh at the same index
+        };
+        struct LocalPose {
+            Vector3 position;
+            Quaternion rotation;
+            Vector3 scale;
+        };
+        // An entity the user hung on a model node; parked at the model while the node is rebuilt
+        struct ParkedEntity {
+            Entity entity = NULL_ENTITY;
+            Entity oldParent = NULL_ENTITY;
+            NodeRef parent;
+            LocalPose pose;
+        };
 
     private:
         YAML::Node oldTransform;
         YAML::Node oldMesh;
         YAML::Node oldModel;
         DeleteEntityCmd* oldSubEntitiesDeleteCmd = nullptr;
+        // a bundle member's runtime nodes, which no delete command can restore
+        bool oldRuntimeNodesDestroyed = false;
         CreateEntityCmd* createEntityCmd = nullptr;
 
         Project* project;
@@ -44,25 +68,6 @@ namespace doriax::editor{
         // Mesh children the reload keeps, so undo only removes the ones it created
         std::vector<Entity> reusedEntities;
 
-        // A node hierarchy is rebuilt rather than refreshed, so a same-file reload records what the
-        // user arranged and puts it back by node name once the new nodes exist.
-        struct NodeRef {
-            int index = -1;
-            std::string name;
-            bool bone = false; // a joint, which the flat skin path keeps apart from a mesh at the same index
-        };
-        struct LocalPose {
-            Vector3 position;
-            Quaternion rotation;
-            Vector3 scale;
-        };
-        // An entity the user hung on a model node; parked at the model while the node is rebuilt
-        struct ParkedEntity {
-            Entity entity = NULL_ENTITY;
-            Entity oldParent = NULL_ENTITY;
-            NodeRef parent;
-            LocalPose pose;
-        };
         // An imported part the user moved away from where the file puts it
         struct MovedPart {
             NodeRef part;
@@ -72,25 +77,26 @@ namespace doriax::editor{
         };
         std::vector<ParkedEntity> parkedEntities;
         std::vector<MovedPart> movedParts;
+        // Another file has other nodes, so the parked entities stay on the model
+        bool sameModelFile = false;
 
         // The generated mesh entities are destroyed before the load, so their submesh edits are
         // taken aside here. Empty when the asset itself changed.
         MeshSystem::SubmeshOverrides savedSubmeshOverrides;
 
-        static std::vector<Entity> collectModelDeleteRoots(Scene* scene, const ModelComponent& model);
         static bool isMappedMeshNode(const ModelComponent& model, Entity entity);
         static NodeRef makeNodeRef(const ModelComponent& model, int nodeIndex, bool bone);
+        static std::unordered_map<Entity, NodeRef> mapModelNodes(Scene* scene, const ModelComponent& model);
         static Entity findModelNode(const ModelComponent& model, const NodeRef& ref);
         static void attachLocal(Scene* scene, Entity child, Entity parent, const LocalPose& pose);
 
-        void recordArrangement(SceneProject* sceneProject, const ModelComponent& model);
+        void recordArrangement(SceneProject* sceneProject, const ModelComponent& model, bool parts);
         void restoreArrangement(SceneProject* sceneProject, const ModelComponent& model);
-        void parkEntities(SceneProject* sceneProject);
-        void unparkEntities(SceneProject* sceneProject);
 
         bool tryLoad();
         void finalizeLoad();
         void schedulePoll();
+        void rebuildRuntimeNodes(SceneProject* sceneProject);
 
     public:
         ModelLoadCmd(Project* project, uint32_t sceneId, Entity entity, const std::string& modelPath);
@@ -99,6 +105,16 @@ namespace doriax::editor{
         // Terrain object placement: created quiet, under `parent`, with a local transform
         ModelLoadCmd(Project* project, uint32_t sceneId, const std::string& entityName, Entity parent, const Vector3& position, const Quaternion& rotation, const Vector3& scale, const std::string& modelPath);
         ~ModelLoadCmd() override;
+
+        static std::vector<Entity> collectModelDeleteRoots(Scene* scene, const ModelComponent& model);
+        // The entities the user hung on the nodes of a model, moved to the model and back
+        static std::vector<ParkedEntity> collectAttachments(SceneProject* sceneProject, Entity modelEntity, const ModelComponent& model);
+        static void parkEntities(SceneProject* sceneProject, Entity modelEntity, const std::vector<ParkedEntity>& parked);
+        static void unparkEntities(SceneProject* sceneProject, const std::vector<ParkedEntity>& parked);
+        // Onto the nodes of a rebuilt model, by node reference
+        static void attachToNodes(Scene* scene, const ModelComponent& model, const std::vector<ParkedEntity>& parked);
+        // Builds the nodes of a model again now, once its old ones are destroyed
+        static bool rebuildNodes(Scene* scene, Entity entity);
 
         bool execute() override;
         void undo() override;

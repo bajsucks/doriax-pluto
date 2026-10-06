@@ -12,6 +12,7 @@
 #include "Factory.h"
 #include "pool/SoundPool.h"
 #include "pool/ShaderPool.h"
+#include "subsystem/MeshSystem.h"
 #include "util/CameraTextureLink.h"
 #include "util/ProjectUtils.h"
 #include "util/StringUtils.h"
@@ -1274,6 +1275,45 @@ Matrix4 editor::Stream::decodeMatrix4(const YAML::Node& node) {
     return mat;
 }
 
+// A texture known only by id, like one of a model still loading, is saved too
+static bool hasTexture(const Texture& texture) {
+    return !texture.empty() || !texture.getId().empty();
+}
+
+// An override keeps only the model's file when the nodes are built by the load, which is
+// the case unless they were made in the editor and are saved with the scene
+static YAML::Node encodeOverrideComponents(Entity entity, const EntityRegistry* registry, Signature signature, const editor::SceneProject* sceneProject) {
+    YAML::Node components = editor::Stream::encodeComponents(entity, registry, signature);
+    if (signature.test(registry->getComponentId<ModelComponent>())) {
+        const ModelComponent& model = registry->getComponent<ModelComponent>(entity);
+        if (!editor::ProjectUtils::hasTrackedModelEntities(sceneProject->scene, model, sceneProject->entities)) {
+            components[editor::Catalog::getComponentName(editor::ComponentType::ModelComponent, true)] = editor::Stream::encodeModelComponent(model, true);
+        }
+    }
+    return components;
+}
+
+// Model texture ids start with the model's absolute path, files keep it relative to the assets
+static std::string encodeModelTextureId(const std::string& id) {
+    const size_t separator = id.find("|gltf-image|");
+    if (separator == std::string::npos) return id;
+
+    const fs::path path(id.substr(0, separator));
+    if (!path.is_absolute()) return id;
+
+    const fs::path relative = path.lexically_normal().lexically_relative(fs::path(System::instance().getAssetPath()).lexically_normal());
+    if (relative.empty() || *relative.begin() == "..") return id;
+
+    return relative.generic_string() + id.substr(separator);
+}
+
+static std::string decodeModelTextureId(const std::string& id) {
+    const size_t separator = id.find("|gltf-image|");
+    if (separator == std::string::npos || fs::path(id.substr(0, separator)).is_absolute()) return id;
+
+    return MeshSystem::getModelFilenameKey(id.substr(0, separator)) + id.substr(separator);
+}
+
 YAML::Node editor::Stream::encodeTexture(const Texture& texture, bool embedData) {
     YAML::Node node;
 
@@ -1287,7 +1327,7 @@ YAML::Node editor::Stream::encodeTexture(const Texture& texture, bool embedData)
         return node;
     }
 
-    if (texture.empty() || texture.isFramebuffer())
+    if (!hasTexture(texture) || texture.isFramebuffer())
         return node;
 
     const bool isCube = texture.isCubeMap() || (texture.getNumFaces() == 6);
@@ -1312,7 +1352,7 @@ YAML::Node editor::Stream::encodeTexture(const Texture& texture, bool embedData)
                 node["data"] = Base64::encode(static_cast<const unsigned char*>(embeddedData->getData()), embeddedData->getSize());
             } else {
                 node["source"] = "id";
-                node["id"] = texture.getId();
+                node["id"] = encodeModelTextureId(texture.getId());
             }
         }
     } else {
@@ -1398,7 +1438,7 @@ Texture editor::Stream::decodeTexture(const YAML::Node& node) {
                 }
             } else if (source == "id") {
                 if (node["id"]) {
-                    texture.setId(node["id"].as<std::string>());
+                    texture.setId(decodeModelTextureId(node["id"].as<std::string>()));
                 }
             } else if (source == "camera") {
                 // framebuffer is bound later by CameraTextureLink::resolve,
@@ -1512,7 +1552,9 @@ YAML::Node editor::Stream::encodeInterleavedBuffer(const InterleavedBuffer& buff
     return node;
 }
 
+// The node holds the whole buffer, so a used one is replaced, keeping its GPU handle
 void editor::Stream::decodeInterleavedBuffer(InterleavedBuffer& buffer, const YAML::Node& node) {
+    buffer.clearAll();
     decodeBuffer(buffer, node);
 
     if (node["vertexSize"]) {
@@ -1526,6 +1568,7 @@ YAML::Node editor::Stream::encodeIndexBuffer(const IndexBuffer& buffer) {
 }
 
 void editor::Stream::decodeIndexBuffer(IndexBuffer& buffer, const YAML::Node& node) {
+    buffer.clearAll();
     decodeBuffer(buffer, node);
 }
 
@@ -3117,7 +3160,7 @@ YAML::Node editor::Stream::encodeEntityAux(const Entity entity, const EntityRegi
                                 YAML::Node entry;
                                 entry["registryEntity"] = member.registryEntity;
                                 Signature sig = Catalog::componentMaskToSignature(registry, overrideIt->second);
-                                YAML::Node overrideComps = encodeComponents(member.localEntity, registry, sig);
+                                YAML::Node overrideComps = encodeOverrideComponents(member.localEntity, registry, sig, sceneProject);
                                 if (overrideComps.IsMap() && overrideComps.size() > 0) {
                                     entry["components"] = overrideComps;
                                 }
@@ -3148,7 +3191,7 @@ YAML::Node editor::Stream::encodeEntityAux(const Entity entity, const EntityRegi
                                         entry["bundlePath"] = nestedBC.path;
                                         entry["bundleRootRegistryEntity"] = member.registryEntity;
                                         Signature sig = Catalog::componentMaskToSignature(registry, nOverrideIt->second);
-                                        YAML::Node overrideComps = encodeComponents(nestedMember.localEntity, registry, sig);
+                                        YAML::Node overrideComps = encodeOverrideComponents(nestedMember.localEntity, registry, sig, sceneProject);
                                         if (overrideComps.IsMap() && overrideComps.size() > 0) {
                                             entry["components"] = overrideComps;
                                         }
@@ -3530,23 +3573,23 @@ YAML::Node editor::Stream::encodeMaterial(const Material& material, bool embedTe
     node["emissiveFactor"] = encodeVector3(material.emissiveFactor);
 
     // Encode textures using the helper method
-    if (!material.baseColorTexture.empty()) {
+    if (hasTexture(material.baseColorTexture)) {
         node["baseColorTexture"] = encodeTexture(material.baseColorTexture, embedTextureData);
     }
 
-    if (!material.emissiveTexture.empty()) {
+    if (hasTexture(material.emissiveTexture)) {
         node["emissiveTexture"] = encodeTexture(material.emissiveTexture, embedTextureData);
     }
 
-    if (!material.metallicRoughnessTexture.empty()) {
+    if (hasTexture(material.metallicRoughnessTexture)) {
         node["metallicRoughnessTexture"] = encodeTexture(material.metallicRoughnessTexture, embedTextureData);
     }
 
-    if (!material.occlusionTexture.empty()) {
+    if (hasTexture(material.occlusionTexture)) {
         node["occlusionTexture"] = encodeTexture(material.occlusionTexture, embedTextureData);
     }
 
-    if (!material.normalTexture.empty()) {
+    if (hasTexture(material.normalTexture)) {
         node["normalTexture"] = encodeTexture(material.normalTexture, embedTextureData);
     }
 
@@ -4781,6 +4824,8 @@ MeshComponent editor::Stream::decodeMeshComponent(const YAML::Node& node, const 
     // Decode buffers using generic methods
     if (node["buffer"]) {
         decodeInterleavedBuffer(mesh.buffer, node["buffer"]);
+        // Counted from the new buffer when the mesh loads
+        mesh.vertexCount = 0;
     }
 
     if (node["indices"]) {
@@ -4845,8 +4890,9 @@ MeshComponent editor::Stream::decodeMeshComponent(const YAML::Node& node, const 
     if (node["cullingMode"]) mesh.cullingMode = stringToCullingMode(node["cullingMode"].as<std::string>());
     if (node["windingOrder"]) mesh.windingOrder = stringToWindingOrder(node["windingOrder"].as<std::string>());
 
-    if (node["customShader"]) mesh.customShader = node["customShader"].as<std::string>();
-    if (node["customDepthShader"]) mesh.customDepthShader = node["customDepthShader"].as<std::string>();
+    // Written only when set
+    mesh.customShader = node["customShader"] ? node["customShader"].as<std::string>() : "";
+    mesh.customDepthShader = node["customDepthShader"] ? node["customDepthShader"].as<std::string>() : "";
     mesh.shaderUniforms = decodeShaderUniforms(node["shaderUniforms"]);
     mesh.needUpdateShaderUniforms = true;
 
@@ -4913,8 +4959,8 @@ UIComponent editor::Stream::decodeUIComponent(const YAML::Node& node, const UICo
     //ui.loaded = node["loaded"].as<bool>();
     //ui.loadCalled = node["loadCalled"].as<bool>();
 
-    if (node["buffer"]) decodeBuffer(ui.buffer, node["buffer"]);
-    if (node["indices"]) decodeBuffer(ui.indices, node["indices"]);
+    if (node["buffer"]) decodeInterleavedBuffer(ui.buffer, node["buffer"]);
+    if (node["indices"]) decodeIndexBuffer(ui.indices, node["indices"]);
     if (node["minBufferCount"]) ui.minBufferCount = node["minBufferCount"].as<unsigned int>();
     if (node["minIndicesCount"]) ui.minIndicesCount = node["minIndicesCount"].as<unsigned int>();
 
@@ -4938,7 +4984,8 @@ UIComponent editor::Stream::decodeUIComponent(const YAML::Node& node, const UICo
     if (node["pointerMoved"]) ui.pointerMoved = node["pointerMoved"].as<bool>();
     if (node["focused"]) ui.focused = node["focused"].as<bool>();
 
-    if (node["customShader"]) ui.customShader = node["customShader"].as<std::string>();
+    // Written only when set
+    ui.customShader = node["customShader"] ? node["customShader"].as<std::string>() : "";
     ui.shaderUniforms = decodeShaderUniforms(node["shaderUniforms"]);
     ui.needUpdateShaderUniforms = true;
 
@@ -5679,7 +5726,7 @@ TerrainComponent editor::Stream::decodeTerrainComponent(const YAML::Node& node, 
     return terrain;
 }
 
-YAML::Node editor::Stream::encodeModelComponent(const ModelComponent& model) {
+YAML::Node editor::Stream::encodeModelComponent(const ModelComponent& model, bool onlyFile) {
     YAML::Node node;
 
     if (!model.filename.empty()) {
@@ -5688,6 +5735,11 @@ YAML::Node editor::Stream::encodeModelComponent(const ModelComponent& model) {
 
     if (model.mergeStaticMeshes) {
         node["mergeStaticMeshes"] = true;
+    }
+
+    // Without the node mapping, for nodes each loaded copy builds itself
+    if (onlyFile) {
+        return node;
     }
 
     node["skeleton"] = static_cast<uint32_t>(model.skeleton);
@@ -5754,9 +5806,9 @@ ModelComponent editor::Stream::decodeModelComponent(const YAML::Node& node, cons
         model = *oldModel;
     }
 
-    // Also check for the old modelPath for exact backward compatibility with old save files
-    if (node["filename"]) model.filename = node["filename"].as<std::string>();
-    if (node["mergeStaticMeshes"]) model.mergeStaticMeshes = node["mergeStaticMeshes"].as<bool>();
+    // Written only when set
+    model.filename = node["filename"] ? node["filename"].as<std::string>() : "";
+    model.mergeStaticMeshes = node["mergeStaticMeshes"] && node["mergeStaticMeshes"].as<bool>();
     if (node["skeleton"]) model.skeleton = static_cast<Entity>(node["skeleton"].as<uint32_t>());
 
     if (node["animations"]) {
@@ -5793,7 +5845,8 @@ ModelComponent editor::Stream::decodeModelComponent(const YAML::Node& node, cons
         }
     }
 
-    model.nodesIdMapping.clear();
+    // A node written with onlyFile has no skeleton, and keeps the nodes already loaded
+    if (node["skeleton"]) model.nodesIdMapping.clear();
     if (node["nodesIdMapping"]) {
         for (const auto& mappedNode : node["nodesIdMapping"]) {
             int nodeIdx = mappedNode["node"].as<int>();
@@ -5803,6 +5856,7 @@ ModelComponent editor::Stream::decodeModelComponent(const YAML::Node& node, cons
     }
 
     if (!oldModel || model.filename != oldModel->filename ||
+            model.mergeStaticMeshes != oldModel->mergeStaticMeshes ||
             model.bonesIdMapping != oldModel->bonesIdMapping ||
             model.meshNodesMapping != oldModel->meshNodesMapping ||
             model.nodesIdMapping != oldModel->nodesIdMapping) {
@@ -6079,12 +6133,8 @@ YAML::Node editor::Stream::encodeCameraComponent(const CameraComponent& camera) 
 }
 
 CameraComponent editor::Stream::decodeCameraComponent(const YAML::Node& node, const CameraComponent* oldCamera) {
-    CameraComponent camera;
-
-    // Use old values as defaults if provided
-    if (oldCamera) {
-        camera = *oldCamera;
-    }
+    // Copied from the old one, a default camera would allocate a framebuffer that is then lost
+    CameraComponent camera = oldCamera ? *oldCamera : CameraComponent();
 
     if (node["type"]) camera.type = stringToCameraType(node["type"].as<std::string>());
     camera.target = decodeFiniteVector3(node["target"], camera.target);
@@ -6142,7 +6192,8 @@ SoundComponent editor::Stream::decodeSoundComponent(const YAML::Node& node, cons
     }
 
     if (node["state"]) audio.state = stringToSoundState(node["state"].as<std::string>());
-    if (node["filename"]) audio.filename = node["filename"].as<std::string>();
+    // Written only when set
+    audio.filename = node["filename"] ? node["filename"].as<std::string>() : "";
     if (node["enableClocked"]) audio.enableClocked = node["enableClocked"].as<bool>();
     if (node["volume"]) audio.volume = decodeFiniteDouble(node["volume"], audio.volume);
     if (node["speed"]) audio.speed = decodeFinite(node["speed"], audio.speed);
@@ -6305,7 +6356,8 @@ SkyComponent editor::Stream::decodeSkyComponent(const YAML::Node& node, const Sk
     if (node["rotation"]) sky.rotation = node["rotation"].as<float>();
     if (node["visible"]) sky.visible = node["visible"].as<bool>();
 
-    if (node["customShader"]) sky.customShader = node["customShader"].as<std::string>();
+    // Written only when set
+    sky.customShader = node["customShader"] ? node["customShader"].as<std::string>() : "";
     sky.shaderUniforms = decodeShaderUniforms(node["shaderUniforms"]);
     sky.needUpdateShaderUniforms = true;
 
@@ -6396,8 +6448,9 @@ WaterComponent editor::Stream::decodeWaterComponent(const YAML::Node& node, cons
     if (node["buoyancy"]) water.buoyancy = node["buoyancy"].as<bool>();
     if (node["buoyancyDepth"]) water.buoyancyDepth = node["buoyancyDepth"].as<float>();
 
-    if (node["customShader"]) water.customShader = node["customShader"].as<std::string>();
-    if (node["customUnderwaterShader"]) water.customUnderwaterShader = node["customUnderwaterShader"].as<std::string>();
+    // Written only when set
+    water.customShader = node["customShader"] ? node["customShader"].as<std::string>() : "";
+    water.customUnderwaterShader = node["customUnderwaterShader"] ? node["customUnderwaterShader"].as<std::string>() : "";
     water.shaderUniforms = decodeShaderUniforms(node["shaderUniforms"]);
     water.needUpdateShaderUniforms = true;
     water.needUpdateTexture = true;
@@ -6707,6 +6760,11 @@ YAML::Node editor::Stream::encodeBody3DComponent(const Body3DComponent& body) {
     node["buoyancy"] = body.buoyancy;
     node["waterDrag"] = body.waterDrag;
     node["waterAngularDrag"] = body.waterAngularDrag;
+    if (body.overrideMassProperties) {
+        node["overrideMassProperties"] = true;
+        node["solidBoxSize"] = encodeVector3(body.solidBoxSize);
+        node["solidBoxDensity"] = body.solidBoxDensity;
+    }
 
     // Six booleans instead of the bit mask, so the file stays readable.
     YAML::Node dofsNode;
@@ -6782,6 +6840,10 @@ Body3DComponent editor::Stream::decodeBody3DComponent(const YAML::Node& node, co
     if (node["buoyancy"]) body.buoyancy = node["buoyancy"].as<float>();
     if (node["waterDrag"]) body.waterDrag = node["waterDrag"].as<float>();
     if (node["waterAngularDrag"]) body.waterAngularDrag = node["waterAngularDrag"].as<float>();
+    // Written only while overriding
+    body.overrideMassProperties = node["overrideMassProperties"] && node["overrideMassProperties"].as<bool>();
+    if (node["solidBoxSize"]) body.solidBoxSize = decodeVector3(node["solidBoxSize"]);
+    if (node["solidBoxDensity"]) body.solidBoxDensity = node["solidBoxDensity"].as<float>();
 
     if (node["allowedDOFs"]) {
         const YAML::Node& dofsNode = node["allowedDOFs"];
@@ -8003,8 +8065,9 @@ PointsComponent editor::Stream::decodePointsComponent(const YAML::Node& node, co
     if (node["autoTransparency"]) points.autoTransparency = node["autoTransparency"].as<bool>();
     if (node["texture"]) points.texture = decodeTexture(node["texture"]);
 
+    // Frames and the custom shader are written only when set
+    points.numFramesRect = 0;
     if (node["framesRect"]) {
-        points.numFramesRect = 0;
         for (const YAML::Node& frameNode : node["framesRect"]) {
             if (points.numFramesRect < (unsigned int)points.framesRect.size()) {
                 points.framesRect[points.numFramesRect] = decodeSpriteFrameData(frameNode);
@@ -8027,19 +8090,17 @@ PointsComponent editor::Stream::decodePointsComponent(const YAML::Node& node, co
         }
     }
 
-    if (node["customShader"]) points.customShader = node["customShader"].as<std::string>();
+    points.customShader = node["customShader"] ? node["customShader"].as<std::string>() : "";
     points.shaderUniforms = decodeShaderUniforms(node["shaderUniforms"]);
     points.needUpdateShaderUniforms = true;
 
-    // Reset runtime fields
+    // Reset runtime fields, a loaded component reloads so its render resources are released
     points.renderPoints.clear();
     points.numVisible = 0;
-    points.loaded = false;
-    points.loadCalled = false;
     points.needUpdate = true;
     points.needUpdateBuffer = false;
     points.needUpdateTexture = true;
-    points.needReload = false;
+    points.needReload = points.loadCalled;
 
     return points;
 }
@@ -8090,14 +8151,14 @@ LinesComponent editor::Stream::decodeLinesComponent(const YAML::Node& node, cons
         lines.maxLines = static_cast<unsigned int>(lines.lines.size());
     }
 
-    if (node["customShader"]) lines.customShader = node["customShader"].as<std::string>();
+    // Written only when set
+    lines.customShader = node["customShader"] ? node["customShader"].as<std::string>() : "";
     lines.shaderUniforms = decodeShaderUniforms(node["shaderUniforms"]);
     lines.needUpdateShaderUniforms = true;
 
-    lines.loaded = false;
-    lines.loadCalled = false;
+    // A loaded component reloads so its render resources are released
     lines.needUpdateBuffer = false;
-    lines.needReload = false;
+    lines.needReload = lines.loadCalled;
 
     return lines;
 }

@@ -389,6 +389,39 @@ void editor::ProjectUtils::collectModelEntities(Scene* scene, const ModelCompone
     }
 }
 
+bool editor::ProjectUtils::destroyModelNodes(Scene* scene, ModelComponent& model){
+    std::vector<Entity> entities;
+    collectModelEntities(scene, model, entities);
+
+    bool destroyed = false;
+    for (Entity entity : entities){
+        if (scene->isEntityCreated(entity)){
+            scene->destroyEntity(entity);
+            destroyed = true;
+        }
+    }
+    clearModelNodes(model);
+    return destroyed;
+}
+
+bool editor::ProjectUtils::hasTrackedModelEntities(Scene* scene, const ModelComponent& model, const std::vector<Entity>& entities){
+    std::vector<Entity> modelEntities;
+    collectModelEntities(scene, model, modelEntities);
+    return std::any_of(modelEntities.begin(), modelEntities.end(), [&](Entity entity){
+        return std::find(entities.begin(), entities.end(), entity) != entities.end();
+    });
+}
+
+void editor::ProjectUtils::clearModelNodes(ModelComponent& model){
+    model.skeleton = NULL_ENTITY;
+    model.bonesIdMapping.clear();
+    model.bonesNameMapping.clear();
+    model.animations.clear();
+    model.meshNodesMapping.clear();
+    model.nodesIdMapping.clear();
+    model.skinBindings.clear();
+}
+
 bool editor::ProjectUtils::hasModelMeshChildrenWithoutRootGeometry(EntityRegistry* registry, Entity entity){
     if (!registry)
         return false;

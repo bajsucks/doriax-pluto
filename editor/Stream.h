@@ -344,7 +344,7 @@ namespace doriax::editor {
         static YAML::Node encodeWaterExclusionComponent(const WaterExclusionComponent& exclusion);
         static WaterExclusionComponent decodeWaterExclusionComponent(const YAML::Node& node, const WaterExclusionComponent* oldExclusion = nullptr);
 
-        static YAML::Node encodeModelComponent(const ModelComponent& model);
+        static YAML::Node encodeModelComponent(const ModelComponent& model, bool onlyFile = false);
         static ModelComponent decodeModelComponent(const YAML::Node& node, const ModelComponent* oldModel = nullptr);
 
         static YAML::Node encodeBundleComponent(const BundleComponent& bundle);

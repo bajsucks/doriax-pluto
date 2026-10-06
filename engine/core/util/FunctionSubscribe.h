@@ -9,6 +9,7 @@
 #define FUNCTIONSUBSCRIBE_H
 
 #include <cstdint>
+#include <exception>
 #include <functional>
 #include <type_traits>
 #include <memory>
@@ -114,6 +115,24 @@ namespace doriax {
             return handler;
         }
     };
+
+    // A C++ exception thrown by a guarded callback is reported like a crash
+    template<typename Fn>
+    inline void callCatching(std::string& exception, Fn&& fn) {
+        try {
+            fn();
+        } catch (const std::exception& e) {
+            exception = std::string("Unhandled C++ exception (") + e.what() + ")";
+        } catch (...) {
+            exception = "Unhandled C++ exception";
+        }
+    }
+
+    inline std::string crashDescription(const CrashInfo& ci) {
+        return std::string(ci.name ? ci.name : "UNKNOWN") +
+               " (" + (ci.description ? ci.description : "") +
+               ") [code=" + std::to_string(ci.code) + "]";
+    }
     #endif
 
     template<typename T>
@@ -280,16 +299,13 @@ namespace doriax {
                         auto& crashHandler = FunctionSubscribeGlobal::getCrashHandler();
                         if (crashHandler) {
                             CrashInfo ci{};
+                            std::string exception;
                             bool ok = callWithCrashGuard([&](){
-                                function(args...);
+                                callCatching(exception, [&](){ function(args...); });
                             }, &ci);
 
-                            if (!ok) {
-                                std::string errorInfo = std::string(ci.name ? ci.name : "UNKNOWN") + 
-                                                    " (" + (ci.description ? ci.description : "") + 
-                                                    ") [code=" + std::to_string(ci.code) + "]";
-
-                                crashHandler(tag, errorInfo);
+                            if (!ok || !exception.empty()) {
+                                crashHandler(tag, ok ? exception : crashDescription(ci));
 
                                 removeAt(i);
                                 continue;
@@ -323,18 +339,15 @@ namespace doriax {
                 if (crashHandler) {
                     Ret result{};
                     CrashInfo ci{};
+                    std::string exception;
                     bool ok = callWithCrashGuard([&](){
-                        result = function(args...);
+                        callCatching(exception, [&](){ result = function(args...); });
                     }, &ci);
 
-                    if (ok) {
+                    if (ok && exception.empty()) {
                         return result;
                     } else {
-                        std::string errorInfo = std::string(ci.name ? ci.name : "UNKNOWN") + 
-                                            " (" + (ci.description ? ci.description : "") + 
-                                            ") [code=" + std::to_string(ci.code) + "]";
-
-                        crashHandler(tag, errorInfo);
+                        crashHandler(tag, ok ? exception : crashDescription(ci));
 
                         removeAt(i);
                         continue;
