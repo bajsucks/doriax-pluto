@@ -32,7 +32,8 @@ static const int cxxStandardCount = sizeof(cxxStandardNames) / sizeof(cxxStandar
 static_assert(std::size(cxxStandardNames) == std::size(cxxStandards));
 
 // D6: what ScriptCreateDialog and the Resources window create. .pluto is the
-// default for new projects; an older project.yaml keeps .lua (Stream.cpp).
+// default everywhere; only an explicit "lua" here (or in project.yaml) keeps
+// creating .lua (Stream.cpp).
 static const char* scriptExtensionNames[] = { "Pluto (.pluto)", "Lua (.lua)" };
 static const ScriptExtension scriptExtensionValues[] = { ScriptExtension::PLUTO, ScriptExtension::LUA };
 static const int scriptExtensionCount = sizeof(scriptExtensionValues) / sizeof(scriptExtensionValues[0]);

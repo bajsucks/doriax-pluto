@@ -1891,9 +1891,9 @@ YAML::Node editor::Stream::encodeProject(Project* project) {
     if (!project->getLuaDir().empty()) {
         root["luaDir"] = project->getLuaDir().string();
     }
-    // Always written, unlike the value-diffed settings below: a missing key has
-    // to mean "legacy project, keep .lua" (D6), so the new-project default
-    // cannot be left implicit.
+    // Always written rather than value-diffed: an absent key still means .pluto
+    // (the default in decodeProject), but writing it records the choice so a
+    // project that opted into .lua keeps it explicitly.
     root["scriptExtension"] = Project::scriptExtensionToString(project->getScriptExtension());
     root["scriptCompilation"] = Project::scriptCompilationToString(project->getScriptCompilation());
     if (!project->getScriptDirs().empty()) {
@@ -2200,12 +2200,14 @@ void editor::Stream::decodeProject(Project* project, const YAML::Node& node, con
         project->setLuaDir(node["luaDir"].as<std::string>());
     }
 
-    // A project.yaml written before these keys existed belongs to the .lua era:
-    // keep creating .lua scripts there instead of switching it to .pluto (D6).
-    // The save path always writes them, so the fallback only runs once.
+    // New scripts are .pluto unless the project opted into .lua, and that holds
+    // for a project.yaml written before the key existed too: the preferred
+    // extension is the default, not something a file has to have been created
+    // with. Only an explicit "lua" in project.yaml (or Project Settings) keeps
+    // creating .lua. Existing .lua scripts are never renamed or converted.
     project->setScriptExtension(node["scriptExtension"]
         ? Project::scriptExtensionFromString(node["scriptExtension"].as<std::string>())
-        : ScriptExtension::LUA);
+        : Project::defaultScriptExtension);
     project->setScriptCompilation(node["scriptCompilation"]
         ? Project::scriptCompilationFromString(node["scriptCompilation"].as<std::string>())
         : Project::defaultScriptCompilation);

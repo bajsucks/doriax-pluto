@@ -72,7 +72,9 @@ author rename.
 
 - Pluto parses `.lua` unchanged, so an existing project keeps working until it
   trips one of the names above.
-- New scripts default to `.pluto` (`scriptExtension` in `project.yaml`); an
-  older project without that key keeps creating `.lua`.
+- New scripts are `.pluto` (`scriptExtension` in `project.yaml` defaults to
+  `pluto`, including for projects created before the key existed). Only a project
+  that explicitly sets `scriptExtension: lua` — in the file or in Project
+  Settings > Directories — keeps creating `.lua`.
 - When `enemy.pluto` and `enemy.lua` both exist, `.pluto` wins and the engine
   logs one warning naming both files. Delete the loser.

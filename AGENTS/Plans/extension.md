@@ -186,10 +186,13 @@ distinct highlighting. Optionally change the display label from "Lua" to "Pluto"
 
 ### D6 — Default extension for new scripts
 
-**Recommendation:** add a project setting (e.g. `scriptExtension`, values
-`pluto` / `lua`) defaulting to `.pluto` for new projects and preserving `.lua`
-for projects that already set it. `ScriptCreateDialog` and `ResourcesWindow`
-must both honor it, or users will get inconsistent files.
+**Recommendation (updated after product feedback):** add a project setting
+(`scriptExtension`, values `pluto` / `lua`) and make `.pluto` the default
+everywhere a new script is created, including in a `project.yaml` written before
+the key existed. Only an explicit `lua` in that file (or Project Settings >
+Directories) creates `.lua`. Existing `.lua` files are never renamed or
+converted. `ScriptCreateDialog`, `ResourcesWindow`, and the AI `create_script`
+action must all honor it, or users will get inconsistent files.
 
 ### D7 — Property parsing state
 
@@ -306,8 +309,10 @@ Files: `editor/window/dialog/ScriptCreateDialog.cpp`,
       that uses `isScriptFile` so `.pluto` under a script dir is compiled/exposed
       as expected.
 
-**Acceptance:** a new project creates `.pluto` scripts by default; an existing
-project keeps `.lua`; `.gitattributes` matches whatever is shipped.
+**Acceptance:** every new script (New Script dialog, Resources window, AI
+`create_script`) is `.pluto` by default, in new and pre-existing projects alike;
+a project that explicitly sets `scriptExtension: lua` keeps `.lua`; existing
+scripts are never converted; `.gitattributes` matches whatever is shipped.
 
 ### W4 — Export and packaging
 
@@ -491,8 +496,9 @@ extension split is where bugs hide.
    will break Android. (W4.3.)
 6. **Property parsing in the live VM.** D7 mitigation may be needed sooner than
    planned if `.pluto` modules do more at load time.
-7. **Should `.pluto` be the default in new projects?** Recommended yes, but it
-   changes generated projects — confirm product intent.
+7. **Should `.pluto` be the default in new projects?** **Resolved: yes.** New
+   scripts are `.pluto` everywhere, including in pre-existing projects that never
+   set `scriptExtension`. A project can still opt into `.lua` explicitly.
 8. **`plutoc` on mobile/console exports.** The editor does not run there, so the
    executable should be excluded from those configs. (W5.1.)
 9. **Strip level and stack traces.** Stripped bytecode degrades diagnostics;

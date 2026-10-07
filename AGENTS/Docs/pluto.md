@@ -199,9 +199,10 @@ Remaining editor gaps:
   three under `lua/`. When a `.pluto` and a `.lua` share a base name the first
   wins and the engine logs one warning naming both.
 - `project.yaml` carries `scriptExtension` (`pluto` or `lua`) for newly created
-  scripts and `scriptCompilation` (`source` or `bytecode`) for exports. A
-  `project.yaml` written before these keys existed loads as `lua` + `source`, so
-  existing projects keep creating `.lua`.
+  scripts and `scriptCompilation` (`source` or `bytecode`) for exports. New
+  scripts are `.pluto` by default, including in a `project.yaml` written before
+  the key existed; only an explicit `lua` (in the file or in Project Settings >
+  Directories) creates `.lua`. Existing scripts are never renamed or converted.
 - **Bytecode** is produced in-process by
   `editor/util/ScriptCompiler.{h,cpp}`: a private scratch `lua_State` opened
   with the same `luaL_openselectedlibs(L, ~0, 0)`, `luaL_loadbufferx(..., "t")`,
