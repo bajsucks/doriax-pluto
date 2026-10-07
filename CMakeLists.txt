@@ -393,7 +393,6 @@ include_directories (${CMAKE_CURRENT_SOURCE_DIR})
 
 include_directories (SYSTEM ${DORIAX_ROOT}/libs/sokol)
 include_directories (SYSTEM ${DORIAX_ROOT}/libs/json)
-include_directories (SYSTEM ${DORIAX_ROOT}/libs/lua)
 include_directories (SYSTEM ${DORIAX_ROOT}/libs/luabridge3)
 include_directories (SYSTEM ${DORIAX_ROOT}/libs/box2d/include)
 include_directories (SYSTEM ${DORIAX_ROOT}/libs/joltphysics)

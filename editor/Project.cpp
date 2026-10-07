@@ -27,7 +27,7 @@
 #include "render/SceneRender2D.h"
 #include "render/SceneRender3D.h"
 
-#include "lua.hpp"
+#include "PlutoLua.h"
 #include "LuaBridge.h"
 #include "LuaBridgeAddon.h"
 

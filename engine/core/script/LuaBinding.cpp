@@ -67,7 +67,8 @@
 #include "action/keyframe/ScaleTracks.h"
 #include "action/keyframe/TranslateTracks.h"
 
-#include "lua.hpp"
+// Pluto's headers: Lua 5.4 plus the Pluto language and library extensions.
+#include "PlutoLua.h"
 
 #include "LuaBridge.h"
 #include "LuaBridgeAddon.h"
@@ -468,8 +469,13 @@ void LuaBinding::init(){
 
 void LuaBinding::registerClasses(lua_State *L){
 #ifndef DISABLE_LUA_BINDINGS
-    // luaL_openlibs() open all libraries: base, string, io, os, package, table, debug
-    luaL_openlibs(L);
+    // Pluto (a Lua 5.4 superset) replaces luaL_openlibs() with
+    // luaL_openselectedlibs(), which takes one bit per library. The stock Lua
+    // libraries live in the low bits (PLUTO_DEFAULTLOADLIBS) and Pluto's
+    // extended standard library in the rest. Selecting every bit opens both,
+    // so scripts get json, base64, crypto, vector3, url, xml, regex, bigint,
+    // ffi, canvas, buffer and socket on top of the usual Lua libraries.
+    luaL_openselectedlibs(L, ~0, 0);
 
     registerCoreClasses(L);
     registerObjectClasses(L);

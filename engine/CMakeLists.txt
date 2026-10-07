@@ -695,7 +695,7 @@ include_directories(SYSTEM libs/luabridge3)
 include_directories(SYSTEM libs/json)
 
 include_directories(SYSTEM libs/sokol)
-include_directories(SYSTEM libs/lua)
+# Pluto's public headers come from the `pluto` target's usage requirements.
 include_directories(SYSTEM libs/stb)
 include_directories(SYSTEM libs/nanosvg)
 include_directories(SYSTEM libs/soloud/include)
@@ -719,7 +719,7 @@ include_directories(SYSTEM libs/sheenbidi/Headers)
 include_directories(SYSTEM libs/meshoptimizer)
 
 add_subdirectory(libs/sokol)
-add_subdirectory(libs/lua)
+add_subdirectory(libs/pluto)
 add_subdirectory(libs/stb)
 add_subdirectory(libs/soloud)
 add_subdirectory(libs/tinyobjloader)
@@ -740,7 +740,7 @@ else()
 endif()
 
 foreach(lib IN ITEMS
-    sokol lua stb soloud tinyobjloader tinygltf tinyxml2
+    sokol pluto pluto_soup stb soloud tinyobjloader tinygltf tinyxml2
     harfbuzz sheenbidi meshoptimizer ${DORIAX_PHYSICS_LIBS})
     target_compile_options(${lib} PRIVATE ${EXTERNAL_WARNING_FLAG})
 endforeach()
@@ -943,7 +943,7 @@ target_link_libraries(
 
     PUBLIC
 
-    sokol lua stb tinyobjloader tinygltf tinyxml2 soloud harfbuzz sheenbidi meshoptimizer
+    sokol pluto stb tinyobjloader tinygltf tinyxml2 soloud harfbuzz sheenbidi meshoptimizer
     ${DORIAX_PHYSICS_LIBS}
 )
 

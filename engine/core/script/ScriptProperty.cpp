@@ -4,7 +4,7 @@
 #include "ScriptProperty.h"
 #include "Log.h"
 #include "LuaBinding.h"
-#include "lua.hpp"
+#include "PlutoLua.h"
 #include "LuaBridge.h"
 
 namespace doriax {

@@ -19,7 +19,7 @@
 #include "LuaBinding.h"
 #include "Log.h"
 
-#include "lua.hpp"
+#include "PlutoLua.h"
 #include "LuaBridge.h"
 #include <stdexcept>
 

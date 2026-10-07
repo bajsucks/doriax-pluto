@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "lua.hpp"
+#include "PlutoLua.h"
 
 #include <string>
 #include <filesystem>

@@ -303,14 +303,25 @@ void CustomTextEditor::initializeLanguage() {
             break;
 
         case SyntaxLanguage::Lua:
+            // Pluto is a Lua 5.4 superset, so the stock keywords stay and the
+            // Pluto additions (https://github.com/PlutoLang/Pluto) follow.
             languageDef.keywords = {
                 "and", "break", "do", "else", "elseif", "end", "false", "for",
                 "function", "goto", "if", "in", "local", "nil", "not", "or",
-                "repeat", "return", "then", "true", "until", "while"
+                "repeat", "return", "then", "true", "until", "while",
+                // Pluto: object orientation, switch, enums and exceptions
+                "class", "extends", "parent", "new", "instanceof", "export",
+                "switch", "case", "default", "continue",
+                "enum", "try", "catch",
+                // Pluto: narrow keywords and the compatibility spellings
+                "as", "begin", "global", "pluto_use",
+                "pluto_switch", "pluto_continue",
+                "pluto_enum", "pluto_new", "pluto_class", "pluto_parent",
+                "pluto_export", "pluto_try", "pluto_catch"
             };
             languageDef.types = {
                 "string", "number", "boolean", "table", "function", "thread",
-                "userdata"
+                "userdata", "exception"
             };
             // Add engine types from auto-generated header
             for (const auto& t : getEngineTypeNames()) languageDef.types.insert(t);
@@ -319,7 +330,11 @@ void CustomTextEditor::initializeLanguage() {
                 "ipairs", "load", "loadfile", "next", "pairs", "pcall", "print",
                 "rawequal", "rawget", "rawlen", "rawset", "require", "select",
                 "setmetatable", "tonumber", "tostring", "type", "xpcall",
-                "coroutine", "debug", "io", "math", "os", "package", "string", "table", "utf8"
+                "coroutine", "debug", "io", "math", "os", "package", "string", "table", "utf8",
+                // Pluto helper and standard library extensions
+                "instanceof", "crypto", "json", "base32", "base64", "vector3",
+                "url", "star", "cat", "http", "scheduler", "bigint", "xml",
+                "regex", "ffi", "canvas", "buffer", "socket"
             };
             // Add engine builtins (static classes + enums) from auto-generated header
             for (const auto& b : getEngineBuiltinNames()) languageDef.builtinFunctions.insert(b);
@@ -442,6 +457,13 @@ void CustomTextEditor::initializeSuggestions() {
         suggestions->AddSnippet("req", "local ${1:module} = require(\"${2:module}\")", "require module");
         suggestions->AddSnippet("ret", "return ${1:value}", "return statement");
         suggestions->AddSnippet("print", "print(${1:value})", "print statement");
+        // Pluto language extensions
+        suggestions->AddSnippet("class", "class ${1:Name}\n\tfunction __construct(${2:args})\n\t\t${3}\n\tend\nend", "Pluto class definition");
+        suggestions->AddSnippet("classex", "class ${1:Name} extends ${2:Base}\n\t${3}\nend", "Pluto class with a base class");
+        suggestions->AddSnippet("switch", "switch ${1:value} do\n\tcase ${2:match}:\n\t\t${3}\n\t\tbreak\n\tdefault:\n\t\t${4}\nend", "Pluto switch statement");
+        suggestions->AddSnippet("enum", "enum ${1:Name} begin\n\t${2:VALUE}\nend", "Pluto enum definition");
+        suggestions->AddSnippet("try", "try\n\t${1}\ncatch ${2:err}\n\t${3}\nend", "Pluto try/catch (prefer pcall)");
+        suggestions->AddSnippet("puse", "pluto_use \"${1:0.12.2}\"", "Pluto compatibility directive");
     } else if (language == SyntaxLanguage::CMake) {
         suggestions->AddSnippet("if", "if(${1:condition})\n\t${2}\nendif()", "if statement");
         suggestions->AddSnippet("ife", "if(${1:condition})\n\t${2}\nelse()\n\t${3}\nendif()", "if-else statement");
