@@ -17,7 +17,7 @@ editor::CommandHistory::~CommandHistory(){
     }
 }
 
-void editor::CommandHistory::addCommand(editor::Command* cmd){
+bool editor::CommandHistory::addCommand(editor::Command* cmd){
     if (cmd->execute()){
         if (index < list.size()){
             for (auto it = list.begin() + index; it != list.end(); ++it) {
@@ -39,14 +39,16 @@ void editor::CommandHistory::addCommand(editor::Command* cmd){
         if (onSceneModified){
             onSceneModified(sceneId, cmd->affectsStructure());
         }
-    }else{
-        delete cmd;
+        return true;
     }
+
+    delete cmd;
+    return false;
 }
 
-void editor::CommandHistory::addCommandNoMerge(Command* cmd){
+bool editor::CommandHistory::addCommandNoMerge(Command* cmd){
     cmd->setNoMerge();
-    addCommand(cmd);
+    return addCommand(cmd);
 }
 
 void editor::CommandHistory::undo(){

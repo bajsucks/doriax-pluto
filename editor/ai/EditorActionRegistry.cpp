@@ -778,7 +778,7 @@ const std::vector<ToolDefinition>& cachedTools() {
         },
         {
             "import_bundle_instance",
-            "Import a .bundle file as a scene instance through ImportEntityBundleCmd.",
+            "Import a .bundle file as a scene instance through ImportEntityBundleCmd. It returns instance_root_id, the new entity holding the bundle's members: move, rotate or rename the instance through it.",
             objectSchema({
                 {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
                 {"bundle_path", stringSchema("Safe project-relative .bundle path")},
@@ -1048,6 +1048,7 @@ const std::vector<ToolDefinition>& cachedTools() {
                 {"scaling_mode", stringSchema("fitwidth, fitheight, letterbox, crop, stretch, or native")},
                 {"window_width", integerSchema("Desktop window width in pixels")},
                 {"window_height", integerSchema("Desktop window height in pixels")},
+                {"vsync", boolSchema("Synchronize Play mode and supported desktop builds to the display refresh rate")},
                 {"loading_scene_id", integerSchema("Scene shown while a scene loads, 0 for none")},
                 {"loading_delay", numberSchema("Seconds the loading scene covers the old scene before it is replaced")},
                 {"loading_timeout", numberSchema("Seconds without load progress before a load stops waiting")},
@@ -1794,7 +1795,7 @@ ValidationResult EditorActionRegistry::validate(const std::string& name, const J
                 return fail(std::string("set_project_settings ") + key + " must be a non-negative number.");
             }
         }
-        for (const char* key : {"async_loading", "web_resize_canvas", "web_hide_emscripten_ui"}) {
+        for (const char* key : {"vsync", "async_loading", "web_resize_canvas", "web_hide_emscripten_ui"}) {
             if (arguments.contains(key) && !arguments[key].is_boolean()) {
                 return fail(std::string("set_project_settings ") + key + " must be a boolean.");
             }

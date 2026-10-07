@@ -24,8 +24,9 @@ namespace doriax::editor{
         explicit CommandHistory(size_t sceneId = 0);
         virtual ~CommandHistory();
 
-        void addCommand(Command* cmd);
-        void addCommandNoMerge(Command* cmd);
+        // false when the command did not execute, it is deleted then
+        bool addCommand(Command* cmd);
+        bool addCommandNoMerge(Command* cmd);
 
         void undo();
         void redo();
