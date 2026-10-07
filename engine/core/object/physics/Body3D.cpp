@@ -698,8 +698,10 @@ void Body3D::setPosition(Vector3 position){
 
     checkBody(body);
     getBodyInterface().SetPosition(body.body, JPH::Vec3(position.x, position.y, position.z), JPH::EActivation::Activate);
+    // jumps, not interpolated
+    body.previousPosition = getPosition();
 
-    scene->getSystem<PhysicsSystem>()->updateTransformFromBody3D(entity, position, getRotation());
+    scene->getSystem<PhysicsSystem>()->updateTransformFromBody3D(entity, body, Engine::getInterpolationAlpha());
 }
 
 Quaternion Body3D::getRotation() const{
@@ -717,8 +719,9 @@ void Body3D::setRotation(Quaternion rotation){
 
     checkBody(body);
     getBodyInterface().SetRotation(body.body, physicsSystem->toValidatedJoltRotation(rotation, entity, -1), JPH::EActivation::Activate);
+    body.previousRotation = getRotation();
 
-    physicsSystem->updateTransformFromBody3D(entity, getPosition(), getRotation());
+    physicsSystem->updateTransformFromBody3D(entity, body, Engine::getInterpolationAlpha());
 }
 
 Vector3 Body3D::getLinearVelocity() const{

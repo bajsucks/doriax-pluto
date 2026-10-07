@@ -47,6 +47,8 @@ namespace doriax{
 		Vector2 gravity2D;
 		Vector3 gravity3D;
 
+		bool interpolation = true;
+
 #ifdef DORIAX_PHYSICS_2D
 		b2WorldId world2D;
 		float pointsToMeterScale2D;
@@ -124,6 +126,10 @@ namespace doriax{
 		// Removes the event callbacks with the substring in their tag
 		void removeSubscriptionsByTag(const std::string& substring);
 
+		// Draws bodies between their last two fixed steps, so they move smoothly at any frame rate
+		void setInterpolation(bool interpolation);
+		bool isInterpolation() const;
+
 #ifdef DORIAX_PHYSICS_2D
 		float getPointsToMeterScale2D() const;
 		void setPointsToMeterScale2D(float pointsToMeterScale2D);
@@ -193,12 +199,14 @@ namespace doriax{
 		void destroyBody3D(Body3DComponent& body);
 #endif
 
-		// Writes a body pose back into its entity, so the transform sync of the next
-		// step does not undo a pose written straight to the body.
+		// Draws the body in its entity, alpha of the way from its pose before the last step.
+		// The transform sync of the next step then does not undo a pose written to the body.
 #ifdef DORIAX_PHYSICS_2D
-		void updateTransformFromBody2D(Entity entity, Vector2 position, float angle);
+		void updateTransformFromBody2D(Entity entity, Body2DComponent& body, float alpha);
 #endif
-		void updateTransformFromBody3D(Entity entity, Vector3 position, Quaternion rotation);
+#ifdef DORIAX_PHYSICS_3D
+		void updateTransformFromBody3D(Entity entity, Body3DComponent& body, float alpha);
+#endif
 
 		// Geometry of the entity's meshes, or of its model's mesh nodes when it has none.
 		// The signature changes with it, so what is built from it knows when to rebuild.
@@ -257,6 +265,8 @@ namespace doriax{
 		void destroy() override;
 		void update(double dt) override;
 		void fixedUpdate(double dt) override;
+		// Called once per frame after the fixed steps
+		void interpolate(double alpha);
 
 		void onComponentAdded(Entity entity, ComponentId componentId) override;
 		void onComponentRemoved(Entity entity, ComponentId componentId) override;
