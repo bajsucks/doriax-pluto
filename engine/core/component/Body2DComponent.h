@@ -6,6 +6,8 @@
 
 #include "Engine.h"
 #include "math/Vector2.h"
+#include "math/Vector3.h"
+#include "math/Quaternion.h"
 #include "util/HybridArray.h"
 #ifdef DORIAX_PHYSICS_2D
 #include "box2d/box2d.h"
@@ -71,6 +73,13 @@ namespace doriax{
         bool newBody = true;
         Vector2 loadedScale = Vector2::UNIT_SCALE;
         bool followingTransform = false; // kinematic, moving to its Transform with a velocity
+#ifdef DORIAX_PHYSICS_2D
+        // pose before the last step, drawn towards the current one
+        b2Transform previousTransform = b2Transform_identity;
+#endif
+        // pose physics last wrote to the Transform
+        Vector3 syncedPosition;
+        Quaternion syncedRotation;
     };
 
 }

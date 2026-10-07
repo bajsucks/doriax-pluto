@@ -111,6 +111,12 @@ namespace doriax{
         bool newBody = true;
         Vector3 loadedScale = Vector3::UNIT_SCALE;
         bool followingTransform = false; // kinematic, moving to its Transform with a velocity
+        // pose before the last step, drawn towards the current one
+        Vector3 previousPosition;
+        Quaternion previousRotation;
+        // pose physics last wrote to the Transform
+        Vector3 syncedPosition;
+        Quaternion syncedRotation;
     };
 
 }

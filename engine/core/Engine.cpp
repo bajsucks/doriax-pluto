@@ -9,6 +9,7 @@
 #include "script/LuaBinding.h"
 #include "manager/SceneManager.h"
 #include "subsystem/AudioSystem.h"
+#include "subsystem/PhysicsSystem.h"
 #include "subsystem/RenderSystem.h"
 #include "subsystem/UISystem.h"
 #include "component/ButtonComponent.h"
@@ -1144,6 +1145,11 @@ void Engine::systemDraw(){
                 Log::warn("Dropping fixed-update steps - more than %i per frame", MAX_UPDATES_PER_FRAME);
                 // Discard remaining backlog so we don't fall further behind next frame.
                 updateTimeCount = 0.0;
+            }
+
+            double alpha = getInterpolationAlpha();
+            for (int i = 0; i < scenes.size(); i++) {
+                scenes[i]->getSystem<PhysicsSystem>()->interpolate(alpha);
             }
         }
 

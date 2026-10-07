@@ -59,6 +59,34 @@ namespace {
         }
     }
 
+    // still the pose physics gave it, not moved by a script or an animation since
+    template<typename T>
+    bool isSynced(const Transform& transform, const T& body){
+        return transform.worldPosition == body.syncedPosition && transform.worldRotation == body.syncedRotation;
+    }
+
+    // returns the world pose as RenderSystem derives it back from the local one
+    void setTransformWorldPose(Scene* scene, Transform& transform, Vector3& position, Quaternion& rotation){
+        Vector3 localPosition = position;
+        Quaternion localRotation = rotation;
+
+        Transform* parent = (transform.parent != NULL_ENTITY) ? scene->findComponent<Transform>(transform.parent) : NULL;
+        if (parent){
+            localPosition = parent->modelMatrix.inverse() * position;
+            localRotation = parent->worldRotation.inverse() * rotation;
+            position = parent->modelMatrix * localPosition;
+            rotation = parent->worldRotation * localRotation;
+        }
+
+        if (transform.position != localPosition || transform.rotation != localRotation){
+            transform.position = localPosition;
+            transform.rotation = localRotation;
+            transform.worldPosition = position;
+            transform.worldRotation = rotation;
+            transform.needUpdate = true;
+        }
+    }
+
 #ifdef DORIAX_PHYSICS_3D
     // Jolt's global allocator/factory/type registration is process-wide; run once
     // (the old per-constructor path re-created and leaked a Factory per scene).
@@ -599,6 +627,14 @@ void PhysicsSystem::removeSubscriptionsByTag(const std::string& substring){
 #endif
 }
 
+void PhysicsSystem::setInterpolation(bool interpolation){
+    this->interpolation = interpolation;
+}
+
+bool PhysicsSystem::isInterpolation() const{
+    return interpolation;
+}
+
 #ifdef DORIAX_PHYSICS_2D
 float PhysicsSystem::getPointsToMeterScale2D() const{
     return pointsToMeterScale2D;
@@ -659,43 +695,59 @@ void PhysicsSystem::flushPendingDestroys3D(){
 #endif
 
 #ifdef DORIAX_PHYSICS_2D
-void PhysicsSystem::updateTransformFromBody2D(Entity entity, Vector2 position, float angle){
+void PhysicsSystem::updateTransformFromBody2D(Entity entity, Body2DComponent& body, float alpha){
     Transform* transform = scene->findComponent<Transform>(entity);
-    if (!transform){
+    if (!transform || !b2Body_IsValid(body.body)){
         return;
+    }
+
+    b2Transform bTransform = b2Body_GetTransform(body.body);
+    if (interpolation && alpha < 1.0f){
+        const b2Transform& previous = body.previousTransform;
+        bTransform.p = previous.p + (bTransform.p - previous.p) * alpha;
+        if (previous.q.c != bTransform.q.c || previous.q.s != bTransform.q.s){
+            bTransform.q = b2NLerp(previous.q, bTransform.q, alpha);
+        }
     }
 
     // Box2D does not own Z, it is kept from the current world position
-    Vector3 worldPosition = Vector3(position.x, position.y, transform->worldPosition.z);
+    Vector3 position(bTransform.p.x * pointsToMeterScale2D, bTransform.p.y * pointsToMeterScale2D, transform->worldPosition.z);
+    Quaternion rotation(Angle::radToDefault(b2Rot_GetAngle(bTransform.q)), Vector3(0, 0, 1));
 
-    updateTransformFromBody3D(entity, worldPosition, Quaternion(angle, Vector3(0, 0, 1)));
+    setTransformWorldPose(scene, *transform, position, rotation);
+    body.syncedPosition = position;
+    body.syncedRotation = rotation;
 }
 #endif
 
-void PhysicsSystem::updateTransformFromBody3D(Entity entity, Vector3 position, Quaternion rotation){
+#ifdef DORIAX_PHYSICS_3D
+void PhysicsSystem::updateTransformFromBody3D(Entity entity, Body3DComponent& body, float alpha){
     Transform* transform = scene->findComponent<Transform>(entity);
-    if (!transform){
+    if (!transform || body.body.IsInvalid()){
         return;
     }
 
-    transform->worldPosition = position;
-    transform->worldRotation = rotation;
-
-    Transform* transformParent = NULL;
-    if (transform->parent != NULL_ENTITY){
-        transformParent = scene->findComponent<Transform>(transform->parent);
+    JPH::RVec3 jPosition;
+    JPH::Quat jRotation;
+    getBodyInterface3D().GetPositionAndRotation(body.body, jPosition, jRotation);
+    if (std::isnan(jPosition.GetX()) || std::isnan(jPosition.GetY()) || std::isnan(jPosition.GetZ())){
+        return;
     }
 
-    if (transformParent){
-        transform->position = transformParent->modelMatrix.inverse() * position;
-        transform->rotation = transformParent->worldRotation.inverse() * rotation;
-    }else{
-        transform->position = position;
-        transform->rotation = rotation;
+    Vector3 position(jPosition.GetX(), jPosition.GetY(), jPosition.GetZ());
+    Quaternion rotation(jRotation.GetW(), jRotation.GetX(), jRotation.GetY(), jRotation.GetZ());
+    if (interpolation && alpha < 1.0f){
+        position = body.previousPosition.lerp(position, alpha);
+        if (body.previousRotation != rotation){
+            rotation = Quaternion::slerp(alpha, body.previousRotation, rotation);
+        }
     }
 
-    transform->needUpdate = true;
+    setTransformWorldPose(scene, *transform, position, rotation);
+    body.syncedPosition = position;
+    body.syncedRotation = rotation;
 }
+#endif
 
 #ifdef DORIAX_PHYSICS_2D
 void PhysicsSystem::updateBody2DPosition(Signature signature, Entity entity, Body2DComponent& body, float stepTime){
@@ -712,7 +764,7 @@ void PhysicsSystem::updateBody2DPosition(Signature signature, Entity entity, Bod
 
             b2Transform bTransform = b2Body_GetTransform(body.body);
             float bAngle = b2Rot_GetAngle(bTransform.q);
-            bool moved = bTransform.p != bNewPosition || bAngle != bNewAngle;
+            bool moved = (body.newBody || !isSynced(transform, body)) && (bTransform.p != bNewPosition || bAngle != bNewAngle);
 
             if (moved && stepTime > 0.0f && body.type == BodyType::KINEMATIC && !body.newBody){
                 // a velocity carries and pushes other bodies, spread over the steps left in the frame
@@ -732,6 +784,9 @@ void PhysicsSystem::updateBody2DPosition(Signature signature, Entity entity, Bod
                     body.followingTransform = false;
                 }
             }
+
+            // drawn from here towards where the step ends
+            body.previousTransform = b2Body_GetTransform(body.body);
         }
     }
 }
@@ -755,7 +810,7 @@ void PhysicsSystem::updateBody3DPosition(Signature signature, Entity entity, Bod
             JPH::Vec3 jPosition;
             JPH::Quat jQuat;
             body_interface.GetPositionAndRotation(body.body, jPosition, jQuat);
-            bool moved = jPosition != jNewPosition || jQuat != jNewQuat;
+            bool moved = (body.newBody || !isSynced(transform, body)) && (jPosition != jNewPosition || jQuat != jNewQuat);
 
             if (moved && stepTime > 0.0f && body.type == BodyType::KINEMATIC && !body.newBody){
                 // a velocity carries and pushes other bodies, spread over the steps left in the frame
@@ -773,6 +828,11 @@ void PhysicsSystem::updateBody3DPosition(Signature signature, Entity entity, Bod
                     body.followingTransform = false;
                 }
             }
+
+            // drawn from here towards where the step ends
+            body_interface.GetPositionAndRotation(body.body, jPosition, jQuat);
+            body.previousPosition = Vector3(jPosition.GetX(), jPosition.GetY(), jPosition.GetZ());
+            body.previousRotation = Quaternion(jQuat.GetW(), jQuat.GetX(), jQuat.GetY(), jQuat.GetZ());
         }
     }
 }
@@ -2984,31 +3044,8 @@ void PhysicsSystem::fixedUpdate(double dt){
                 continue;
             }
 
-            b2Transform bTransform = event->transform;
-            if (signature.test(scene->getComponentId<Transform>())){
-                Transform& transform = scene->getComponent<Transform>(entity);
-
-                Vector3 worldPosition = Vector3(bTransform.p.x * pointsToMeterScale2D, bTransform.p.y * pointsToMeterScale2D, transform.worldPosition.z);
-                Quaternion worldRotation = Quaternion(Angle::radToDefault(b2Rot_GetAngle(bTransform.q)), Vector3(0, 0, 1));
-                Vector3 nPosition = worldPosition;
-                Quaternion nRotation = worldRotation;
-
-                if (transform.parent != NULL_ENTITY){
-                    Transform* transformParent = scene->findComponent<Transform>(transform.parent);
-                    if (transformParent){
-                        nPosition = transformParent->modelMatrix.inverse() * nPosition;
-                        nRotation = transformParent->worldRotation.inverse() * nRotation;
-                    }
-                }
-
-                if (transform.position != nPosition || transform.rotation != nRotation){
-                    transform.position = nPosition;
-                    transform.rotation = nRotation;
-                    // the next fixed step of this frame syncs the body from the world pose
-                    transform.worldPosition = worldPosition;
-                    transform.worldRotation = worldRotation;
-                    transform.needUpdate = true;
-                }
+            if (body){
+                updateTransformFromBody2D(entity, *body, 1.0f);
             }
         }
 
@@ -3076,38 +3113,38 @@ void PhysicsSystem::fixedUpdate(double dt){
             continue;
         }
 
-        if (!body.body.IsInvalid()){
-            JPH::BodyInterface &body_interface = world3D.GetBodyInterfaceNoLock();
-            JPH::RVec3 position = body_interface.GetPosition(body.body);
-            JPH::Quat rotation = body_interface.GetRotation(body.body);
-            if (signature.test(scene->getComponentId<Transform>())){
-                Transform& transform = scene->getComponent<Transform>(entity);
+        updateTransformFromBody3D(entity, body, 1.0f);
+    }
+#endif
+}
 
-                if (!std::isnan(position.GetX()) && !std::isnan(position.GetY()) && !std::isnan(position.GetZ())){
-                    Vector3 worldPosition = Vector3(position.GetX(), position.GetY(), position.GetZ());
-                    Quaternion worldRotation = Quaternion(rotation.GetW(), rotation.GetX(), rotation.GetY(), rotation.GetZ());
-                    Vector3 nPosition = worldPosition;
-                    Quaternion nRotation = worldRotation;
+void PhysicsSystem::interpolate(double alpha){
+    if (paused || !interpolation){
+        return;
+    }
 
-                    if (transform.parent != NULL_ENTITY){
-                        Transform* transformParent = scene->findComponent<Transform>(transform.parent);
-                        if (transformParent){
-                            nPosition = transformParent->modelMatrix.inverse() * nPosition;
-                            nRotation = transformParent->worldRotation.inverse() * nRotation;
-                        }
-                    }
+#ifdef DORIAX_PHYSICS_2D
+    auto bodies2d = scene->getComponentArray<Body2DComponent>();
+    for (size_t i = 0; i < bodies2d->size(); i++){
+        Body2DComponent& body = bodies2d->getComponentFromIndex(i);
+        Entity entity = bodies2d->getEntity(i);
+        Transform* transform = scene->findComponent<Transform>(entity);
 
-                    if (transform.position != nPosition || transform.rotation != nRotation){
-                        transform.position = nPosition;
-                        transform.rotation = nRotation;
-                        // the next fixed step of this frame syncs the body from the world pose
-                        transform.worldPosition = worldPosition;
-                        transform.worldRotation = worldRotation;
-                        transform.needUpdate = true;
-                    }
-                }
+        if (body.type != BodyType::STATIC && transform && isSynced(*transform, body)){
+            updateTransformFromBody2D(entity, body, (float)alpha);
+        }
+    }
+#endif
 
-            }
+#ifdef DORIAX_PHYSICS_3D
+    auto bodies3d = scene->getComponentArray<Body3DComponent>();
+    for (size_t i = 0; i < bodies3d->size(); i++){
+        Body3DComponent& body = bodies3d->getComponentFromIndex(i);
+        Entity entity = bodies3d->getEntity(i);
+        Transform* transform = scene->findComponent<Transform>(entity);
+
+        if (body.type != BodyType::STATIC && transform && isSynced(*transform, body)){
+            updateTransformFromBody3D(entity, body, (float)alpha);
         }
     }
 #endif
