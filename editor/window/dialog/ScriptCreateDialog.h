@@ -27,6 +27,8 @@ private:
     bool m_isOpen = false;
     fs::path m_projectPath;
     fs::path m_luaPath;
+    // ".pluto" or ".lua", from the project's New Script Extension setting (D6).
+    std::string m_scriptExtension = ".pluto";
     std::string m_selectedPath;
     char m_baseNameBuffer[128] = "";
     CreationKind m_creationKind = CreationKind::CPP_SUBCLASS;
@@ -72,6 +74,7 @@ public:
               Entity entity,
               const fs::path& projectPath,
               const fs::path& luaPath,
+              const std::string& scriptExtension,
               const std::string& defaultBaseName,
               std::function<void(const fs::path&, const fs::path&, const std::string&, ScriptType)> onCreate,
               std::function<void()> onCancel = nullptr);

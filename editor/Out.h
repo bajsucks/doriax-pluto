@@ -60,6 +60,8 @@ namespace doriax::editor {
         static void warning(const std::string& message);
         static void error(const std::string& message);
         static void build(const std::string& message);
+        // Script compile diagnostics, shown on their own Output channel (W6.5).
+        static void scripts(const std::string& message);
 
         // Overloads for const char* without formatting
         static void info(const char* message) { info(std::string(message)); }
@@ -67,6 +69,7 @@ namespace doriax::editor {
         static void warning(const char* message) { warning(std::string(message)); }
         static void error(const char* message) { error(std::string(message)); }
         static void build(const char* message) { build(std::string(message)); }
+        static void scripts(const char* message) { scripts(std::string(message)); }
 
         // Formatted logging methods with variable arguments
         template<typename... Args>
@@ -92,6 +95,11 @@ namespace doriax::editor {
         template<typename... Args>
         static void build(const char* fmt, Args... args) {
             build(formatMessage(fmt, args...));
+        }
+
+        template<typename... Args>
+        static void scripts(const char* fmt, Args... args) {
+            scripts(formatMessage(fmt, args...));
         }
 
         // Debug assertion

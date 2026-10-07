@@ -60,6 +60,20 @@ namespace doriax::editor{
         IMAGE_VIEWER
     };
 
+    // Extension new scripts are created with (D6). Both stay valid: Pluto parses
+    // Lua unchanged, so an existing .lua project is never converted.
+    enum class ScriptExtension {
+        PLUTO,
+        LUA
+    };
+
+    // What an export ships for scripts (D3): readable source, or bytecode
+    // compiled in-process by the pinned Pluto revision.
+    enum class ScriptCompilation {
+        SOURCE,
+        BYTECODE
+    };
+
     struct TabEntry{
         TabType type;
         std::string filepath;
@@ -303,6 +317,8 @@ namespace doriax::editor{
         std::filesystem::path windowIcon;  // project-relative image path; empty = no icon
         std::filesystem::path assetsDir;
         std::filesystem::path luaDir;
+        ScriptExtension scriptExtension;        // extension for new scripts (D6)
+        ScriptCompilation scriptCompilation;    // source or bytecode exports (D3)
         std::vector<std::filesystem::path> scriptDirs;  // extra C++ include and source roots
         int cxxStandard;  // C++ standard for Play and exported builds
         bool physics2DEnabled;  // Box2D in exported builds; Play always has it
@@ -551,6 +567,8 @@ namespace doriax::editor{
         static constexpr bool defaultPhysics2DEnabled = true;
         static constexpr bool defaultPhysics3DEnabled = true;
         static constexpr int defaultCxxStandard = cxxStandards[0];
+        static constexpr ScriptExtension defaultScriptExtension = ScriptExtension::PLUTO;
+        static constexpr ScriptCompilation defaultScriptCompilation = ScriptCompilation::SOURCE;
 
         Project();
 
@@ -600,6 +618,21 @@ namespace doriax::editor{
 
         void setLuaDir(const std::filesystem::path& luaDir);
         std::filesystem::path getLuaDir() const;
+
+        // Extension used for scripts created from the editor, and what an export
+        // does with the script sources. project.yaml round-trips both names.
+        void setScriptExtension(ScriptExtension scriptExtension);
+        ScriptExtension getScriptExtension() const;
+        // ".pluto" or ".lua", for path building, filters, and messages.
+        std::string getScriptFileExtension() const;
+        void setScriptCompilation(ScriptCompilation scriptCompilation);
+        ScriptCompilation getScriptCompilation() const;
+        bool isScriptBytecodeCompilation() const;
+
+        static std::string scriptExtensionToString(ScriptExtension extension);
+        static ScriptExtension scriptExtensionFromString(const std::string& value);
+        static std::string scriptCompilationToString(ScriptCompilation compilation);
+        static ScriptCompilation scriptCompilationFromString(const std::string& value);
 
         // Roots added to the C++ build: each is an include directory, and the
         // sources under it compile without a script component referencing them.

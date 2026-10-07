@@ -30,6 +30,7 @@ const char* logTypeLabel(LogType type) {
         case LogType::Error:   return "ERROR";
         case LogType::Success: return "OK   ";
         case LogType::Build:   return "BUILD";
+        case LogType::Scripts: return "SCRPT";
         default:               return "INFO ";
     }
 }
@@ -144,6 +145,10 @@ void Out::error(const std::string& message) {
 
 void Out::build(const std::string& message) {
     logMessage(LogType::Build, message, "[BUILD] ", std::cerr);
+}
+
+void Out::scripts(const std::string& message) {
+    logMessage(LogType::Scripts, message, "[SCRIPTS] ", std::cerr);
 }
 
 void Out::editor_assert(bool condition, const std::string& message) {

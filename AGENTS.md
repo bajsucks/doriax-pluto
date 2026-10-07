@@ -10,7 +10,10 @@ parses or runs scripts.
 
 ## Index
 
-- [`AGENTS/Docs/pluto.md`](AGENTS/Docs/pluto.md) — how Pluto is wired in, and its caveats.
+- [`AGENTS/Docs/pluto.md`](AGENTS/Docs/pluto.md) — how Pluto is wired in, `.pluto`
+  support, bytecode, and its caveats.
+- [`AGENTS/Docs/pluto-migration.md`](AGENTS/Docs/pluto-migration.md) — the
+  reserved-word break and how to fix it.
 - [`AGENTS/Plans/`](AGENTS/Plans/) — in-flight work items. Start with
   [`extension.md`](AGENTS/Plans/extension.md) (`.pluto` support + `plutoc`).
 
@@ -41,11 +44,19 @@ These are easy to break and expensive to notice:
 5. **Reserved words.** Pluto makes `class`, `switch`, `case`, `default`, `enum`,
    `new`, `continue`, `parent`, `export`, `try`, `catch`, `global`, `as`,
    `begin`, `extends`, `instanceof`, and `pluto_use` keywords. Code, scripts, or
-   generated identifiers using those names will fail to parse.
+   generated identifiers using those names will fail to parse. Scripts can rename
+   the identifier or disable the keyword with `pluto_use`; see
+   [`AGENTS/Docs/pluto-migration.md`](AGENTS/Docs/pluto-migration.md).
 6. **`luaL_openselectedlibs(L, ~0, 0)` is deliberate but opinionated.** It opens
    every Pluto library globally, including `ffi`, `socket`, `http`, and Pluto's
    replacement `assert`. If you change it, read the "Runtime init" section of
-   `AGENTS/Docs/pluto.md` and update that doc.
+   `AGENTS/Docs/pluto.md` and update that doc. The in-process bytecode compiler
+   (`editor/util/ScriptCompiler.cpp`) opens the same set, so keep them in step.
+7. **`.pluto` and `.lua` are both first-class.** Never assume one extension.
+   Scene script paths keep whatever the author wrote; resolution order lives in
+   `LuaBinding::moduleLoader` (`.pluto` before `.lua`, assets root before `lua/`),
+   and bytecode exports rely on the `.luac` fallback. `.luac` is an export
+   artifact, never an authoring file.
 
 ## Build
 
@@ -64,10 +75,18 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build --target doriax-editor -j"$(nproc)"
 ```
 
-- The **first configure needs network**: Pluto is pulled with `FetchContent`
+- **First configure needs network**: Pluto is pulled with `FetchContent`
   from GitHub (pinned tag). For offline or reproducible builds pass a checkout:
   `-DPLUTO_SOURCE_DIR=/path/to/Pluto` (must be the pinned revision) or
   `-DPLUTO_GIT_TAG=<sha>`.
+- **`plutoc`** is an extra desktop target (upstream `luac.cpp`) that compiles
+  `.pluto`/`.lua` to `.luac`. It is skipped on Android/iOS/Emscripten. Build it
+  with `cmake --build build --target plutoc`.
+- **`-DDORIAX_BUILD_TESTS=ON`** adds the headless script checks:
+  `doriax-pluto-check` (Pluto syntax, `class`/`switch`/`enum`/`json`, and a
+  bytecode round trip) and `doriax-keyword-check` (editor keywords vs Pluto's
+  lexer). Run them with `ctest --test-dir build --output-on-failure`. Off by
+  default; CI turns them on.
 - C++ standard is 17 by default; 20 and 23 are allowed
   (`DORIAX_CXX_STANDARD`, see `engine/CMakeLists.txt:3`). Pluto itself is built
   as C++17 regardless.
@@ -85,31 +104,38 @@ cmake --build build --target doriax-editor -j"$(nproc)"
 | Engine runtime / ECS / objects | `engine/core/` |
 | Scripting C API + bindings | `engine/core/script/` (`LuaBinding.cpp`, `binding/*.cpp`) |
 | Pluto header shim | `engine/core/script/PlutoLua.h` |
-| Pluto CMake target | `engine/libs/pluto/CMakeLists.txt` |
+| Pluto CMake targets (`pluto`, `pluto_soup`, `plutoc`) | `engine/libs/pluto/CMakeLists.txt` |
 | Editor application shell (ImGui) | `editor/` |
 | Embedded code editor | `editor/window/widget/CustomTextEditor.cpp`, `editor/window/CodeEditor.cpp` |
 | Script/project file handling | `editor/util/Util.h`, `editor/Project.cpp`, `editor/util/ProjectUtils.cpp` |
+| In-process script compiler (bytecode, diagnostics) | `editor/util/ScriptCompiler.{h,cpp}` |
 | Export pipeline | `editor/Exporter.cpp`, `editor/Factory.cpp`, `editor/Generator.cpp` |
 | AI scripting actions | `editor/ai/EditorActionExecutor.cpp`, `editor/ai/EditorActionRegistry.cpp` |
-| Engine sample project / Lua template | `engine/project/` |
+| Headless script checks | `tests/pluto/` (built with `DORIAX_BUILD_TESTS`) |
+| Engine sample project / script template | `engine/project/` |
 
 ## Things that will bite you
 
-- **No engine test suite.** There is no `ctest` target for `doriax` (only
-  spirv-cross's own tests). Verification means: configure, build
-  `doriax-editor`, and run a script. "It compiles" is not "it works".
-- **CI is a build matrix, not a functional test.** `.github/workflows/cmake.yml`
-  builds Windows (MSVC + MinGW), Ubuntu GCC, and macOS Clang. Only Linux has been
-  exercised locally for the Pluto swap; the Windows/macOS/Android/Emscripten link
-  paths are unverified.
+- **The engine has no functional test suite, but the script runtime has two
+  headless checks.** `doriax-pluto-check` and `doriax-keyword-check` cover Pluto
+  syntax, the bytecode round trip, and editor keyword drift; they do not cover
+  the editor, exporter, or scene loading. Verification of anything else still
+  means: configure, build `doriax-editor`, and run a script. "It compiles" is
+  not "it works".
+- **CI runs those two checks only on the Ubuntu job.** The matrix builds Windows
+  (MSVC + MinGW), Ubuntu GCC, and macOS Clang, and now also builds `plutoc` and
+  the checks everywhere. Only Linux has been exercised locally; the
+  Windows/macOS/Android/Emscripten link paths are unverified.
 - **The editor's language data is hand-maintained.** Keywords, types, snippet
   lists, and the Lua/Pluto block-depth parser live in `CustomTextEditor.cpp` and
-  `editor/util/ScriptEvents.cpp`. They duplicate knowledge that Pluto's own lexer
-  has, so they drift. `AGENTS/Plans/extension.md` covers generating them.
-- **Script file extensions are hard-coded in many places.** `.lua` appears in
-  `editor/util/Util.h`, `CodeEditor.cpp`, `ScriptCreateDialog.cpp`,
-  `ResourcesWindow.cpp`, `Project.cpp`, `Exporter.cpp`, and the AI executor.
-  Adding an extension means auditing all of them; the plan lists every site.
+  `editor/util/ScriptEvents.cpp`. `doriax-keyword-check` fails the build when the
+  keyword list drifts from Pluto's lexer, but the list is still edited by hand;
+  the single-source-of-truth generation remains a stretch goal in
+  `AGENTS/Plans/extension.md`.
+- **Script extensions are accepted in pairs, not hard-coded to `.lua`.** Use
+  `Util::isLuaFile` / `Util::isScriptFile` (`editor/util/Util.h`) rather than
+  comparing an extension string. `Project::getScriptFileExtension()` is what new
+  scripts use; `.luac` is deliberately excluded from the authoring predicates.
 - **`NO_LUA_INIT` / `DISABLE_LUA_BINDINGS`** compile-time switches exist
   (root `CMakeLists.txt`, `engine/CMakeLists.txt`, `LuaBinding.cpp`). Check them
   before assuming a code path always runs.
@@ -117,6 +143,9 @@ cmake --build build --target doriax-editor -j"$(nproc)"
   `LUA_VERSION_NUM` is not already defined, so `PlutoLua.h` must precede it.
 - **Editor and exported game load scripts through the `lua://` virtual path**
   (`LuaBinding::moduleLoader`, `initializeLuaScripts`), not the OS filesystem.
+- **Bytecode is version-locked.** `.luac` only loads in the Pluto build that
+  produced it. The editor compiles in-process (`ScriptCompiler`); `plutoc` links
+  the same library on purpose. Do not introduce a second producer.
 
 ## Conventions
 
@@ -125,7 +154,8 @@ cmake --build build --target doriax-editor -j"$(nproc)"
 - Comments explain *why*, in full sentences; match the surrounding style rather
   than the terse style of vendored third-party code.
 - CMake targets: `pluto` (runtime), `pluto_soup` (Pluto's support library),
-  `doriax` (engine), `doriax-editor` (application).
+  `plutoc` (desktop bytecode CLI), `doriax` (engine), `doriax-editor`
+  (application), plus the opt-in `doriax-pluto-check` / `doriax-keyword-check`.
 - Keep `AGENTS/Docs/*.md` factual and current; date or version anything that
   will rot (e.g. "as of Pluto 0.12.2").
 
@@ -134,10 +164,12 @@ cmake --build build --target doriax-editor -j"$(nproc)"
 After changing anything in the scripting path:
 
 ```bash
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build build --target doriax-editor -j"$(nproc)"
-./build/doriax-editor   # open a .lua file, confirm highlighting + autocomplete
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DDORIAX_BUILD_TESTS=ON
+cmake --build build --target doriax-editor plutoc doriax-pluto-check doriax-keyword-check -j"$(nproc)"
+ctest --test-dir build --output-on-failure
+./build/doriax-editor   # open a .pluto file, confirm highlighting + autocomplete
 ```
 
-`AGENTS/Docs/pluto.md` has a headless smoke test that exercises Pluto syntax and
-the extension libraries without launching the GUI.
+`AGENTS/Docs/pluto.md` documents the checks and a standalone headless smoke test
+that exercises Pluto syntax and the extension libraries without launching the
+GUI.

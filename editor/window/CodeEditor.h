@@ -78,6 +78,9 @@ namespace doriax::editor {
         std::string getWindowTitle(const EditorInstance& instance) const;
         void updateScriptProperties(const EditorInstance& instance, const std::string& inMemoryContent = "");
         void updateScriptPropertiesForPath(const fs::path& relFilepath, const std::string& inMemoryContent = "");
+        // Parses a Lua-family file on save and reports failures on the Scripts
+        // Output channel (W6.5). Static content is checked, never executed.
+        void reportScriptDiagnostics(const EditorInstance& instance);
 
         void updateAllProjectSymbols();
         void applyParsedProjectSymbols();

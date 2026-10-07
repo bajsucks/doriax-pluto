@@ -1891,6 +1891,11 @@ YAML::Node editor::Stream::encodeProject(Project* project) {
     if (!project->getLuaDir().empty()) {
         root["luaDir"] = project->getLuaDir().string();
     }
+    // Always written, unlike the value-diffed settings below: a missing key has
+    // to mean "legacy project, keep .lua" (D6), so the new-project default
+    // cannot be left implicit.
+    root["scriptExtension"] = Project::scriptExtensionToString(project->getScriptExtension());
+    root["scriptCompilation"] = Project::scriptCompilationToString(project->getScriptCompilation());
     if (!project->getScriptDirs().empty()) {
         YAML::Node scriptDirsNode;
         for (const fs::path& scriptDir : project->getScriptDirs()) {
@@ -2194,6 +2199,16 @@ void editor::Stream::decodeProject(Project* project, const YAML::Node& node, con
     if (node["luaDir"]) {
         project->setLuaDir(node["luaDir"].as<std::string>());
     }
+
+    // A project.yaml written before these keys existed belongs to the .lua era:
+    // keep creating .lua scripts there instead of switching it to .pluto (D6).
+    // The save path always writes them, so the fallback only runs once.
+    project->setScriptExtension(node["scriptExtension"]
+        ? Project::scriptExtensionFromString(node["scriptExtension"].as<std::string>())
+        : ScriptExtension::LUA);
+    project->setScriptCompilation(node["scriptCompilation"]
+        ? Project::scriptCompilationFromString(node["scriptCompilation"].as<std::string>())
+        : Project::defaultScriptCompilation);
 
     if (node["scriptDirs"]) {
         std::vector<fs::path> scriptDirs;

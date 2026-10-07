@@ -52,7 +52,7 @@ namespace doriax::editor{
         }
 
         inline static std::string getScriptExtensions() {
-             return "lua,cpp,cc,cxx,h,hh,hpp,hxx";
+             return "lua,pluto,cpp,cc,cxx,h,hh,hpp,hxx";
         }
 
         inline static bool isImageFile(const std::string& path) {
@@ -272,9 +272,13 @@ namespace doriax::editor{
             return isImageFile(path) || isModelFile(path) || isFontFile(path) || isAudioFile(path);
         }
 
+        // Scripts the code editor can open and the exporter routes to the
+        // "lua://" tree. .pluto is Pluto's preferred extension; .lua stays valid
+        // (Pluto is a Lua 5.4 superset). .luac is deliberately absent: it is an
+        // export/runtime artifact, never an authoring file (W4.4).
         inline static bool isScriptFile(const std::string& path) {
              static const std::unordered_set<std::string> scriptExtensions = {
-                ".lua", ".cpp", ".cc", ".cxx", ".h", ".hh", ".hpp", ".hxx"
+                ".lua", ".pluto", ".cpp", ".cc", ".cxx", ".h", ".hh", ".hpp", ".hxx"
             };
 
             std::string ext = std::filesystem::path(path).extension().string();
@@ -285,9 +289,10 @@ namespace doriax::editor{
             return scriptExtensions.find(ext) != scriptExtensions.end();
         }
 
+        // Lua-family scripts: parsed and run by the Pluto runtime.
         inline static bool isLuaFile(const std::string& path) {
              static const std::unordered_set<std::string> luaExtensions = {
-                ".lua"
+                ".lua", ".pluto"
             };
 
             std::string ext = std::filesystem::path(path).extension().string();

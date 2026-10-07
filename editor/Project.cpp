@@ -2396,6 +2396,49 @@ std::filesystem::path editor::Project::getLuaDir() const{
     return luaDir;
 }
 
+// The stored form is the bare extension name, so project.yaml stays readable
+// and a hand-edited file keeps working. Unknown values fall back to the default
+// rather than failing a load.
+std::string editor::Project::scriptExtensionToString(ScriptExtension extension) {
+    return extension == ScriptExtension::LUA ? "lua" : "pluto";
+}
+
+editor::ScriptExtension editor::Project::scriptExtensionFromString(const std::string& value) {
+    return value == "lua" ? ScriptExtension::LUA : ScriptExtension::PLUTO;
+}
+
+std::string editor::Project::scriptCompilationToString(ScriptCompilation compilation) {
+    return compilation == ScriptCompilation::BYTECODE ? "bytecode" : "source";
+}
+
+editor::ScriptCompilation editor::Project::scriptCompilationFromString(const std::string& value) {
+    return value == "bytecode" ? ScriptCompilation::BYTECODE : ScriptCompilation::SOURCE;
+}
+
+void editor::Project::setScriptExtension(ScriptExtension scriptExtension){
+    this->scriptExtension = scriptExtension;
+}
+
+editor::ScriptExtension editor::Project::getScriptExtension() const{
+    return scriptExtension;
+}
+
+std::string editor::Project::getScriptFileExtension() const{
+    return scriptExtension == ScriptExtension::LUA ? ".lua" : ".pluto";
+}
+
+void editor::Project::setScriptCompilation(ScriptCompilation scriptCompilation){
+    this->scriptCompilation = scriptCompilation;
+}
+
+editor::ScriptCompilation editor::Project::getScriptCompilation() const{
+    return scriptCompilation;
+}
+
+bool editor::Project::isScriptBytecodeCompilation() const{
+    return scriptCompilation == ScriptCompilation::BYTECODE;
+}
+
 void editor::Project::setScriptDirs(std::vector<std::filesystem::path> scriptDirs){
     this->scriptDirs = std::move(scriptDirs);
 }
@@ -4425,6 +4468,8 @@ void editor::Project::resetConfigs() {
     windowIcon.clear();
     assetsDir = defaultAssetsDir;
     luaDir = defaultLuaDir;
+    scriptExtension = defaultScriptExtension;
+    scriptCompilation = defaultScriptCompilation;
     scriptDirs.clear();
     cxxStandard = defaultCxxStandard;
     physics2DEnabled = defaultPhysics2DEnabled;
@@ -5028,6 +5073,7 @@ const char* versionControlAttributes =
     "*.bundle  text eol=lf\n"
     "*.yaml    text eol=lf\n"
     "*.lua     text eol=lf\n"
+    "*.pluto   text eol=lf\n"
     "*.cmake   text eol=lf\n"
     "*.h       text eol=lf\n"
     "*.cpp     text eol=lf\n"
@@ -5046,7 +5092,10 @@ const char* versionControlAttributes =
     "*.wav     binary\n"
     "*.mp3     binary\n"
     "*.ttf     binary\n"
-    "*.otf     binary\n";
+    "*.otf     binary\n"
+    // Bytecode is an export artifact (W4.5). It is not meant to be committed,
+    // and marking it binary keeps a diff from trying to read it as text.
+    "*.luac    binary\n";
 
 } // namespace
 

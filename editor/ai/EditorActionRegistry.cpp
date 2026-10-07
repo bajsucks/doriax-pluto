@@ -661,7 +661,7 @@ const std::vector<ToolDefinition>& cachedTools() {
         },
         {
             "create_script",
-            "Create a Lua or C++ script file from a minimal template, attach it to an entity, and update ScriptComponent. Lua scripts are returned tables with init(), self.scene, and self.entity. C++ scripts use flat headers (\"Mesh.h\", \"ScriptBase.h\"); for mesh/cube behavior prefer cpp_subclass extending Mesh and unregister engine events in destructors.",
+            "Create a Pluto/Lua or C++ script file from a minimal template, attach it to an entity, and update ScriptComponent. Lua-family scripts are returned tables with init(), self.scene, and self.entity; they use the project's configured extension (.pluto by default, .lua when the project was created with it). C++ scripts use flat headers (\"Mesh.h\", \"ScriptBase.h\"); for mesh/cube behavior prefer cpp_subclass extending Mesh and unregister engine events in destructors.",
             objectSchema({
                 {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
                 {"entity_id", integerSchema("Entity id")},
@@ -674,14 +674,14 @@ const std::vector<ToolDefinition>& cachedTools() {
         },
         {
             "attach_script",
-            "Attach an existing Lua or C++ script to an entity ScriptComponent as a new entry. Use it only for a script the entity does not have yet; to rename or repoint a script it already has, use update_script_entry.",
+            "Attach an existing Pluto/Lua or C++ script to an entity ScriptComponent as a new entry. Use it only for a script the entity does not have yet; to rename or repoint a script it already has, use update_script_entry.",
             objectSchema({
                 {"scene_id", integerSchema("Scene id. Omit to use the selected scene")},
                 {"entity_id", integerSchema("Entity id")},
                 {"entity_name", stringSchema("Entity name, used only when entity_id is omitted")},
                 {"type", stringSchema("lua or cpp")},
                 {"class_name", stringSchema("Class/module name")},
-                {"path", stringSchema("Safe project-relative .lua or .cpp path")},
+                {"path", stringSchema("Safe project-relative .pluto, .lua, or .cpp path")},
                 {"header_path", stringSchema("Safe project-relative header path for C++ scripts")}
             }, {"type", "class_name", "path"}),
             false
@@ -697,7 +697,7 @@ const std::vector<ToolDefinition>& cachedTools() {
                 {"class_name", stringSchema("Current class name of the entry, used when index is omitted")},
                 {"path", stringSchema("Current source or header path of the entry, used when index and class_name are omitted")},
                 {"new_class_name", stringSchema("New class/module name")},
-                {"new_path", stringSchema("New safe project-relative .lua or .cpp path")},
+                {"new_path", stringSchema("New safe project-relative .pluto, .lua, or .cpp path")},
                 {"new_header_path", stringSchema("New safe project-relative header path, C++ entries only")}
             }),
             false
@@ -719,7 +719,7 @@ const std::vector<ToolDefinition>& cachedTools() {
             "update_script_file",
             "Replace an existing project script file with complete content and refresh attached ScriptComponent properties. Lua content must use Doriax table modules, not Dori.Script or editor property paths. For Mesh/Shape color use Shape(self.scene, self.entity) and setColor(1,0,0,1) or setColor(Vector4(1,0,0,1)). Choose update timing correctly in both Lua and C++: onUpdate is for variable-frame non-physics logic, while continuous forces and torques must use onFixedUpdate and must not be multiplied by delta time. Size forces from the body's real mass, not from a guessed magnitude: 3D mass is shape volume * density (default density 1000 kg/m3), while 2D mass is shape area * density (default density 1), so never carry the 3D default over to a 2D body. C++ content must use flat quoted headers (\"Mesh.h\", not <core/Mesh.h>), cpp_subclass + setColor for mesh entities, REGISTER_ENGINE_EVENT with the appropriate update event, and matching destructor cleanup with UNREGISTER_ENGINE_EVENT.",
             objectSchema({
-                {"path", stringSchema("Existing safe project-relative script path. Allowed extensions: .lua, .cpp, .h, .hpp")},
+                {"path", stringSchema("Existing safe project-relative script path. Allowed extensions: .pluto, .lua, .cpp, .h, .hpp")},
                 {"content", stringSchema("Complete replacement file contents")},
                 {"reason", stringSchema("Short reason shown in the approval preview")}
             }, {"path", "content"}),
@@ -1602,8 +1602,8 @@ ValidationResult EditorActionRegistry::validate(const std::string& name, const J
             return fail("path must be a safe project-relative path.");
         }
         const std::string ext = path.extension().string();
-        if (ext != ".lua" && ext != ".cpp" && ext != ".h" && ext != ".hpp") {
-            return fail("update_script_file only supports .lua, .cpp, .h, and .hpp files.");
+        if (ext != ".lua" && ext != ".pluto" && ext != ".cpp" && ext != ".h" && ext != ".hpp") {
+            return fail("update_script_file only supports .pluto, .lua, .cpp, .h, and .hpp files.");
         }
         return ok();
     }

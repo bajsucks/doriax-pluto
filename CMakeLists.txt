@@ -549,6 +549,7 @@ set(DORIAX_EDITOR_SOURCES
     ${EDITOR_DIR}/util/EntityBundle.cpp
     ${EDITOR_DIR}/util/ProjectUtils.cpp
     ${EDITOR_DIR}/util/ScriptParser.cpp
+    ${EDITOR_DIR}/util/ScriptCompiler.cpp
     ${EDITOR_DIR}/util/ScriptEvents.cpp
     ${EDITOR_DIR}/util/PngWriter.cpp
     ${EDITOR_DIR}/util/FbxImporter.cpp
@@ -916,4 +917,19 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
                 CONFIGURATIONS Release MinSizeRel
         )
     endforeach()
+endif()
+
+# --- Headless checks -------------------------------------------------------
+# Opt-in: CI turns these on to fail the build when the script runtime or the
+# editor's keyword list regresses (W7). They link the same `pluto` target the
+# engine links, so they always test the pinned revision, and they need no
+# window or generated headers.
+option(DORIAX_BUILD_TESTS "Build the headless script-runtime checks" OFF)
+if(DORIAX_BUILD_TESTS)
+    enable_testing()
+    # `pluto` exposes its source directory as its public include directory, which
+    # is where llex.cpp lives; read it off the target instead of re-declaring the
+    # path here (the FetchContent variables are scoped to libs/pluto).
+    get_target_property(DORIAX_PLUTO_SRC_DIR pluto INTERFACE_INCLUDE_DIRECTORIES)
+    add_subdirectory(tests/pluto)
 endif()

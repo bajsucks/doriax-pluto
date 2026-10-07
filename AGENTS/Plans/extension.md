@@ -7,6 +7,38 @@
 > Read [`../Docs/pluto.md`](../Docs/pluto.md) first. It documents the current
 > integration and the caveats this plan assumes.
 
+## Status (implementation pass)
+
+**Shipped: M1, M2, M3 (minus the compile cache), and most of M4.** The build is
+green on Linux with `plutoc`, and both headless checks pass
+(`ctest -DDORIAX_BUILD_TESTS=ON`: `pluto-runtime`, `pluto-editor-keywords`).
+
+What is **not** done, and why:
+
+- **W5.3 (compile cache)** — deliberately skipped. An export compiles each
+  script once and Play uses source, so a content-hash cache has no measured
+  consumer yet. Add it when repeated exports of a large project make it hurt;
+  the recommended location remains `.doriax/`.
+- **W7.3 (export round-trip test)** — needs a project fixture and the exporter
+  driving the real runtime; there is no headless harness for that yet. This is
+  the highest-value missing test because it is the only one that catches an
+  exporter/runtime extension split.
+- **W7.4 (D2 ambiguity regression test)** — the ordering and warning are in
+  `LuaBinding::moduleLoader`, but exercising it needs the engine runtime plus
+  the `lua://` virtual filesystem.
+- **W8.2 (D9 scanner)** — the migration guide exists and the save-time
+  diagnostic links it, but there is no automated project/CLI scan for reserved
+  words used as identifiers. Auto-fix stays out of scope by decision.
+
+Verified this pass: `.pluto` and `.lua` parse and run headless; `lua_dump`
+bytecode round-trips through `luaL_loadbufferx(..., "b")`; a text chunk misnamed
+`.luac` is rejected in text mode (and vice versa); the editor's
+`ScriptCompiler` compiled a `.pluto` class and the engine-style loader ran it;
+the editor keyword list matches Pluto's `luaX_tokens`; `plutoc` compiles a
+`.pluto` file; the editor and CLI build. **Not verified**: renaming/copying
+through the GUI, editor Play, a full export, bytecode export end-to-end, and
+every non-Linux target.
+
 ## Objective
 
 A project using the fork should be able to:
@@ -208,17 +240,17 @@ Task IDs are stable; reference them in commits and in the plan checkboxes.
 Files: `engine/core/script/LuaBinding.cpp`,
 `engine/core/component/ScriptComponent.h`, `engine/project/lua/`.
 
-- [ ] **W1.1** `moduleLoader`: try `.pluto` then `.lua`, for both the assets root
+- [x] **W1.1** `moduleLoader`: try `.pluto` then `.lua`, for both the assets root
       and the `lua/` subdirectory, in the D2 order. Keep the `"no file in assets
       directory"` fallback message.
-- [ ] **W1.2** `init()`: look for `lua://main.pluto` before `lua://main.lua`, and
+- [x] **W1.2** `init()`: look for `lua://main.pluto` before `lua://main.lua`, and
       the `lua/` variants likewise.
-- [ ] **W1.3** `initializeLuaScripts()`: no extension logic expected, but
+- [x] **W1.3** `initializeLuaScripts()`: no extension logic expected, but
       confirm a `.pluto` path loads and that a `.luac` path loads; pass the
       path (not `className`) as the chunk name so stack traces stay useful.
-- [ ] **W1.4** Update the `ScriptEntry::path` comment in `ScriptComponent.h` to
+- [x] **W1.4** Update the `ScriptEntry::path` comment in `ScriptComponent.h` to
       say `.cpp`, `.lua`, or `.pluto`.
-- [ ] **W1.5** Add `engine/project/lua/main.pluto`? **Do not** replace
+- [x] **W1.5** Add `engine/project/lua/main.pluto`? **Do not** replace
       `main.lua` in the template yet; instead let W3 create the right one, or add
       both and rely on the D2 order. Decide before editing the sample project.
 
@@ -232,19 +264,19 @@ Files: `editor/util/Util.h`, `editor/window/CodeEditor.cpp`,
 `editor/window/Properties.cpp`, `editor/window/AiChatWindow.cpp`,
 `editor/command/type/RenameFileCmd.cpp`, `editor/command/type/CopyFileCmd.cpp`.
 
-- [ ] **W2.1** `Util::isLuaFile`: accept `.pluto` (and `.luac`? see W4.4 —
+- [x] **W2.1** `Util::isLuaFile`: accept `.pluto` (and `.luac`? see W4.4 —
       probably yes for consistency). `Util::isScriptFile`: accept `.pluto`.
-- [ ] **W2.2** `CodeEditor::languageForPath`: map `.pluto` → `SyntaxLanguage::Lua`.
-- [ ] **W2.3** `CustomTextEditor`: optionally relabel "Lua" → "Pluto"; keep the
+- [x] **W2.2** `CodeEditor::languageForPath`: map `.pluto` → `SyntaxLanguage::Lua`.
+- [x] **W2.3** `CustomTextEditor`: optionally relabel "Lua" → "Pluto"; keep the
       keyword data as-is (it already includes Pluto keywords).
-- [ ] **W2.4** `ScriptEvents.cpp` `luaDocument()`: add the Pluto block openers
+- [x] **W2.4** `ScriptEvents.cpp` `luaDocument()`: add the Pluto block openers
       `class` and `try`, and `begin` (for `enum ... begin`). `switch ... do`
       already balances via `do`. Verify `catch` does not change depth.
-- [ ] **W2.5** Audit `Util::isScriptFile` / `isLuaFile` consumers for
+- [x] **W2.5** Audit `Util::isScriptFile` / `isLuaFile` consumers for
       extension-driven behavior that should now include `.pluto`:
       `Properties.cpp:8948`, `AiChatWindow.cpp:1811`,
       `RenameFileCmd.cpp:58,99`, `CopyFileCmd.cpp:79,149`.
-- [ ] **W2.6** Confirm rename/copy path remapping (`.lua` ↔ `.pluto`) still
+- [x] **W2.6** Confirm rename/copy path remapping (`.lua` ↔ `.pluto`) still
       rewrites `ScriptEntry::path` correctly.
 
 **Acceptance:** creating, opening, editing, renaming, and copying a `.pluto` file
@@ -257,20 +289,20 @@ Files: `editor/window/dialog/ScriptCreateDialog.cpp`,
 `editor/window/ResourcesWindow.cpp`, `editor/Project.cpp`,
 `editor/Project.h`, `editor/cli/CommandLine.cpp`.
 
-- [ ] **W3.1** Add the D6 project setting (`scriptExtension`). Surface it in
+- [x] **W3.1** Add the D6 project setting (`scriptExtension`). Surface it in
       Project Settings > Directories next to the Lua dir.
-- [ ] **W3.2** `ScriptCreateDialog::makeLuaPath()` and `writeFiles()` honor the
+- [x] **W3.2** `ScriptCreateDialog::makeLuaPath()` and `writeFiles()` honor the
       setting; the template body should stay valid in both dialects
       (`local M = {} ... return M`) unless the user picked Pluto, in which case a
       Pluto-flavored template (e.g. a `class`) is a nice touch.
-- [ ] **W3.3** `ScriptCreateDialog::selectExistingFile()` validation accepts
+- [x] **W3.3** `ScriptCreateDialog::selectExistingFile()` validation accepts
       `.pluto`, and the error strings stop saying "(.lua)" only.
-- [ ] **W3.4** `ResourcesWindow` new-item flow appends the configured extension
+- [x] **W3.4** `ResourcesWindow` new-item flow appends the configured extension
       instead of hard-coded `.lua`; file-type icon/detection accepts `.pluto`.
-- [ ] **W3.5** `Project::versionControlAttributes` emits `*.pluto text eol=lf`
+- [x] **W3.5** `Project::versionControlAttributes` emits `*.pluto text eol=lf`
       (and `*.luac binary` if W4 ships bytecode). Existing projects regenerate
       `.gitattributes` on save — verify that path.
-- [ ] **W3.6** Check `Project::holdsOnlyAssets` and any "script root" scanning
+- [x] **W3.6** Check `Project::holdsOnlyAssets` and any "script root" scanning
       that uses `isScriptFile` so `.pluto` under a script dir is compiled/exposed
       as expected.
 
@@ -281,23 +313,23 @@ project keeps `.lua`; `.gitattributes` matches whatever is shipped.
 
 Files: `editor/Exporter.cpp`, `editor/Exporter.h`, `editor/cli/CommandLine.cpp`.
 
-- [ ] **W4.1** `isLuaExportFile()`: add `.pluto` to the allowlist.
-- [ ] **W4.2** `isLuaSourceFile()`: add `.pluto`.
-- [ ] **W4.3** `copyLua()` and the `copyAssets()` duplicate-path merge
+- [x] **W4.1** `isLuaExportFile()`: add `.pluto` to the allowlist.
+- [x] **W4.2** `isLuaSourceFile()`: add `.pluto`.
+- [x] **W4.3** `copyLua()` and the `copyAssets()` duplicate-path merge
       (`Exporter.cpp` ~1647-1672 and ~1723-1724) must treat `.pluto` as a Lua
       source. The Android merge failure on duplicates is the reason these checks
       exist; add `.pluto` to the same predicate rather than parallel logic.
-- [ ] **W4.4** Decide whether `.luac` is an authoring extension or only an export
+- [x] **W4.4** Decide whether `.luac` is an authoring extension or only an export
       artifact. Recommendation: **not** an authoring extension; accept it at
       runtime/export only.
-- [ ] **W4.5** If D3 bytecode is enabled, insert a compile step after
+- [x] **W4.5** If D3 bytecode is enabled, insert a compile step after
       `copyLua()`/before packing: compile each shipped script with the D4
       in-process dumper, write `.luac`, and exclude the original text. Reuse the
       "removable packed tree entries" logic (`Exporter.cpp` ~1254-1281) and
       update it if it assumes `.lua`.
-- [ ] **W4.6** Record the Pluto revision in the exported manifest/`AGENTS.md`
+- [x] **W4.6** Record the Pluto revision in the exported manifest/`AGENTS.md`
       so a bytecode version mismatch is diagnosable.
-- [ ] **W4.7** `editor/ai/EditorActionExecutor.cpp:4474` builds an exporter
+- [x] **W4.7** `editor/ai/EditorActionExecutor.cpp:4474` builds an exporter
       config from `getLuaPath()`; confirm the new setting flows through there and
       through `editor/cli/CommandLine.cpp:545`.
 
@@ -312,7 +344,7 @@ Files: `engine/libs/pluto/CMakeLists.txt`, new
 `editor/util/ScriptCompiler.{h,cpp}` (or similar), `editor/Exporter.cpp`,
 root `CMakeLists.txt` (where the editor target is defined).
 
-- [ ] **W5.1** Add an executable target to
+- [x] **W5.1** Add an executable target to
       `engine/libs/pluto/CMakeLists.txt`:
 
       ```cmake
@@ -325,7 +357,7 @@ root `CMakeLists.txt` (where the editor target is defined).
       external-warning loop in `engine/CMakeLists.txt`, and decide whether it is
       built by default or only on demand (recommend: build by default on desktop,
       skip on mobile/console where the editor does not run).
-- [ ] **W5.2** Implement the in-process compiler used by the editor/export:
+- [x] **W5.2** Implement the in-process compiler used by the editor/export:
       scratch `lua_State`, `luaL_openselectedlibs` matching the runtime,
       `luaL_loadbufferx(..., "t")`, `lua_dump(L, writer, &buf, 1)`. Return a
       structured result (ok + bytes, or error message + line).
@@ -333,13 +365,13 @@ root `CMakeLists.txt` (where the editor target is defined).
       invalidate on source change or version change. Decide the cache location
       (recommend inside the editor's internal `.doriax/` directory, never next to
       the source).
-- [ ] **W5.4** Version guard: stamp the Pluto revision (e.g. the
+- [x] **W5.4** Version guard: stamp the Pluto revision (e.g. the
       `PLUTO_VERSION` string, `"Pluto 0.12.2"`, plus the git tag/commit from
       `PLUTO_GIT_TAG`) into cached/exported bytecode metadata and refuse to load
       a mismatched artifact with a clear message.
-- [ ] **W5.5** Expose "Compile scripts" as an editor action and a CLI flag
+- [x] **W5.5** Expose "Compile scripts" as an editor action and a CLI flag
       (e.g. `--compile-scripts`) so CI can validate without a full export.
-- [ ] **W5.6** Document the interaction with `strip`: stripping removes local
+- [x] **W5.6** Document the interaction with `strip`: stripping removes local
       names and debug info, which degrades stack traces. Recommendation: ship
       stripped bytecode in Release exports and unstripped in Debug.
 
@@ -354,21 +386,21 @@ Files: `editor/ai/EditorActionExecutor.cpp`,
 `editor/ai/EditorActionRegistry.cpp`, `editor/Generator.cpp`,
 `editor/window/widget/CustomTextEditor.cpp` (error markers), Output panel.
 
-- [ ] **W6.1** `validateDoriaxLuaScriptContent()` is heuristic and text-based; it
+- [x] **W6.1** `validateDoriaxLuaScriptContent()` is heuristic and text-based; it
       already applies to Pluto content. Make its call sites accept `.pluto` and
       consider rejecting constructs that only parse in one dialect if that is
       ever desired (probably not — both are valid).
-- [ ] **W6.2** `updateScriptEntry` (`new_path` validation) and
+- [x] **W6.2** `updateScriptEntry` (`new_path` validation) and
       `updateScriptFile` accept `.pluto` (and `.luac` where appropriate). Files:
       `EditorActionExecutor.cpp` ~3996-4005, ~4050-4067.
-- [ ] **W6.3** Update extension lists/messages in `EditorActionExecutor.cpp`
+- [x] **W6.3** Update extension lists/messages in `EditorActionExecutor.cpp`
       (~1977, ~5304, ~5379) and `EditorActionRegistry.cpp` (~684, ~700, ~722,
       ~1605).
-- [ ] **W6.4** `Generator.cpp` (~1241): generated `AGENTS.md` should say scripts
+- [x] **W6.4** `Generator.cpp` (~1241): generated `AGENTS.md` should say scripts
       are `.lua` **or** `.pluto` and are loaded at runtime.
-- [ ] **W6.5** D8: surface compile errors on save. Add a "Scripts" output
+- [x] **W6.5** D8: surface compile errors on save. Add a "Scripts" output
       channel; wire the scratch compiler from W5.2.
-- [ ] **W6.6** If the editor gains a `scriptExtension` setting, make the AI
+- [x] **W6.6** If the editor gains a `scriptExtension` setting, make the AI
       prompts/`search_engine_api` examples reflect it.
 
 **Acceptance:** the AI can create and edit `.pluto` files; a `.pluto` file with a
@@ -378,11 +410,11 @@ syntax error shows an editor-visible diagnostic with a line number.
 
 Files: `.github/workflows/cmake.yml`, new test sources, `CMakeLists.txt`.
 
-- [ ] **W7.1** Add a headless smoke run to CI: build `plutoc` (and/or a tiny
+- [x] **W7.1** Add a headless smoke run to CI: build `plutoc` (and/or a tiny
       `pluto`-linked test) and execute a script exercising `class`, `switch`,
       `enum`, and a Pluto extension (`json`). Fail the job on a non-zero exit.
       The program in `../Docs/pluto.md` is a starting point.
-- [ ] **W7.2** Add a unit test that cross-checks the editor keyword list against
+- [x] **W7.2** Add a unit test that cross-checks the editor keyword list against
       Pluto's reserved words. Simplest robust form: check a small checked-in
       expected list in both places (a `.txt` parsed by the test and by the
       editor initializer), and a second assertion that the list matches
@@ -393,7 +425,7 @@ Files: `.github/workflows/cmake.yml`, new test sources, `CMakeLists.txt`.
       This is the only test that catches the exporter/runtime extension split.
 - [ ] **W7.4** Add a regression test for the D2 ambiguity rule (both `.pluto` and
       `.lua` present) if feasible in the runtime test harness.
-- [ ] **W7.5** Ensure the Windows/macOS CI jobs still build with `plutoc` in the
+- [x] **W7.5** Ensure the Windows/macOS CI jobs still build with `plutoc` in the
       tree (the executable is unnecessary on mobile; gate it).
 
 **Acceptance:** CI fails if `.pluto` stops loading or if the editor keyword list
@@ -404,12 +436,12 @@ drifts from Pluto.
 Files: `README.md`, `AGENTS.md`, `AGENTS/Docs/pluto.md`, user docs (external repo
 `doriax-site`), `engine/project/`.
 
-- [ ] **W8.1** Update `AGENTS.md` and `AGENTS/Docs/pluto.md` to reflect that
+- [x] **W8.1** Update `AGENTS.md` and `AGENTS/Docs/pluto.md` to reflect that
       `.pluto` is supported and how bytecode is produced.
 - [ ] **W8.2** Add a migration guide for the reserved words (D9) and link it from
       the compile-error message.
-- [ ] **W8.3** Update the sample project (`engine/project/`) and any templates.
-- [ ] **W8.4** README/scripting docs should say Pluto (Lua 5.4 superset) and list
+- [x] **W8.3** Update the sample project (`engine/project/`) and any templates.
+- [x] **W8.4** README/scripting docs should say Pluto (Lua 5.4 superset) and list
       the extension setting.
 
 **Acceptance:** a reader who has never seen the fork can author and ship a
@@ -472,19 +504,19 @@ extension split is where bugs hide.
 
 Before starting:
 
-- [ ] Read `../Docs/pluto.md` and confirm the Pluto pin still matches
+- [x] Read `../Docs/pluto.md` and confirm the Pluto pin still matches
       `engine/libs/pluto/CMakeLists.txt`.
-- [ ] Build `doriax-editor` on Linux once to confirm a clean baseline.
-- [ ] Grep `".lua"` across `engine/ editor/` and re-confirm the file list above
+- [x] Build `doriax-editor` on Linux once to confirm a clean baseline.
+- [x] Grep `".lua"` across `engine/ editor/` and re-confirm the file list above
       has not drifted (`grep -rn '\.lua' engine editor --include=*.cpp --include=*.h`).
 
 When finishing:
 
-- [ ] Update `../Docs/pluto.md` (remove items this plan retires, add new caveats).
-- [ ] Update `AGENTS.md` if the build or hard rules changed.
-- [ ] Leave this plan's checkboxes accurate; if unfinished, keep the file and
+- [x] Update `../Docs/pluto.md` (remove items this plan retires, add new caveats).
+- [x] Update `AGENTS.md` if the build or hard rules changed.
+- [x] Leave this plan's checkboxes accurate; if unfinished, keep the file and
       mark the current milestone.
-- [ ] Verify the test matrix rows you touched, and note which rows remain
+- [x] Verify the test matrix rows you touched, and note which rows remain
       unverified (especially non-Linux).
-- [ ] If `plutoc` or bytecode shipped, record the Pluto revision in the export
+- [x] If `plutoc` or bytecode shipped, record the Pluto revision in the export
       metadata and in the docs.

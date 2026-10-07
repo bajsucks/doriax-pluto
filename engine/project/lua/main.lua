@@ -1,1 +1,4 @@
+-- Kept as the Lua-dialect variant beside main.pluto. Pluto resolves .pluto
+-- first, so this file is shadowed and the engine logs one warning naming both;
+-- delete whichever of the two a project does not want.
 --print("lua file")

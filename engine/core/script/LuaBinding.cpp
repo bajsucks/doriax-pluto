@@ -378,33 +378,86 @@ int LuaBinding::setLuaPath(const char* path) {
     return 0;
 }
 
+namespace {
+
+// D2 resolution order, shared by moduleLoader() and init(): the assets root
+// before the lua/ subdirectory, and .pluto before .lua. Both are valid Pluto
+// input, so .pluto winning lets a project rename a script without deleting the
+// old file while it migrates. .luac is last, and only exists in exports built
+// with scriptCompilation: bytecode (W4.5), where the source text is not shipped.
+const char* const SCRIPT_EXTENSIONS[] = { ".pluto", ".lua", ".luac" };
+constexpr size_t SCRIPT_EXTENSION_COUNT = sizeof(SCRIPT_EXTENSIONS) / sizeof(SCRIPT_EXTENSIONS[0]);
+
+// Loader mode for luaL_loadbufferx(). Bytecode is only ever produced with the
+// .luac extension, so a text chunk misnamed .luac - or a binary chunk named
+// .pluto - fails with a clear "attempt to load" message instead of being
+// silently reinterpreted.
+const char* scriptLoadMode(const std::string& path) {
+    static const std::string bytecodeExtension = ".luac";
+    if (path.size() >= bytecodeExtension.size() &&
+        path.compare(path.size() - bytecodeExtension.size(), bytecodeExtension.size(), bytecodeExtension) == 0) {
+        return "b";
+    }
+    return "t";
+}
+
+// Rewrites a script path to its compiled sibling ("x.pluto" -> "x.luac"),
+// preserving any directory part. Used to fall back to exported bytecode.
+std::string compiledScriptPath(const std::string& path) {
+    const size_t slash = path.find_last_of("/\\");
+    const size_t dot = path.find_last_of('.');
+    if (dot == std::string::npos || (slash != std::string::npos && dot < slash)) {
+        return path + ".luac";
+    }
+    return path.substr(0, dot) + ".luac";
+}
+
+// A project carrying both enemy.pluto and enemy.lua loads the first silently,
+// which is exactly the kind of bug that costs an afternoon. Warn once per
+// shadowed file so the duplicate is visible without spamming every require().
+void warnShadowedScript(const std::string& loaded, const std::string& shadowed) {
+    static std::set<std::string> warned;
+    if (!warned.insert(loaded + "|" + shadowed).second) return;
+
+    Log::warn("Both \"%s\" and \"%s\" exist; \"%s\" is loaded. Remove or rename the duplicate.",
+              loaded.c_str(), shadowed.c_str(), loaded.c_str());
+}
+
+} // namespace
+
 int LuaBinding::moduleLoader(lua_State *L) {
     
     const char *filename = lua_tostring(L, 1);
     std::string separator(1, System::instance().getDirSeparator());
     filename = luaL_gsub(L, filename, ".", separator.c_str());
     
-    std::string filepath;
-    Data filedata;
+    const std::string base = filename;
+    const std::string roots[] = { std::string(""), std::string("lua") + separator };
     
-    filepath = "lua://" + std::string("") + filename + ".lua";
-    filedata.open(filepath.c_str());
-    if (filedata.getMemPtr() != NULL) {
-        
-        luaL_loadbuffer(L, (const char *) filedata.getMemPtr(), filedata.length(),
-                        filepath.c_str());
-        
-        return 1;
-    }
-
-    filepath = "lua://" + std::string("lua") + System::instance().getDirSeparator() + filename + ".lua";
-    filedata.open(filepath.c_str());
-    if (filedata.getMemPtr() != NULL) {
-        
-        luaL_loadbuffer(L, (const char *) filedata.getMemPtr(), filedata.length(),
-                        filepath.c_str());
-        
-        return 1;
+    for (const std::string& root : roots) {
+        for (size_t i = 0; i < SCRIPT_EXTENSION_COUNT; i++) {
+            const std::string filepath = "lua://" + root + base + SCRIPT_EXTENSIONS[i];
+            
+            Data filedata;
+            if (filedata.open(filepath.c_str()) != FileErrors::FILEDATA_OK) continue;
+            
+            // Only the source extensions shadow each other: a .luac next to a
+            // .pluto is an export artifact, not an ambiguous project file.
+            for (size_t j = i + 1; j < SCRIPT_EXTENSION_COUNT; j++) {
+                if (std::string(SCRIPT_EXTENSIONS[j]) == ".luac") continue;
+                const std::string shadowed = "lua://" + root + base + SCRIPT_EXTENSIONS[j];
+                Data other;
+                if (other.open(shadowed.c_str()) == FileErrors::FILEDATA_OK) {
+                    warnShadowedScript(filepath, shadowed);
+                    break;
+                }
+            }
+            
+            luaL_loadbufferx(L, (const char *) filedata.getMemPtr(), filedata.length(),
+                             filepath.c_str(), scriptLoadMode(filepath));
+            
+            return 1;
+        }
     }
     
     lua_pushstring(L, "\n\tno file in assets directory");
@@ -441,19 +494,40 @@ void LuaBinding::init(){
 
     std::string luadir = std::string("lua") + System::instance().getDirSeparator();
 
-    std::string luafile = std::string("lua://") + "main.lua";
-    std::string luafile_subdir = std::string("lua://") + luadir + "main.lua";
-
+    // D2: main.pluto wins over main.lua, and the assets root wins over lua/.
+    // The chunk name follows the file that actually opened, so the error below
+    // points at the real entry point instead of a name that was never read.
+    const std::string roots[] = { std::string(""), luadir };
+    std::string luafile;
     Data filedata;
 
-    //First try open on root assets dir
-    if (filedata.open(luafile.c_str()) != FileErrors::FILEDATA_OK){
-        //Second try to open on lua dir
-        filedata.open(luafile_subdir.c_str());
+    for (const std::string& root : roots) {
+        for (size_t i = 0; i < SCRIPT_EXTENSION_COUNT; i++) {
+            if (std::string(SCRIPT_EXTENSIONS[i]) == ".luac") continue; // no main.luac
+            const std::string candidate = "lua://" + root + "main" + SCRIPT_EXTENSIONS[i];
+            if (filedata.open(candidate.c_str()) != FileErrors::FILEDATA_OK) continue;
+
+            luafile = candidate;
+
+            for (size_t j = i + 1; j < SCRIPT_EXTENSION_COUNT; j++) {
+                if (std::string(SCRIPT_EXTENSIONS[j]) == ".luac") continue;
+                const std::string shadowed = "lua://" + root + "main" + SCRIPT_EXTENSIONS[j];
+                Data other;
+                if (other.open(shadowed.c_str()) == FileErrors::FILEDATA_OK) {
+                    warnShadowedScript(candidate, shadowed);
+                    break;
+                }
+            }
+            break;
+        }
+        if (!luafile.empty()) break;
     }
 
+    // A project without an entry point is valid: an empty chunk runs and exits.
+    if (luafile.empty()) luafile = "lua://main.pluto";
+
     //int luaL_dofile (lua_State *L, const char *filename);
-    if (luaL_loadbuffer(L,(const char*)filedata.getMemPtr(),filedata.length(), luafile.c_str()) == 0){
+    if (luaL_loadbufferx(L,(const char*)filedata.getMemPtr(),filedata.length(), luafile.c_str(), scriptLoadMode(luafile)) == 0){
         if(pcallWithTraceback(L, 0, LUA_MULTRET) != 0){
             Log::error("Lua Error: %s", getLuaStackErrorString(L, -1).c_str());
             lua_pop(L, 1);
@@ -671,11 +745,25 @@ void LuaBinding::initializeLuaScripts(Scene* scene) {
             std::string luaFile = std::string("lua://") + scriptEntry.path;
             Data filedata;
             if (filedata.open(luaFile.c_str()) != FileErrors::FILEDATA_OK) {
-                Log::error("Lua script file not found: %s", scriptEntry.path.c_str());
-                continue;
+                // A bytecode export (W4.5) drops the source text and ships
+                // <base>.luac beside where it was, while the scene keeps the
+                // authored .pluto/.lua path. Fall back to the compiled sibling
+                // so the same scene runs against either export.
+                const std::string compiled = compiledScriptPath(scriptEntry.path);
+                const std::string compiledFile = std::string("lua://") + compiled;
+                if (compiled != scriptEntry.path &&
+                    filedata.open(compiledFile.c_str()) == FileErrors::FILEDATA_OK) {
+                    luaFile = compiledFile;
+                } else {
+                    Log::error("Lua script file not found: %s", scriptEntry.path.c_str());
+                    continue;
+                }
             }
 
-            int status = luaL_loadbuffer(L, (const char*)filedata.getMemPtr(), filedata.length(), scriptEntry.path.c_str());
+            // The chunk name stays the authored path so a stack trace names the
+            // file the scene references, even when bytecode was loaded instead.
+            int status = luaL_loadbufferx(L, (const char*)filedata.getMemPtr(), filedata.length(),
+                                          scriptEntry.path.c_str(), scriptLoadMode(luaFile));
             if (status != LUA_OK) {
                 Log::error("Failed to load Lua file '%s': %s", scriptEntry.path.c_str(), getLuaStackErrorString(L, -1).c_str());
                 lua_pop(L, 1);

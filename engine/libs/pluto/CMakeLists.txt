@@ -96,3 +96,36 @@ if(EMSCRIPTEN AND EMSCRIPTEN_THREAD_SUPPORT)
     target_compile_options(pluto PRIVATE -pthread)
     target_compile_options(pluto_soup PRIVATE -pthread)
 endif()
+
+# --- plutoc: upstream's bytecode compiler (src/luac.cpp) -------------------
+# The CLI form of the same dumper the editor drives in-process through
+# editor/util/ScriptCompiler.cpp; useful for CI and external tooling. It links
+# the identical pluto library, so its bytecode is interchangeable with the
+# editor's, and needs no readline (only lua.cpp, the REPL, does).
+#
+# Desktop only: the editor does not run on mobile/console targets, so shipping a
+# host-only compiler there would only bloat the build (W5.1).
+if(NOT CMAKE_SYSTEM_NAME MATCHES "Android|iOS|Emscripten")
+    add_executable(plutoc "${PLUTO_SRC_DIR}/luac.cpp")
+    target_link_libraries(plutoc PRIVATE pluto)
+    set_target_properties(
+        plutoc
+        PROPERTIES
+            CXX_STANDARD 17
+            CXX_STANDARD_REQUIRED ON
+    )
+
+    # luac.cpp includes lprefix.h, so it needs the same platform define as the
+    # library it links.
+    if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+        target_compile_definitions(plutoc PRIVATE LUA_USE_WINDOWS)
+    elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+        target_compile_definitions(plutoc PRIVATE LUA_USE_MACOSX)
+    elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        target_compile_definitions(plutoc PRIVATE LUA_USE_LINUX)
+    endif()
+
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(plutoc PRIVATE -Wno-multichar)
+    endif()
+endif()

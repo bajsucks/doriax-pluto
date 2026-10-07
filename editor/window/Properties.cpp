@@ -8949,13 +8949,13 @@ void editor::Properties::drawScriptComponent(ComponentType cpType, SceneProject*
                             : Util::isSourceFile(p.string());
                         if (!validType) {
                             Backend::getApp().registerAlert("Error", script.type == ScriptType::LUA
-                                ? "Select a Lua script file."
+                                ? "Select a Pluto or Lua script file."
                                 : "Select a C++ source file.");
                         } else {
                             // Lua sources are stored relative to the Lua root ("lua://")
                             if (!Util::isInsidePath(p, sourceRoot)) {
                                 Backend::getApp().registerAlert("Error", script.type == ScriptType::LUA
-                                    ? "File must be inside the Lua directory."
+                                    ? "File must be inside the script (Lua) directory."
                                     : "File must be inside project directory.");
                             } else {
                                 std::error_code ec;
@@ -13545,6 +13545,7 @@ void editor::Properties::show(){
                 firstEntity,
                 project->getProjectPath(),
                 project->getLuaPath(),
+                project->getScriptFileExtension(),
                 defaultName,
                 [this, sceneProject, entities](const std::filesystem::path& headerPath,
                                             const std::filesystem::path& sourcePath,

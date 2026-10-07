@@ -1838,7 +1838,9 @@ void editor::ResourcesWindow::handleNewItem(){
             if (!itemName.empty()) {
                 std::string content;
                 if (newItemType == NewItemType::LUA_SCRIPT) {
-                    if (!Util::isLuaFile(itemName)) itemName += ".lua";
+                    // An explicit .lua is respected; a bare name gets the
+                    // project's configured extension (D6).
+                    if (!Util::isLuaFile(itemName)) itemName += project->getScriptFileExtension();
                     std::string moduleName = Factory::toIdentifier(fs::path(itemName).stem().string());
                     content = "local " + moduleName + " = {}\n\nreturn " + moduleName + "\n";
                 } else if (newItemType == NewItemType::CPP_SOURCE) {

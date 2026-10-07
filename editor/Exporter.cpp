@@ -11,6 +11,7 @@
 #include "util/FbxImporter.h"
 #include "util/FileUtils.h"
 #include "util/MsBuildProgress.h"
+#include "util/ScriptCompiler.h"
 #include "util/ShaderHeaderBuilder.h"
 #include "pool/ShaderPool.h"
 
@@ -26,6 +27,7 @@
 #include <cstring>
 #include <fstream>
 #include <future>
+#include <iterator>
 #include <map>
 #include <vector>
 
@@ -557,6 +559,12 @@ void editor::Exporter::runExport() {
     if (isCancelled()) { setError("Export cancelled"); return; }
     if (!copyAssets()) return;
     if (isCancelled()) { setError("Export cancelled"); return; }
+    // After copyAssets(), whose duplicate-path merge works on the source tree,
+    // and before packing/building, which read the lua tree (W4.5).
+    if (config.scriptBytecode) {
+        if (!compileLuaBytecode()) return;
+        if (isCancelled()) { setError("Export cancelled"); return; }
+    }
     if (!copyCppScripts()) return;
     if (isCancelled()) { setError("Export cancelled"); return; }
     if (!copyEngine()) return;
@@ -701,7 +709,7 @@ bool editor::Exporter::isLuaExportFile(const fs::path& path) {
     std::transform(ext.begin(), ext.end(), ext.begin(),
                    [](unsigned char c) { return std::tolower(c); });
     static const std::set<std::string> luaExtensions = {
-        ".lua", ".luac", ".json", ".txt", ".csv", ".tsv", ".xml", ".ini", ".cfg", ".conf", ".toml", ".dat"
+        ".lua", ".pluto", ".luac", ".json", ".txt", ".csv", ".tsv", ".xml", ".ini", ".cfg", ".conf", ".toml", ".dat"
     };
     return luaExtensions.count(ext) > 0;
 }
@@ -711,7 +719,7 @@ bool editor::Exporter::isLuaSourceFile(const fs::path& path) {
     std::string ext = path.extension().string();
     std::transform(ext.begin(), ext.end(), ext.begin(),
                    [](unsigned char c) { return std::tolower(c); });
-    return ext == ".lua" || ext == ".luac";
+    return ext == ".lua" || ext == ".pluto" || ext == ".luac";
 }
 
 bool editor::Exporter::checkTargetDir() {
@@ -1732,6 +1740,92 @@ bool editor::Exporter::copyLua() {
         }
     }
 
+    return true;
+}
+
+// Bytecode export (W4.5). The source text is not shipped at all: each script in
+// the exported lua tree becomes <base>.luac and the text is removed. The scene
+// keeps the authored .pluto/.lua path, and the runtime falls back to the
+// compiled sibling (LuaBinding), so nothing else in the export needs rewriting.
+bool editor::Exporter::compileLuaBytecode() {
+    setProgress("Compiling scripts to bytecode...", 0.35f);
+
+    const fs::path luaRoot = getExportProjectRoot() / "lua";
+    std::error_code ec;
+    if (!fs::exists(luaRoot, ec)) {
+        return true; // No scripts at all, nothing to compile
+    }
+
+    // Release exports strip local names and debug info; Debug keeps them so a
+    // stack trace still names locals (W5.6).
+    const bool strip = (config.buildType != "Debug");
+
+    std::vector<fs::path> sources;
+    for (fs::recursive_directory_iterator it(luaRoot, fs::directory_options::skip_permission_denied, ec), end;
+         it != end; it.increment(ec)) {
+        const fs::directory_entry& entry = *it;
+        if (!entry.is_regular_file(ec)) continue;
+
+        const std::string ext = [&] {
+            std::string lower = entry.path().extension().string();
+            std::transform(lower.begin(), lower.end(), lower.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            return lower;
+        }();
+        if (ext != ".lua" && ext != ".pluto") continue;
+
+        sources.push_back(entry.path());
+    }
+
+    for (const fs::path& sourcePath : sources) {
+        if (isCancelled()) {
+            setError("Export cancelled");
+            return false;
+        }
+
+        std::ifstream in(sourcePath, std::ios::binary);
+        if (!in) {
+            setError("Failed to read script for bytecode compilation: " + sourcePath.string());
+            return false;
+        }
+        std::string source((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        in.close();
+
+        // relative to the lua root, so the chunk name mirrors the "lua://" path
+        // the runtime resolves and stack traces read like the project's.
+        const fs::path chunkName = fs::relative(sourcePath, luaRoot, ec).generic_string();
+
+        ScriptCompiler::Result result = ScriptCompiler::compile(source, chunkName, strip);
+        if (!result.ok) {
+            setError("Cannot compile " + chunkName.generic_string() + " (" + ScriptCompiler::runtimeVersion() + "): " + result.error);
+            return false;
+        }
+
+        fs::path compiledPath = sourcePath;
+        compiledPath.replace_extension(ScriptCompiler::bytecodeExtension());
+
+        std::ofstream out(compiledPath, std::ios::binary | std::ios::trunc);
+        if (!out) {
+            setError("Failed to write bytecode: " + compiledPath.string());
+            return false;
+        }
+        out.write(result.bytecode.data(), static_cast<std::streamsize>(result.bytecode.size()));
+        out.close();
+        if (!out) {
+            setError("Failed to write bytecode: " + compiledPath.string());
+            return false;
+        }
+
+        // Only after the artifact exists, so a failure never destroys the source
+        fs::remove(sourcePath, ec);
+        if (ec) {
+            setError("Failed to remove the exported source " + sourcePath.string() + ": " + ec.message());
+            return false;
+        }
+    }
+
+    Out::info("Precompiled %zu script(s) to %s bytecode (%s).",
+              sources.size(), ScriptCompiler::bytecodeExtension(), ScriptCompiler::runtimeVersion());
     return true;
 }
 

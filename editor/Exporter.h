@@ -40,6 +40,10 @@ namespace doriax::editor {
         bool overwriteTarget = false;  // SourceCode: allow exporting into a non-empty targetDir
         fs::path assetsDir;
         fs::path luaDir;
+        // D3: ship .pluto/.lua source, or compile each one to .luac at export
+        // time (W4.5). The runtime resolves either form; the editor always plays
+        // from source, so hot reload and readable stack traces survive.
+        bool scriptBytecode = false;
         uint32_t startSceneId = 0;
         // Resolved from the scenes and the overrides below; CLI shader generation
         // fills it in directly
@@ -147,6 +151,10 @@ namespace doriax::editor {
         bool copyGenerated();
         bool copyAssets();
         bool copyLua();
+        // Bytecode export (W4.5): compiles every shipped .pluto/.lua in the lua
+        // tree to .luac with the engine's own Pluto build, then removes the text
+        // so the export carries no readable source.
+        bool compileLuaBytecode();
         bool copyCppScripts();
         bool copyEngine();
         bool writeExportSettingsScript(std::string& cmakeContent);

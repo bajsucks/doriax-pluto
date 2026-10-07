@@ -16,7 +16,7 @@ namespace doriax{
 
     struct DORIAX_API ScriptEntry {
         ScriptType type = ScriptType::CPP;
-        std::string path;        // .cpp or .lua (for Lua: script file path)
+        std::string path;        // .cpp, .pluto, or .lua (for Lua-family scripts: script file path)
         std::string headerPath;  // for C++; empty for Lua
         std::string className;   // C++ class or Lua module name (file base name)
         bool enabled = false;

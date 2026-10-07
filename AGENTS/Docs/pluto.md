@@ -54,6 +54,10 @@ What it does:
   Bigint, etc. support code). Self-contained; no OpenSSL/zlib needed.
 - **`pluto`**: a static library from `src/*.cpp` **minus** `lua.cpp` (the
   standalone REPL) and `luac.cpp` (the `plutoc` compiler).
+- **`plutoc`**: an executable from `luac.cpp`, built on desktop platforms only
+  (skipped for Android/iOS/Emscripten, where the editor does not run). It links
+  `pluto`, uses the same `LUA_USE_*` define, and is added to the external-warning
+  suppression in `engine/CMakeLists.txt`.
 - PUBLIC **SYSTEM** include directories, so consumers get Pluto's headers
   without inheriting its warnings.
 - `CXX_STANDARD 17` and `POSITION_INDEPENDENT_CODE ON` on both targets.
@@ -168,46 +172,83 @@ this document and the "Hard rules" in `AGENTS.md`.
 - `initializeLanguage()` `case SyntaxLanguage::Lua:` now contains the full Pluto
   reserved-word set plus the legacy `pluto_*` compatibility spellings, and adds
   `exception` to the type set and the Pluto library names to the builtin set.
+  `.pluto` files map to this same `SyntaxLanguage::Lua`, and the label reads
+  "Pluto".
 - `initializeSuggestions()` `language == SyntaxLanguage::Lua` adds class / switch
   / enum / try snippets.
 
 Because the lexer classifies words through `languageDef.keywords` and the
 autocomplete reads the same set, this one edit drives both. There is no second
-token list.
+token list. A headless check cross-checks that list against Pluto's own
+`luaX_tokens` (`tests/pluto/keyword_check.cpp`, built with
+`-DDORIAX_BUILD_TESTS=ON`), so a pin move that adds a keyword fails the build.
 
-Known editor gaps:
+Remaining editor gaps:
 
-- `editor/util/ScriptEvents.cpp` computes Lua block depth from
-  `function`/`if`/`do`/`repeat` and `end`/`until` only. `class`, `enum ... begin`,
-  and `try` are not counted, so indentation/folding around them can be wrong.
-- The keyword list is hand-maintained and will drift from Pluto's lexer.
-- `languageForPath` (`editor/window/CodeEditor.cpp`) maps only `.lua`, not
-  `.pluto` — see the plan.
-- The display label is still shown as "Lua".
+- The keyword list is still hand-maintained; the test above only catches drift,
+  it does not generate the list (the single-source-of-truth stretch goal, W7.2).
+- `editor/util/ScriptEvents.cpp` now counts `class`, `try` and `begin` as block
+  openers alongside Lua's. `switch ... do` balances through `do` and `catch`
+  does not change depth.
+
+## `.pluto`, resolution order, and bytecode
+
+- `.pluto` and `.lua` are both first-class; `Util::isLuaFile` accepts both.
+  `require()` and the script entry point resolve in a fixed order (D2):
+  `lua://<name>.pluto`, `lua://<name>.lua`, `lua://<name>.luac`, then the same
+  three under `lua/`. When a `.pluto` and a `.lua` share a base name the first
+  wins and the engine logs one warning naming both.
+- `project.yaml` carries `scriptExtension` (`pluto` or `lua`) for newly created
+  scripts and `scriptCompilation` (`source` or `bytecode`) for exports. A
+  `project.yaml` written before these keys existed loads as `lua` + `source`, so
+  existing projects keep creating `.lua`.
+- **Bytecode** is produced in-process by
+  `editor/util/ScriptCompiler.{h,cpp}`: a private scratch `lua_State` opened
+  with the same `luaL_openselectedlibs(L, ~0, 0)`, `luaL_loadbufferx(..., "t")`,
+  then `lua_dump(..., strip)`. Release exports strip debug info, Debug keeps it.
+  A bytecode export replaces each `.pluto`/`.lua` in the exported `lua/` tree
+  with `<base>.luac` and removes the text; the scene keeps the authored path and
+  `LuaBinding` falls back to the compiled sibling.
+- **`plutoc`** (upstream `src/luac.cpp`) is built on desktop platforms and links
+  the identical `pluto` library, so its `.luac` is interchangeable with the
+  editor's. Use it for CI or external tooling: `plutoc -o out.luac in.pluto`.
+  The CLI export also takes `--compile-scripts`.
+- Bytecode is locked to the producing Pluto build. `luaL_loadbufferx` uses mode
+  `"b"` for `.luac` and `"t"` for text, so a mismatch or a misnamed file fails
+  with a load error instead of being reinterpreted. The revision
+  (`PLUTO_VERSION`, currently `Pluto 0.12.2`) is recorded in the exported
+  `AGENTS.md`.
 
 ## Caveats and known limitations
 
 Ordered roughly by how likely they are to matter.
 
-1. **Reserved words break existing scripts.** See the list in `AGENTS.md`.
-   `local new = ...`, `{ class = ... }`, etc. stop parsing. Use `pluto_use` or
-   rename. No migration tooling exists yet.
-2. **No `.pluto` support anywhere.** The whole editor/exporter/AI pipeline keys
-   off `.lua`. Plan: `AGENTS/Plans/extension.md`.
-3. **No precompilation (`plutoc`) and no parse-time diagnostics.** Scripts are
-   parsed at runtime by `luaL_loadbuffer`; syntax errors appear as engine log
-   lines, not editor diagnostics. `.luac` is already accepted by the exporter's
-   file filters but nothing produces or consumes it deliberately.
+1. **Reserved words break existing scripts.** See
+   [`pluto-migration.md`](pluto-migration.md) for the list and the fixes.
+   `local new = ...`, `{ class = ... }`, etc. stop parsing. No auto-fixer exists
+   (deliberately); the editor reports the failure with a line number on save.
+2. **Bytecode is tied to one Pluto build.** Shipping `.luac` from a different
+   revision is rejected at load. That is the point, but it means upgrading the
+   pin invalidates every precompiled artifact. The export records the revision
+   to make the mismatch diagnosable.
+3. **Compile diagnostics are save-time only.** The editor checks scripts on save
+   and on export; it does not run a background linter, and there is no
+   squiggle/marker overlay — the message goes to the Output window's Scripts
+   channel. `editor/util/ProjectUtils.cpp` still parses `properties` in the live
+   runtime state (D7 deferred).
 4. **No sandbox.** All libraries are open (see Runtime init).
 5. **`assert` semantics changed** (see Runtime init).
 6. **Only Linux is verified.** The Windows/macOS link libraries come from
-   Pluto's Makefile but have not been built. Android and Emscripten get no
-   `LUA_USE_*` define and Soup's networking/threading has not been tested there.
+   Pluto's Makefile but have not been built locally. Android and Emscripten get
+   no `LUA_USE_*` define and Soup's networking/threading has not been tested
+   there.
 7. **First configure needs network** (`FetchContent`), and the pin is a movable
    tag rather than a SHA. Offline builds need `-DPLUTO_SOURCE_DIR`.
 8. **The macro shim is brittle** (60 hand-listed `#undef`s tied to 0.12.2).
 9. **Source lists are globs**, so upstream changes alter our build silently.
-10. **No engine tests / no functional CI.** The CI matrix builds only.
+10. **CI runs two headless checks, not a functional suite.** `pluto-runtime`
+    (class/switch/enum/json + a bytecode round trip) and `pluto-editor-keywords`
+    run on the Ubuntu job. There is no round-trip test through the exporter yet.
 11. **No debugger or profiler** for scripts.
 12. **`try`/`catch` is deprecated upstream** in 0.12.x (lowered to `pcall`, emits
     a warning). Prefer `pcall`/`xpcall` in new code and docs.
@@ -227,6 +268,24 @@ Offline or pinned to a local checkout:
 git clone --branch 0.12.2 --depth 1 https://github.com/PlutoLang/Pluto.git /tmp/Pluto
 cmake -S . -B build -G Ninja -DPLUTO_SOURCE_DIR=/tmp/Pluto
 ```
+
+**Headless checks in-tree** (no GUI). This is what CI runs:
+
+```bash
+cmake -S . -B build-tests -G Ninja -DCMAKE_BUILD_TYPE=Release -DDORIAX_BUILD_TESTS=ON
+cmake --build build-tests --target doriax-pluto-check doriax-keyword-check plutoc -j"$(nproc)"
+ctest --test-dir build-tests --output-on-failure
+# expected: pluto-runtime Passed, pluto-editor-keywords Passed
+```
+
+`doriax-pluto-check` is `tests/pluto/check.cpp`: it exercises `class`,
+`switch`, `enum`, `json`, and a `lua_dump`/reload bytecode round trip against
+the same `pluto` library the engine links. `doriax-keyword-check` compares the
+editor's keyword list with Pluto's `luaX_tokens`. Neither needs a window or the
+generated headers.
+
+The standalone scratch-directory variant below still works if you want to test
+Pluto without this repo's CMake:
 
 **Headless runtime smoke test** (no GUI). In a scratch directory, with the
 absolute path to this repo:
@@ -264,11 +323,15 @@ cmake -S . -B build -G Ninja && cmake --build build && ./build/check
 # expected: PLUTO_OK {"answer":42}
 ```
 
-**Editor**: launch `build/doriax-editor`, open a `.lua` file, and confirm `class`,
-`switch`, `enum`, `try`, `parent`, `export` highlight and autocomplete.
+**Editor**: launch `build/doriax-editor`, open a `.pluto` file, and confirm
+`class`, `switch`, `enum`, `try`, `parent`, `export` highlight and autocomplete,
+and that indentation inside `class`/`enum`/`try` matches `end`. Save a file with
+a deliberate syntax error and confirm it appears on the Output window's
+**Scripts** channel with a line number.
 
 **Cross-platform**: push a branch and let `.github/workflows/cmake.yml` build the
-matrix. There is no functional test in CI.
+matrix. The Ubuntu job also runs the two headless checks and `plutoc`; Windows
+and macOS build `plutoc` and the checks but do not run them.
 
 ## Key file reference
 
@@ -283,5 +346,10 @@ matrix. There is no functional test in CI.
 | Editor keywords / snippets | `editor/window/widget/CustomTextEditor.cpp` |
 | Language detection | `editor/window/CodeEditor.cpp` (`languageForPath`) |
 | Extension predicates | `editor/util/Util.h` (`isLuaFile`, `isScriptFile`) |
-| Export filters / copy | `editor/Exporter.cpp` (`isLuaExportFile`, `isLuaSourceFile`, `copyLua`) |
+| Export filters / copy | `editor/Exporter.cpp` (`isLuaExportFile`, `isLuaSourceFile`, `copyLua`, `compileLuaBytecode`) |
+| In-process bytecode compiler | `editor/util/ScriptCompiler.{h,cpp}` |
+| `plutoc` CLI target | `engine/libs/pluto/CMakeLists.txt` |
+| Headless checks | `tests/pluto/` (`-DDORIAX_BUILD_TESTS=ON`) |
+| Extension setting / serialization | `editor/Project.h`, `editor/Stream.cpp` (`scriptExtension`, `scriptCompilation`) |
+| Reserved-word migration guide | `AGENTS/Docs/pluto-migration.md` |
 | Script type / path | `engine/core/component/ScriptComponent.h` |

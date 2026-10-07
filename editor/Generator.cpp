@@ -10,6 +10,7 @@
 #include "AppSettings.h"
 #include "util/CxxStandards.h"
 #include "util/FileUtils.h"
+#include "util/ScriptCompiler.h"
 #include "util/ShellEnv.h"
 #include "util/Util.h"
 
@@ -1238,7 +1239,10 @@ void editor::Generator::writeSourceFiles(const fs::path& projectPath, const fs::
                      "so a header at `<root>/PLAYER/Thing.h` is included as `PLAYER/Thing.h`.\n";
     agentsContent += "The C++ language standard is Project Settings > Build > C++ Standard (`cxxStandard` in `project.yaml`): "
                      + editor::cxxStandardList() + ". Play and export both build with it; do not edit `CMAKE_CXX_STANDARD` in the generated CMakeLists.txt.\n";
-    agentsContent += "Lua scripts (`.lua`) are separate — they are loaded at runtime and are not compiled into the binary.\n\n";
+    agentsContent += "Lua-family scripts (`.pluto`, `.lua`) are separate — they are parsed and run at runtime by the embedded Pluto interpreter "
+                     "(a Lua 5.4 superset) and are not compiled into the binary. `project.yaml`'s `scriptExtension` (`pluto` or `lua`) is the extension new scripts are created with; "
+                     "`scriptCompilation` (`source` or `bytecode`) decides what an export ships. Bytecode exports replace every script with a `.luac` compiled by the engine's pinned "
+                     "Pluto build (" + std::string(editor::ScriptCompiler::runtimeVersion()) + ") and are locked to that revision, so bytecode compiled elsewhere is rejected at load.\n\n";
     agentsContent += "## BundleManager API\n\n";
     agentsContent += "`registerBundle` factories return `bool`. Void-returning factories still register and are treated as success. "
                      "Every createBundle call creates its own instance root, so a bundle can be spawned repeatedly; the third argument is the entity the new root is parented to. "

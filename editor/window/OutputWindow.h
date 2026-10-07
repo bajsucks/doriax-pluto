@@ -14,7 +14,10 @@ namespace doriax::editor {
         Warning,
         Error,
         Success,
-        Build
+        Build,
+        // Script compile diagnostics (W6.5): kept separate from Build so a
+        // script error is not buried in compiler output.
+        Scripts
     };
 
     struct LogData {
@@ -44,7 +47,7 @@ namespace doriax::editor {
         bool hasStoredSelection;
         bool isSelecting;                    // dragging selection?
 
-        bool typeFilters[5];
+        bool typeFilters[6];
 
         // Auto-scroll
         bool autoScroll;                // when true, keep pinned to bottom

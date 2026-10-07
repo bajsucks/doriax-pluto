@@ -32,6 +32,7 @@ static ImVec4 GetLogTypeColor(LogType type) {
         case LogType::Error:   return ImVec4(1.00f, 0.45f, 0.45f, 1.00f); // red
         case LogType::Success: return ImVec4(0.55f, 1.00f, 0.55f, 1.00f); // green
         case LogType::Build:   return ImVec4(0.60f, 0.85f, 1.00f, 1.00f); // sky
+        case LogType::Scripts: return ImVec4(0.80f, 0.70f, 1.00f, 1.00f); // violet
         default:               return ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
     }
 }
@@ -49,7 +50,7 @@ OutputWindow::OutputWindow() {
     lastScrollY = 0.0f;      // initialize scroll tracking
     userScrollInputPending = false;
     pendingScrollToBottom = false;
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 6; i++) {
         typeFilters[i] = true;
     }
     searchMatchCase = false; // default: case-insensitive
@@ -197,6 +198,7 @@ void OutputWindow::addLog(LogType type, const std::string& message) {
         case LogType::Info: typeStr = "Info"; break;
         case LogType::Warning: typeStr = "Warning"; break;
         case LogType::Build: typeStr = "Build"; break;
+        case LogType::Scripts: typeStr = "Scripts"; break;
     }
     std::string formattedMessage = "[" + typeStr + "] " + message + "\n";
 
@@ -215,6 +217,7 @@ static std::string getTypePrefixString(LogType type) {
         case LogType::Info: return "[Info] ";
         case LogType::Warning: return "[Warning] ";
         case LogType::Build: return "[Build] ";
+        case LogType::Scripts: return "[Scripts] ";
         default: return "[Unknown] ";
     }
 }
@@ -225,7 +228,9 @@ std::string OutputWindow::getRecentLogText(size_t maxEntries, bool onlyProblems)
     // Walk from the newest entry backwards, collecting up to maxEntries.
     std::vector<const LogData*> selected;
     for (auto it = logs.rbegin(); it != logs.rend() && selected.size() < maxEntries; ++it) {
-        if (onlyProblems && it->type != LogType::Error && it->type != LogType::Warning && it->type != LogType::Build) {
+        // Script diagnostics only report failures, so they count as problems too.
+        if (onlyProblems && it->type != LogType::Error && it->type != LogType::Warning
+                && it->type != LogType::Build && it->type != LogType::Scripts) {
             continue;
         }
         selected.push_back(&(*it));
@@ -273,6 +278,7 @@ void OutputWindow::rebuildBuffer(float wrapWidth) {
             case LogType::Error: typeAllowed = typeFilters[2]; break;
             case LogType::Success: typeAllowed = typeFilters[3]; break;
             case LogType::Build: typeAllowed = typeFilters[4]; break;
+            case LogType::Scripts: typeAllowed = typeFilters[5]; break;
         }
 
         // Empty message: just print the prefix as its own line
@@ -702,7 +708,7 @@ void OutputWindow::show() {
 
     // Filter button (filter icon)
     bool anyFilterDisabled = false;
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 6; i++) {
         if (!typeFilters[i]) {
             anyFilterDisabled = true;
             break;
@@ -722,8 +728,8 @@ void OutputWindow::show() {
         bool filterChanged = false;
 
         // Type filters
-        const char* filterNames[] = {"Info", "Warning", "Error", "Success", "Build"};
-        for (int i = 0; i < 5; i++) {
+        const char* filterNames[] = {"Info", "Warning", "Error", "Success", "Build", "Scripts"};
+        for (int i = 0; i < 6; i++) {
             if (ImGui::Checkbox(filterNames[i], &typeFilters[i])) {
                 filterChanged = true;
             }

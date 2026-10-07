@@ -1056,8 +1056,10 @@ bool parseScriptCreationType(const std::string& value, ScriptType& out, bool& cp
     return false;
 }
 
-std::string scriptTypeExtension(ScriptType type, bool header) {
-    if (type == ScriptType::LUA) return ".lua";
+// luaExtension is the project's configured extension (.pluto by default), so an
+// AI-created Lua-family script matches what the editor's dialogs create.
+std::string scriptTypeExtension(ScriptType type, bool header, const std::string& luaExtension = ".pluto") {
+    if (type == ScriptType::LUA) return luaExtension;
     return header ? ".h" : ".cpp";
 }
 
@@ -1974,7 +1976,7 @@ void updateMeshShape(MeshComponent& meshComp, MeshSystem* meshSys, const ShapePa
 
 bool isReadableTextResource(const std::string& ext) {
     static const std::set<std::string> allowed = {
-        ".lua", ".cpp", ".h", ".hpp", ".material", ".scene", ".yaml", ".yml",
+        ".lua", ".pluto", ".cpp", ".h", ".hpp", ".material", ".scene", ".yaml", ".yml",
         ".json", ".txt", ".glsl", ".vert", ".frag", ".hlsl", ".md", ".csv", ".ini", ".cfg",
         ".cmake"
     };
@@ -3783,7 +3785,10 @@ ActionResult EditorActionExecutor::createScript(const Json& arguments) {
     fs::create_directories(targetFull, ec);
     if (ec) return failResult("Failed to create script directory: " + ec.message());
 
-    fs::path sourceFull = PathUtils::uniqueChildPath(targetFull, className, scriptTypeExtension(type, false));
+    // The project's configured extension, so an AI-created Lua-family script
+    // is consistent with the editor's own New Script dialog (D6).
+    const std::string luaExtension = project->getScriptFileExtension();
+    fs::path sourceFull = PathUtils::uniqueChildPath(targetFull, className, scriptTypeExtension(type, false, luaExtension));
     fs::path headerFull;
     if (type != ScriptType::LUA) {
         headerFull = PathUtils::uniqueChildPath(targetFull, className, scriptTypeExtension(type, true));
@@ -3802,7 +3807,7 @@ ActionResult EditorActionExecutor::createScript(const Json& arguments) {
     if (type == ScriptType::LUA) {
         std::ofstream f(sourceFull, std::ios::trunc);
         if (!f) return failResult("Failed to create Lua script file.");
-        f << "-- " << className << ".lua\n\n";
+        f << "-- " << className << luaExtension << "\n\n";
         f << "local " << className << " = {\n";
         f << "    properties = {\n";
         f << "        { name = \"speed\", displayName = \"Speed\", type = \"float\", default = 5.0 },\n";
@@ -3998,7 +4003,7 @@ ActionResult EditorActionExecutor::updateScriptEntry(const Json& arguments) {
         if (!safeRelativePath(project, arguments, "new_path", sourceRel, error, true)) return failResult(error);
         const bool validSource = (entry.type == ScriptType::LUA)
             ? Util::isLuaFile(sourceRel.string()) : Util::isSourceFile(sourceRel.string());
-        if (!validSource) return failResult("new_path must be a .lua file for Lua entries and a .cpp file for C++ entries.");
+        if (!validSource) return failResult("new_path must be a .pluto or .lua file for Lua entries and a .cpp file for C++ entries.");
         entry.path = (entry.type == ScriptType::LUA)
             ? project->normalizeToLuaRelative(project->getProjectPath() / sourceRel).generic_string()
             : sourceRel.generic_string();
@@ -4051,8 +4056,8 @@ ActionResult EditorActionExecutor::updateScriptFile(const Json& arguments) {
     }
 
     const std::string ext = lower(rel.extension().string());
-    if (ext != ".lua" && ext != ".cpp" && ext != ".h" && ext != ".hpp") {
-        return failResult("path must point to a .lua, .cpp, .h, or .hpp script file.");
+    if (ext != ".lua" && ext != ".pluto" && ext != ".cpp" && ext != ".h" && ext != ".hpp") {
+        return failResult("path must point to a .pluto, .lua, .cpp, .h, or .hpp script file.");
     }
 
     const std::string content = arguments.value("content", "");
@@ -4060,7 +4065,9 @@ ActionResult EditorActionExecutor::updateScriptFile(const Json& arguments) {
     if (content.size() > kMaxScriptBytes) {
         return failResult("Script content is too large for an AI edit.");
     }
-    if (ext == ".lua") {
+    // .pluto and .lua are the same language to the runtime; the heuristic check
+    // applies to both.
+    if (ext == ".lua" || ext == ".pluto") {
         std::string validationError = validateDoriaxLuaScriptContent(content);
         if (!validationError.empty()) {
             return failResult(validationError);
@@ -4472,6 +4479,7 @@ ActionResult EditorActionExecutor::exportProject(const Json& arguments, const st
     // Stored references are relative to these roots, so they are not overridable
     config.assetsDir = project->getAssetsPath();
     config.luaDir = project->getLuaPath();
+    config.scriptBytecode = project->isScriptBytecodeCompilation();
     config.startSceneId = static_cast<uint32_t>(arguments.value("start_scene_id", static_cast<int>(project->getStartSceneId())));
     config.packNativeResources = project->shouldPackNativeResources();
     std::string error;
@@ -5301,7 +5309,7 @@ ActionResult EditorActionExecutor::readResourceFile(const Json& arguments) {
 
 static bool isEngineSourceExt(const std::string& ext) {
     static const std::set<std::string> allowed = {
-        ".h", ".hpp", ".inl", ".cpp", ".cc", ".c", ".lua"
+        ".h", ".hpp", ".inl", ".cpp", ".cc", ".c", ".lua", ".pluto"
     };
     return allowed.count(ext) > 0;
 }
@@ -5376,7 +5384,7 @@ ActionResult EditorActionExecutor::readEngineSource(const Json& arguments) {
     if (!isEngineSourceExt(lower(rel.extension().string()))) {
         return warningResult(
             "read_engine_source only reads engine source files "
-            "(.h, .hpp, .inl, .cpp, .lua).");
+            "(.h, .hpp, .inl, .cpp, .lua, .pluto).");
     }
 
     const fs::path engineRoot = FileUtils::getEngineDir();

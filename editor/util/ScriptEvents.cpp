@@ -447,14 +447,18 @@ Document luaDocument(const std::string& text) {
     doc.words = findWords(doc.masked);
     doc.depth.resize(text.size() + 1);
 
-    // An "end" is already outside the block it closes
+    // An "end" is already outside the block it closes. Pluto adds block openers
+    // on top of Lua's: `class ... end`, `try ... catch ... end`, and
+    // `enum ... begin ... end`. `switch ... do ... end` already balances through
+    // `do`, and `catch` does not change depth.
     int depth = 0;
     size_t pos = 0;
     for (const Word& word : doc.words) {
         for (; pos < word.start; pos++) doc.depth[pos] = depth;
         if ((word.text == "end" || word.text == "until") && depth > 0) depth--;
         for (; pos < word.start + word.text.size(); pos++) doc.depth[pos] = depth;
-        if (word.text == "function" || word.text == "if" || word.text == "do" || word.text == "repeat") depth++;
+        if (word.text == "function" || word.text == "if" || word.text == "do" || word.text == "repeat" ||
+            word.text == "class" || word.text == "try" || word.text == "begin") depth++;
     }
     for (; pos <= text.size(); pos++) doc.depth[pos] = depth;
     return doc;

@@ -1,0 +1,21 @@
+-- Sample entry point for the engine's own project directory.
+--
+-- The runtime is Pluto, a Lua 5.4 superset, and resolution prefers .pluto over
+-- .lua when both exist (see AGENTS/Docs/pluto.md). main.lua is kept beside this
+-- file as the Lua-dialect variant; delete either one if a project only wants
+-- the other.
+
+class Greeter
+    function __construct(name)
+        self.name = name
+    end
+
+    function greet()
+        return $"hello, {self.name}"
+    end
+end
+
+enum class Mode begin ONCE, ALWAYS end
+
+local greeter = new Greeter("Pluto")
+print(greeter:greet(), Mode.ONCE)

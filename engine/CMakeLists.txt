@@ -745,6 +745,12 @@ foreach(lib IN ITEMS
     target_compile_options(${lib} PRIVATE ${EXTERNAL_WARNING_FLAG})
 endforeach()
 
+# plutoc is desktop-only (engine/libs/pluto/CMakeLists.txt gates it), so it is
+# not in the list above. It builds upstream luac.cpp, which is not ours to fix.
+if(TARGET plutoc)
+    target_compile_options(plutoc PRIVATE ${EXTERNAL_WARNING_FLAG})
+endif()
+
 if(DEFINED NO_LUA_INIT)
     add_definitions("-DNO_LUA_INIT=${NO_LUA_INIT}")
     unset(NO_LUA_INIT CACHE)

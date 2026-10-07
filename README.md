@@ -7,8 +7,16 @@
 </p>
 
 <p align="center">
-  <strong>A lightweight native C++ engine for 2D and 3D games, with a visual editor and Lua scripting.</strong>
+  <strong>A lightweight native C++ engine for 2D and 3D games, with a visual editor and scripting.</strong>
 </p>
+
+> **This fork runs Pluto, not vanilla Lua.** The scripting runtime is
+> [Pluto](https://github.com/PlutoLang/Pluto) 0.12.2, a Lua 5.4 superset with
+> classes, `switch`, `enum`, and a larger standard library. Scripts may use
+> either `.pluto` (the default for new scripts) or `.lua`; both run unchanged
+> where the syntax overlaps. Pluto reserves some names Lua allowed as
+> identifiers, so read the [migration notes](AGENTS/Docs/pluto-migration.md) if
+> an existing `.lua` file stops parsing.
 
 <p align="center">
   <strong>Your game. Your source. Your build.</strong>
@@ -42,7 +50,7 @@ Doriax is for developers who want a smaller, native, code-transparent engine wit
 
 - **Lightweight** — a lean, data-oriented runtime that keeps abstractions and engine overhead under control
 - **Native C++** — native platform and graphics backends, with C++ available throughout the stack
-- **Lua and C++ together** — prototype quickly in Lua, write native gameplay code in C++, or mix both
+- **Pluto and C++ together** — prototype quickly in Pluto (`.pluto`) or Lua (`.lua`), write native gameplay code in C++, or mix both. **Project Settings > Directories** picks the extension new scripts use, and **Build > Script Compilation** chooses whether exports ship the source or precompiled `.luac` bytecode.
 - **Visual workflow** — edit 2D, 3D, and UI scenes with a hierarchy, inspector, resources, animation timeline, and play mode
 - **ECS and data-oriented** — shared 2D/3D runtime designed around cache-friendly component data
 - **Open and hackable** — MIT-licensed engine code and readable exported projects, with no closed build pipeline
@@ -99,7 +107,7 @@ When you want a finished artifact instead, use **Desktop** export to build a rea
 | Editor | Windows, Linux, macOS |
 | Export targets | Windows, Linux, macOS, Android, iOS, HTML5 |
 | Rendering backends | OpenGL/OpenGL ES, Vulkan, Metal, Direct3D 11 |
-| Scripting | Lua, C++ |
+| Scripting | Pluto (`.pluto`), Lua (`.lua`), C++ |
 
 Backend availability depends on the target platform. OpenGL is the default editor backend on Windows and Linux, while macOS uses Metal; Vulkan can be selected on Windows or Linux at configure time.
 

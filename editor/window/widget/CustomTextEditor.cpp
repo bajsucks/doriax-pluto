@@ -540,7 +540,9 @@ void CustomTextEditor::SetLanguage(SyntaxLanguage lang) {
 const char* CustomTextEditor::GetLanguageName() const {
     switch (language) {
         case SyntaxLanguage::Cpp: return "C++";
-        case SyntaxLanguage::Lua: return "Lua";
+        // The runtime is Pluto (a Lua 5.4 superset), which is also what .pluto
+        // files use; the label says so rather than the base language (D5).
+        case SyntaxLanguage::Lua: return "Pluto";
         case SyntaxLanguage::CMake: return "CMake";
         default: return "Plain Text";
     }

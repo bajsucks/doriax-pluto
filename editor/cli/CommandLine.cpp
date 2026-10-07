@@ -50,6 +50,7 @@ struct ExportCliOptions {
     std::string startScene;
     std::set<ShaderBackend> backends;
     std::set<ShaderKey> shaderKeys;
+    bool compileScripts = false;
     bool help = false;
     bool listScenes = false;
 };
@@ -281,6 +282,9 @@ static void printUsage(const std::string& commandName) {
         << "      --backend <list>        opengl, opengles, d3d11, metal-macos, metal-ios, vulkan, all. Can repeat.\n"
         << "      --shader <spec>         Shader type and optional properties, e.g. mesh:Uv1,Nor. Can repeat.\n"
         << "      --list-scenes           Print project scenes and exit.\n"
+        << "      --compile-scripts       Ship scripts as .luac bytecode (same as the project's\n"
+        << "                              Script Compilation setting). Parses every script with the\n"
+        << "                              pinned Pluto build, so it doubles as a CI syntax check.\n"
         << "  -h, --help                  Show this help.\n\n"
         << "If no --backend is provided, all supported backends are used.\n"
         << "If no --shader is provided, shaders discovered while regenerating scenes are exported.\n"
@@ -361,6 +365,8 @@ static bool parseArgs(int argc, char** argv, ExportCliOptions& options, std::str
             options.shaderKeys.insert(key);
         } else if (arg == "--list-scenes") {
             options.listScenes = true;
+        } else if (arg == "--compile-scripts") {
+            options.compileScripts = true;
         } else {
             error = "Unknown argument: " + arg;
             return false;
@@ -545,6 +551,9 @@ int CommandLine::runExportCommand(int argc, char** argv, const char* executableN
     config.luaDir    = options.luaDir.empty()    ? project.getLuaDir()    : options.luaDir;
     config.startSceneId = resolveStartSceneId(project, options.startScene);
     config.packNativeResources = project.shouldPackNativeResources();
+    // The flag can only turn bytecode on: an explicit --compile-scripts is a CI
+    // request, while the project setting is the persistent choice.
+    config.scriptBytecode = options.compileScripts || project.isScriptBytecodeCompilation();
     config.selectedBackends   = options.backends;
     config.shaderKeysOverride = options.shaderKeys;
 

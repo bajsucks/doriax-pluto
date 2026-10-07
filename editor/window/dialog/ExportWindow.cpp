@@ -1001,6 +1001,7 @@ void ExportWindow::startConfiguredExport(bool overwriteTarget) {
     // Stored references are relative to these roots, set in the project settings
     exportConfig.assetsDir = m_project->getAssetsPath();
     exportConfig.luaDir = m_project->getLuaPath();
+    exportConfig.scriptBytecode = m_project->isScriptBytecodeCompilation();
 
     // Set start scene
     const SceneProject* startScene = m_project->getScene(m_startSceneId);

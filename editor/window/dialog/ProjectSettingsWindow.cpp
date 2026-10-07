@@ -31,6 +31,17 @@ static const char* cxxStandardNames[] = { "C++17", "C++20", "C++23" };
 static const int cxxStandardCount = sizeof(cxxStandardNames) / sizeof(cxxStandardNames[0]);
 static_assert(std::size(cxxStandardNames) == std::size(cxxStandards));
 
+// D6: what ScriptCreateDialog and the Resources window create. .pluto is the
+// default for new projects; an older project.yaml keeps .lua (Stream.cpp).
+static const char* scriptExtensionNames[] = { "Pluto (.pluto)", "Lua (.lua)" };
+static const ScriptExtension scriptExtensionValues[] = { ScriptExtension::PLUTO, ScriptExtension::LUA };
+static const int scriptExtensionCount = sizeof(scriptExtensionValues) / sizeof(scriptExtensionValues[0]);
+
+// D3: what an export ships for scripts.
+static const char* scriptCompilationNames[] = { "Source", "Bytecode" };
+static const ScriptCompilation scriptCompilationValues[] = { ScriptCompilation::SOURCE, ScriptCompilation::BYTECODE };
+static const int scriptCompilationCount = sizeof(scriptCompilationValues) / sizeof(scriptCompilationValues[0]);
+
 static const char* androidOrientationNames[] = { "Unspecified", "Portrait", "Landscape", "Sensor Portrait", "Sensor Landscape", "Full Sensor" };
 static const AndroidOrientation androidOrientationValues[] = {
     AndroidOrientation::Unspecified,
@@ -816,6 +827,8 @@ void ProjectSettingsWindow::open(Project* project) {
     m_assetsDir = project->getAssetsDir();
     m_luaDir = project->getLuaDir();
     m_scriptDirs = project->getScriptDirs();
+    m_scriptExtensionIndex = project->getScriptExtension() == ScriptExtension::LUA ? 1 : 0;
+    m_scriptCompilationIndex = project->getScriptCompilation() == ScriptCompilation::BYTECODE ? 1 : 0;
     m_cxxStandardIndex = findCxxStandardIndex(project->getCxxStandard());
     m_physics2DEnabled = project->isPhysics2DEnabled();
     m_physics3DEnabled = project->isPhysics3DEnabled();
@@ -1281,6 +1294,10 @@ void ProjectSettingsWindow::drawDirectoriesSettings() {
             m_luaDir, fs::path(Project::defaultLuaDir), true
         );
         drawScriptDirsSetting(m_project, m_scriptDirs);
+        drawComboSetting("New Script Extension", "##ScriptExtension", scriptExtensionNames, scriptExtensionCount,
+            m_scriptExtensionIndex, 0,
+            "Extension used by the New Script dialogs and the Resources window. "
+            "Existing scripts keep their own extension; Pluto parses .lua unchanged, so nothing is converted.");
     });
 }
 
@@ -1303,6 +1320,12 @@ void ProjectSettingsWindow::drawBuildSettings() {
             "Language standard for C++ scripts in Play and exported games. Saved with the project. "
             "Exports also compile the engine with this standard. "
             "Choose a compatible compiler in Editor Settings > Desktop.");
+
+        drawComboSetting("Script Compilation", "##ScriptCompilation", scriptCompilationNames, scriptCompilationCount,
+            m_scriptCompilationIndex, 0,
+            "Source ships the .pluto/.lua text as written. Bytecode compiles every script at export time with the "
+            "engine's pinned Pluto revision and ships .luac instead, so the source is not readable. "
+            "Bytecode is locked to that Pluto build; tools reading the sources still use Source.");
     });
 }
 
@@ -1627,6 +1650,14 @@ bool ProjectSettingsWindow::applySettings() {
     // Moves the referenced files in and rewrites every reference to the new roots
     m_project->changeAssetRoots(m_assetsDir, m_luaDir);
     m_project->setScriptDirs(m_scriptDirs);
+    if (m_scriptExtensionIndex < 0 || m_scriptExtensionIndex >= scriptExtensionCount) {
+        m_scriptExtensionIndex = 0;
+    }
+    m_project->setScriptExtension(scriptExtensionValues[m_scriptExtensionIndex]);
+    if (m_scriptCompilationIndex < 0 || m_scriptCompilationIndex >= scriptCompilationCount) {
+        m_scriptCompilationIndex = 0;
+    }
+    m_project->setScriptCompilation(scriptCompilationValues[m_scriptCompilationIndex]);
     if (m_cxxStandardIndex < 0 || m_cxxStandardIndex >= cxxStandardCount) {
         m_cxxStandardIndex = 0;
     }

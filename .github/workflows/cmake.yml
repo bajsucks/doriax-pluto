@@ -180,6 +180,7 @@ jobs:
             -S . \
             -B build \
             -DDORIAXEDITOR_VERSION:STRING="$DORIAX_VERSION" \
+            -DDORIAX_BUILD_TESTS=ON \
             -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} \
             -G "${{ matrix.config.generators }}" \
             -DCMAKE_INSTALL_PREFIX:PATH=instdir \
@@ -190,11 +191,26 @@ jobs:
           CC: ${{ matrix.config.cc }}
           CXX: ${{ matrix.config.cxx }}
         run: |
-          targets=("${{ env.TARGET }}")
+          # plutoc and the headless checks ride along so every platform proves
+          # the script toolchain still builds (W7.1, W7.5).
+          targets=("${{ env.TARGET }}" plutoc doriax-pluto-check doriax-keyword-check)
           if [[ "$RUNNER_OS" == "Windows" ]]; then
             targets+=("${{ env.TARGET }}-cmd")
           fi
           cmake --build build --config ${{env.BUILD_TYPE}} --target "${targets[@]}"
+
+      - name: Smoke test the script runtime
+        if: startsWith(matrix.config.os, 'ubuntu')
+        run: |
+          # pluto-runtime exercises class/switch/enum/json and the bytecode
+          # round trip; pluto-editor-keywords keeps the editor list in sync with
+          # Pluto's lexer. Both fail the job, not just warn.
+          ctest --test-dir build --output-on-failure
+
+          # The CLI form of the same dumper the editor drives in-process.
+          printf 'RESULT = 1\nprint("plutoc ok")\n' > /tmp/smoke.pluto
+          build/engine/libs/pluto/plutoc -o /tmp/smoke.luac /tmp/smoke.pluto
+          test -s /tmp/smoke.luac
 
       - name: Install Strip
         run: cmake --install build --config ${{env.BUILD_TYPE}} --strip

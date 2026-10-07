@@ -48,6 +48,8 @@ namespace doriax::editor {
         fs::path m_assetsDir;
         fs::path m_luaDir;
         std::vector<fs::path> m_scriptDirs;
+        int m_scriptExtensionIndex = 0;
+        int m_scriptCompilationIndex = 0;
         int m_cxxStandardIndex = 0;
         bool m_physics2DEnabled = true;
         bool m_physics3DEnabled = true;

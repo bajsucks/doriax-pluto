@@ -6,6 +6,7 @@
 #include "Backend.h"
 #include "AppSettings.h"
 #include "util/ProjectUtils.h"
+#include "util/ScriptCompiler.h"
 #include "util/ScriptParser.h"
 #include "util/Util.h"
 #include "widget/SemanticSuggestions.h"
@@ -414,7 +415,9 @@ editor::SyntaxLanguage languageForPath(const fs::path& path) {
     std::transform(ext.begin(), ext.end(), ext.begin(),
                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
-    if (ext == ".lua") return editor::SyntaxLanguage::Lua;
+    // .pluto is Pluto's own extension; its syntax is a superset of Lua's, so it
+    // reuses the Lua grammar/autocomplete data (D5).
+    if (editor::Util::isLuaFile(ext)) return editor::SyntaxLanguage::Lua;
     // GLSL is close enough to reuse the C++ highlighter
     if (ext == ".c" || editor::Util::isSourceFile(ext) || editor::Util::isHeaderFile(ext) || editor::Util::isShaderFile(ext))
         return editor::SyntaxLanguage::Cpp;
@@ -1414,6 +1417,8 @@ bool editor::CodeEditor::save(EditorInstance& instance) {
         instance.propertyInsertUndoIndex = -1;
         instance.lastWriteTime = fs::last_write_time(fullPath);
 
+        reportScriptDiagnostics(instance);
+
         updateScriptProperties(instance);
         updateAllProjectSymbols();
         invalidateShadersForFile(instance);
@@ -1430,6 +1435,30 @@ bool editor::CodeEditor::saveLastFocused(){
         return save(*lastFocused);
     }
     return true;
+}
+
+// D8/W6.5: a syntax error used to surface only in the engine log at Play time.
+// Parsing the saved text here (never executing it) turns it into an
+// editor-visible diagnostic with a line number.
+void editor::CodeEditor::reportScriptDiagnostics(const EditorInstance& instance) {
+    if (!instance.editor || !Util::isLuaFile(instance.filepath.string())) {
+        return;
+    }
+
+    const std::string chunkName = instance.filepath.generic_string();
+    const ScriptCompiler::Result result = ScriptCompiler::checkSyntax(instance.editor->GetText(), chunkName);
+    if (result.ok) {
+        return;
+    }
+
+    const std::string location = result.line > 0
+        ? chunkName + ":" + std::to_string(result.line)
+        : chunkName;
+    Out::scripts("%s: %s", location.c_str(), result.error.c_str());
+    Out::scripts("  Parsed with %s. If an identifier uses a Pluto keyword "
+                 "(class, switch, case, default, enum, new, continue, parent, export, try, catch, global, as, begin, extends, instanceof, pluto_use), "
+                 "rename it or mark the file with pluto_use; see AGENTS/Docs/pluto-migration.md.",
+                 ScriptCompiler::runtimeVersion());
 }
 
 bool editor::CodeEditor::save(const std::string& filepath) {
