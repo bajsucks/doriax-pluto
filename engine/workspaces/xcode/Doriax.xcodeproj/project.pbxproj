@@ -62,6 +62,8 @@
 		17995BF73003C3A800411B78 /* DoriaxGameController.mm in Sources */ = {isa = PBXBuildFile; fileRef = 17995BF63003C3A800411B78 /* DoriaxGameController.mm */; };
 		17995BF83003C3A800411B78 /* DoriaxGameController.mm in Sources */ = {isa = PBXBuildFile; fileRef = 17995BF63003C3A800411B78 /* DoriaxGameController.mm */; };
 		17995BFA3003C40000411B78 /* GameController.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 17995BF93003C40000411B78 /* GameController.framework */; };
+		C01F5B49D35B3E4A17DA5501 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 717AD970290B67A5007D7DB5 /* AVFoundation.framework */; };
+		9FEA0E1833571B071F78F5C3 /* AudioToolbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 717AD972290B67B8007D7DB5 /* AudioToolbox.framework */; };
 		17995BFD3003C4F600411B78 /* GameController.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 17995BF93003C40000411B78 /* GameController.framework */; };
 		17A4DD6D2F5E4F8800C1BFC6 /* HybridArray.h in Headers */ = {isa = PBXBuildFile; fileRef = 17A4DD6C2F5E4F8800C1BFC6 /* HybridArray.h */; };
 		17C554F82FB903B0008804C2 /* ModelPool.h in Headers */ = {isa = PBXBuildFile; fileRef = 17C554F62FB903B0008804C2 /* ModelPool.h */; };
@@ -3061,6 +3063,8 @@
 				7116070B2A0D84660052A9C3 /* GoogleMobileAds.xcframework in Frameworks */,
 				713D82D7259D324700567F9F /* libdoriax-ios.a in Frameworks */,
 				17995BFA3003C40000411B78 /* GameController.framework in Frameworks */,
+				C01F5B49D35B3E4A17DA5501 /* AVFoundation.framework in Frameworks */,
+				9FEA0E1833571B071F78F5C3 /* AudioToolbox.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

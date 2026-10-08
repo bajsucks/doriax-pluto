@@ -311,27 +311,32 @@ static GADPaidEventHandler paidEventHandler(int format) {
         };
 
         GADRequest *request = [self buildRequest];
+        // braced, as ARC forbids jumping past a block's capture
         switch (format) {
-            case FormatInterstitial:
+            case FormatInterstitial: {
                 [GADInterstitialAd loadWithAdUnitID:adUnitId request:request completionHandler:^(GADInterstitialAd *ad, NSError *error) {
                     completion(ad, error);
                 }];
                 break;
-            case FormatRewarded:
+            }
+            case FormatRewarded: {
                 [GADRewardedAd loadWithAdUnitID:adUnitId request:request completionHandler:^(GADRewardedAd *ad, NSError *error) {
                     completion(ad, error);
                 }];
                 break;
-            case FormatRewardedInterstitial:
+            }
+            case FormatRewardedInterstitial: {
                 [GADRewardedInterstitialAd loadWithAdUnitID:adUnitId request:request completionHandler:^(GADRewardedInterstitialAd *ad, NSError *error) {
                     completion(ad, error);
                 }];
                 break;
-            default:
+            }
+            default: {
                 [GADAppOpenAd loadWithAdUnitID:adUnitId request:request completionHandler:^(GADAppOpenAd *ad, NSError *error) {
                     completion(ad, error);
                 }];
                 break;
+            }
         }
     });
 }

@@ -613,6 +613,10 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 
             # GameController framework for gamepad input (DoriaxGameController.mm)
             "-framework GameController"
+
+            # Audio session and units for miniaudio
+            "-framework AVFoundation"
+            "-framework AudioToolbox"
         )
 
         if(DORIAX_ADMOB)
