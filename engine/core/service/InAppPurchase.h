@@ -16,7 +16,7 @@ namespace doriax {
 
     // Sent to the platform as integers, so keep the order
     enum class ProductType{
-        INAPP, // one-time product: consumable or not
+        INAPP, // one-time product: consumable or not. Also an iOS non-renewing subscription, which the store never expires: check purchaseTime.
         SUBS
     };
 

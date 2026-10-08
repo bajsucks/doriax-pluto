@@ -211,6 +211,9 @@ private final class Store {
             }
 
             guard let purchase else {
+                if consume {
+                    consumed.remove(originalID)
+                }
                 answerFinish(purchaseToken, consume: consume, .itemNotOwned, "No purchase has this token")
                 return
             }
@@ -325,7 +328,7 @@ private final class Store {
         // entitled while subscribed or in a billing grace period
         var entitled: (transaction: Transaction, jws: String)?
         for await result in Transaction.currentEntitlements {
-            if case .verified(let latest) = result, latest.originalID == transaction.originalID {
+            if case .verified(let latest) = result, latest.originalID == transaction.originalID, !latest.isUpgraded {
                 entitled = (latest, result.jwsRepresentation)
             }
         }
