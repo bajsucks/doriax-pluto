@@ -214,6 +214,10 @@ namespace doriax::editor {
         static std::string textureAlphaBorderToString(TextureAlphaBorder alphaBorder);
         static TextureAlphaBorder stringToTextureAlphaBorder(const std::string& str);
 
+        // Also the DORIAX_WEB_PORTAL values of the engine CMake
+        static std::string webPortalTypeToString(WebPortalType type);
+        static WebPortalType stringToWebPortalType(const std::string& str);
+
         static YAML::Node encodeProject(Project* project);
         // The workspace supplies the per-user half of the project (tabs, cameras,
         // viewport toggles); project.yaml no longer carries it. See Workspace.h.

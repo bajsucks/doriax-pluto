@@ -9,6 +9,9 @@ endif()
 option(DORIAX_PHYSICS_2D "Enable Box2D-based 2D physics" ON)
 option(DORIAX_PHYSICS_3D "Enable Jolt-based 3D physics" ON)
 option(DORIAX_ADMOB "Link Google Mobile Ads into iOS builds" ON)
+set(DORIAX_WEB_PORTALS none crazygames poki)
+set(DORIAX_WEB_PORTAL none CACHE STRING "Game portal SDK of web builds")
+set_property(CACHE DORIAX_WEB_PORTAL PROPERTY STRINGS ${DORIAX_WEB_PORTALS})
 
 # =============================================================
 # STANDALONE PROJECT SETUP
@@ -195,6 +198,14 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 
         add_definitions("-DWITH_MINIAUDIO")
 
+        if(NOT DORIAX_WEB_PORTAL IN_LIST DORIAX_WEB_PORTALS)
+            message(FATAL_ERROR "DORIAX_WEB_PORTAL=${DORIAX_WEB_PORTAL} is not one of: ${DORIAX_WEB_PORTALS}")
+        endif()
+        if(NOT DORIAX_WEB_PORTAL STREQUAL "none")
+            string(TOUPPER "${DORIAX_WEB_PORTAL}" WEB_PORTAL_NAME)
+            add_definitions("-DDORIAX_WEB_PORTAL_${WEB_PORTAL_NAME}")
+        endif()
+
         set(CMAKE_EXECUTABLE_SUFFIX ".html")
 
         set(PLATFORM_ROOT ${DORIAX_ROOT}/platform/emscripten)
@@ -209,6 +220,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 
         list(APPEND PLATFORM_SOURCE
             ${PLATFORM_ROOT}/DoriaxWeb.cpp
+            ${PLATFORM_ROOT}/WebPortals.cpp
             ${PLATFORM_ROOT}/main.cpp
         )
 
@@ -879,8 +891,8 @@ set(DORIAX_SRCS
     core/script/binding/ThreadClassesLua.cpp
     core/script/binding/UtilClassesLua.cpp
     core/service/AdMob.cpp
-    core/service/CrazyGames.cpp
     core/service/InAppPurchase.cpp
+    core/service/WebPortal.cpp
     core/shader/ShaderData.cpp
     core/shader/ShaderDataSerializer.cpp
     core/shader/ShaderUniforms.cpp

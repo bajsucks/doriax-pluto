@@ -4,6 +4,7 @@
 #pragma once
 
 #include "Scene.h"
+#include "service/WebPortal.h"
 #include "Catalog.h"
 #include "render/SceneRender.h"
 #include "command/CommandHistory.h"
@@ -208,6 +209,8 @@ namespace doriax::editor{
         std::string headInclude;
         bool resizeCanvasToWindow = true;
         bool hideEmscriptenUI = false;
+        // Its SDK is loaded for the WebPortal class
+        WebPortalType portal = WebPortalType::NONE;
     };
 
     struct LinuxProjectSettings {

@@ -552,9 +552,9 @@
 		7162FD4D25963AE00075B97D /* RenderSystem.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7162FC7025962A0E0075B97D /* RenderSystem.cpp */; };
 		7162FD4F25963AE00075B97D /* Engine.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7162FC7225962A0E0075B97D /* Engine.cpp */; };
 		28E52BA95CCC81E935E8C5C9 /* AdMob.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FFF5659A4A956B408AC2FB6E /* AdMob.cpp */; };
-		F37B1C8358CB5EB3EBE70B3A /* CrazyGames.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CEC8376B872CD830EFEEEEB9 /* CrazyGames.cpp */; };
+		F37B1C8358CB5EB3EBE70B3A /* WebPortal.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CEC8376B872CD830EFEEEEB9 /* WebPortal.cpp */; };
 		F84CC14AEBB190B5A8922A45 /* AdMob.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FFF5659A4A956B408AC2FB6E /* AdMob.cpp */; };
-		C62CFC18C760189F8AF8A75C /* CrazyGames.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CEC8376B872CD830EFEEEEB9 /* CrazyGames.cpp */; };
+		C62CFC18C760189F8AF8A75C /* WebPortal.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CEC8376B872CD830EFEEEEB9 /* WebPortal.cpp */; };
 		9EE41A5717A3B925766DF671 /* InAppPurchase.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6C5792484E249F98EB4EF3CB /* InAppPurchase.cpp */; };
 		B5C14DF393F15D4646BB7F97 /* InAppPurchase.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6C5792484E249F98EB4EF3CB /* InAppPurchase.cpp */; };
 		7162FD5825963AE00075B97D /* InterleavedBuffer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7162FC7D25962A0E0075B97D /* InterleavedBuffer.cpp */; };
@@ -2104,8 +2104,8 @@
 		7162FC7225962A0E0075B97D /* Engine.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Engine.cpp; sourceTree = "<group>"; };
 		5F15A9476017C7274CB002E4 /* AdMob.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = AdMob.h; sourceTree = "<group>"; };
 		FFF5659A4A956B408AC2FB6E /* AdMob.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = AdMob.cpp; sourceTree = "<group>"; };
-		BC761A3673EFC04836605E86 /* CrazyGames.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = CrazyGames.h; sourceTree = "<group>"; };
-		CEC8376B872CD830EFEEEEB9 /* CrazyGames.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = CrazyGames.cpp; sourceTree = "<group>"; };
+		BC761A3673EFC04836605E86 /* WebPortal.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = WebPortal.h; sourceTree = "<group>"; };
+		CEC8376B872CD830EFEEEEB9 /* WebPortal.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = WebPortal.cpp; sourceTree = "<group>"; };
 		19E77A849E46C6CCDF490A80 /* InAppPurchase.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = InAppPurchase.h; sourceTree = "<group>"; };
 		6C5792484E249F98EB4EF3CB /* InAppPurchase.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = InAppPurchase.cpp; sourceTree = "<group>"; };
 		7162FC7A25962A0E0075B97D /* Doriax.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Doriax.h; sourceTree = "<group>"; };
@@ -3223,10 +3223,10 @@
 			children = (
 				5F15A9476017C7274CB002E4 /* AdMob.h */,
 				FFF5659A4A956B408AC2FB6E /* AdMob.cpp */,
-				BC761A3673EFC04836605E86 /* CrazyGames.h */,
-				CEC8376B872CD830EFEEEEB9 /* CrazyGames.cpp */,
 				19E77A849E46C6CCDF490A80 /* InAppPurchase.h */,
 				6C5792484E249F98EB4EF3CB /* InAppPurchase.cpp */,
+				BC761A3673EFC04836605E86 /* WebPortal.h */,
+				CEC8376B872CD830EFEEEEB9 /* WebPortal.cpp */,
 			);
 			path = service;
 			sourceTree = "<group>";
@@ -7236,7 +7236,7 @@
 				713D82AD259D307F00567F9F /* RenderSystem.cpp in Sources */,
 				713D82AE259D307F00567F9F /* Engine.cpp in Sources */,
 				28E52BA95CCC81E935E8C5C9 /* AdMob.cpp in Sources */,
-				F37B1C8358CB5EB3EBE70B3A /* CrazyGames.cpp in Sources */,
+				F37B1C8358CB5EB3EBE70B3A /* WebPortal.cpp in Sources */,
 				9EE41A5717A3B925766DF671 /* InAppPurchase.cpp in Sources */,
 				71ABBD1D277A31BA001CE3AF /* Text.cpp in Sources */,
 				71ABBD4A27A87A2E001CE3AF /* MeshSystem.cpp in Sources */,
@@ -7452,7 +7452,7 @@
 				7170A3D52818A8A30003E965 /* Bone.cpp in Sources */,
 				7162FD4F25963AE00075B97D /* Engine.cpp in Sources */,
 				F84CC14AEBB190B5A8922A45 /* AdMob.cpp in Sources */,
-				C62CFC18C760189F8AF8A75C /* CrazyGames.cpp in Sources */,
+				C62CFC18C760189F8AF8A75C /* WebPortal.cpp in Sources */,
 				B5C14DF393F15D4646BB7F97 /* InAppPurchase.cpp in Sources */,
 				7105A55828B305910092EA05 /* Color.cpp in Sources */,
 				716803C92DF75E6F00ED71BE /* ThreadClassesLua.cpp in Sources */,

@@ -2169,6 +2169,7 @@ bool editor::Exporter::copyEngine() {
         projectSettings += indent + std::string("set(DORIAX_PHYSICS_2D ") + (project->isPhysics2DEnabled() ? "ON" : "OFF") + ")";
         projectSettings += indent + std::string("set(DORIAX_PHYSICS_3D ") + (project->isPhysics3DEnabled() ? "ON" : "OFF") + ")";
         projectSettings += indent + std::string("set(DORIAX_ADMOB ") + (project->getIOSProjectSettings().admobEnabled ? "ON" : "OFF") + ")";
+        projectSettings += indent + "set(DORIAX_WEB_PORTAL " + Stream::webPortalTypeToString(project->getWebProjectSettings().portal) + ")";
         cmakeContent.replace(projectSettingsPos, projectSettingsMarker.size(), projectSettings);
     } else {
         Out::warning("Exported CMakeLists.txt is missing the project settings marker; using platform defaults");

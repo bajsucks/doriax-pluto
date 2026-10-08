@@ -21,7 +21,7 @@ namespace doriax {
 
     class AdMobBackend;
     class InAppPurchaseBackend;
-    class CrazyGamesBackend;
+    class WebPortalBackend;
 
     enum class CursorType{
         ARROW, // default
@@ -144,7 +144,7 @@ namespace doriax {
         // Services in core/service, null where the platform or the build has none
         virtual AdMobBackend* getAdMobBackend();
         virtual InAppPurchaseBackend* getInAppPurchaseBackend();
-        virtual CrazyGamesBackend* getCrazyGamesBackend();
+        virtual WebPortalBackend* getWebPortalBackend();
     };
 
 }

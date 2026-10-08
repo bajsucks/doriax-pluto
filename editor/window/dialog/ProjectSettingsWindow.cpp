@@ -27,6 +27,10 @@ static const char* windowModeNames[] = { "Windowed", "Maximized", "Fullscreen" }
 static const WindowMode windowModeValues[] = { WindowMode::WINDOWED, WindowMode::MAXIMIZED, WindowMode::FULLSCREEN };
 static const int windowModeCount = sizeof(windowModeValues) / sizeof(windowModeValues[0]);
 
+static const char* webPortalNames[] = { "None", "CrazyGames", "Poki" };
+static const WebPortalType webPortalValues[] = { WebPortalType::NONE, WebPortalType::CRAZYGAMES, WebPortalType::POKI };
+static const int webPortalCount = sizeof(webPortalValues) / sizeof(webPortalValues[0]);
+
 static const char* cxxStandardNames[] = { "C++17", "C++20", "C++23" };
 static const int cxxStandardCount = sizeof(cxxStandardNames) / sizeof(cxxStandardNames[0]);
 static_assert(std::size(cxxStandardNames) == std::size(cxxStandards));
@@ -133,6 +137,13 @@ static int findWindowModeIndex(WindowMode mode) {
 static int findCxxStandardIndex(int standard) {
     for (int i = 0; i < cxxStandardCount; i++) {
         if (cxxStandards[i] == standard) return i;
+    }
+    return 0;
+}
+
+static int findWebPortalIndex(WebPortalType portal) {
+    for (int i = 0; i < webPortalCount; i++) {
+        if (webPortalValues[i] == portal) return i;
     }
     return 0;
 }
@@ -847,6 +858,7 @@ void ProjectSettingsWindow::open(Project* project) {
     snprintf(m_webHeadIncludeBuffer, sizeof(m_webHeadIncludeBuffer), "%s", web.headInclude.c_str());
     m_webResizeCanvasToWindow = web.resizeCanvasToWindow;
     m_webHideEmscriptenUI = web.hideEmscriptenUI;
+    m_webPortalIndex = findWebPortalIndex(web.portal);
 
     const LinuxProjectSettings& linuxSettings = project->getLinuxProjectSettings();
     snprintf(m_linuxApplicationNameBuffer, sizeof(m_linuxApplicationNameBuffer), "%s", linuxSettings.applicationName.c_str());
@@ -1395,6 +1407,9 @@ void ProjectSettingsWindow::drawWebSettings() {
     }
     ImGui::Checkbox("##WebHideEmscriptenUI", &m_webHideEmscriptenUI);
     endSettingsRow("Hide the standard logo, status, controls and output console. Runtime scripts remain active. Custom HTML elements are not removed.");
+
+    drawComboSetting("Game Portal", "##WebPortal", webPortalNames, webPortalCount, m_webPortalIndex, findWebPortalIndex(WebPortalType::NONE),
+        "Loads this portal's SDK for the WebPortal class: ads and gameplay events. Each portal needs its own export.");
 }
 
 void ProjectSettingsWindow::drawLinuxSettings() {
@@ -1714,6 +1729,7 @@ bool ProjectSettingsWindow::applySettings() {
     applyTextBuffer(web.headInclude, m_webHeadIncludeBuffer);
     web.resizeCanvasToWindow = m_webResizeCanvasToWindow;
     web.hideEmscriptenUI = m_webHideEmscriptenUI;
+    web.portal = webPortalValues[std::clamp(m_webPortalIndex, 0, webPortalCount - 1)];
 
     LinuxProjectSettings& linuxSettings = m_project->getLinuxProjectSettings();
     applyOverride(linuxSettings.applicationName, m_linuxApplicationNameBuffer, inheritedName);

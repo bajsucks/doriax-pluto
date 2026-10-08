@@ -265,6 +265,6 @@ InAppPurchaseBackend* System::getInAppPurchaseBackend(){
     return nullptr;
 }
 
-CrazyGamesBackend* System::getCrazyGamesBackend(){
+WebPortalBackend* System::getWebPortalBackend(){
     return nullptr;
 }

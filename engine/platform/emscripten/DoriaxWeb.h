@@ -97,7 +97,8 @@ public:
     virtual void setStringForKey(const char* key, const std::string& value) override;
     virtual void removeKey(const char *key) override;
 
-    virtual doriax::CrazyGamesBackend* getCrazyGamesBackend() override;
+    // WebPortals.cpp
+    virtual doriax::WebPortalBackend* getWebPortalBackend() override;
 
 };
 

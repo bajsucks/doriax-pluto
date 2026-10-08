@@ -16,8 +16,8 @@
 #include "Input.h"
 #include "System.h"
 #include "AdMob.h"
-#include "CrazyGames.h"
 #include "InAppPurchase.h"
+#include "WebPortal.h"
 #ifdef DORIAX_PHYSICS_2D
 #include "Body2D.h"
 #include "Contact2D.h"
@@ -269,17 +269,24 @@ void LuaBinding::registerCoreClasses(lua_State *L){
         .endNamespace();
 
     luabridge::getGlobalNamespace(L)
-        .beginNamespace("CrazyGamesAdType")
-        .addVariable("MIDGAME", CrazyGamesAdType::MIDGAME)
-        .addVariable("REWARDED", CrazyGamesAdType::REWARDED)
+        .beginNamespace("WebPortalType")
+        .addVariable("NONE", WebPortalType::NONE)
+        .addVariable("CRAZYGAMES", WebPortalType::CRAZYGAMES)
+        .addVariable("POKI", WebPortalType::POKI)
         .endNamespace();
 
     luabridge::getGlobalNamespace(L)
-        .beginNamespace("CrazyGamesEnvironment")
-        .addVariable("UNINITIALIZED", CrazyGamesEnvironment::UNINITIALIZED)
-        .addVariable("DISABLED", CrazyGamesEnvironment::DISABLED)
-        .addVariable("LOCAL", CrazyGamesEnvironment::LOCAL)
-        .addVariable("CRAZYGAMES", CrazyGamesEnvironment::CRAZYGAMES)
+        .beginNamespace("WebPortalAdType")
+        .addVariable("MIDGAME", WebPortalAdType::MIDGAME)
+        .addVariable("REWARDED", WebPortalAdType::REWARDED)
+        .endNamespace();
+
+    luabridge::getGlobalNamespace(L)
+        .beginNamespace("WebPortalEnvironment")
+        .addVariable("UNINITIALIZED", WebPortalEnvironment::UNINITIALIZED)
+        .addVariable("DISABLED", WebPortalEnvironment::DISABLED)
+        .addVariable("LOCAL", WebPortalEnvironment::LOCAL)
+        .addVariable("PORTAL", WebPortalEnvironment::PORTAL)
         .endNamespace();
 
     luabridge::getGlobalNamespace(L)
@@ -662,24 +669,24 @@ void LuaBinding::registerCoreClasses(lua_State *L){
         .endClass();
 
     luabridge::getGlobalNamespace(L)
-        .beginClass<FunctionSubscribe<void(CrazyGamesEnvironment)>>("FunctionSubscribe_V_CGE")
-        .addFunction("__call", &FunctionSubscribe<void(CrazyGamesEnvironment)>::call)
-        .addFunction("call", &FunctionSubscribe<void(CrazyGamesEnvironment)>::call)
-        .addFunction("add", (bool (FunctionSubscribe<void(CrazyGamesEnvironment)>::*)(const std::string&, lua_State*))&FunctionSubscribe<void(CrazyGamesEnvironment)>::add)
+        .beginClass<FunctionSubscribe<void(WebPortalEnvironment)>>("FunctionSubscribe_V_WPE")
+        .addFunction("__call", &FunctionSubscribe<void(WebPortalEnvironment)>::call)
+        .addFunction("call", &FunctionSubscribe<void(WebPortalEnvironment)>::call)
+        .addFunction("add", (bool (FunctionSubscribe<void(WebPortalEnvironment)>::*)(const std::string&, lua_State*))&FunctionSubscribe<void(WebPortalEnvironment)>::add)
         .endClass();
 
     luabridge::getGlobalNamespace(L)
-        .beginClass<FunctionSubscribe<void(CrazyGamesAdType)>>("FunctionSubscribe_V_CGAT")
-        .addFunction("__call", &FunctionSubscribe<void(CrazyGamesAdType)>::call)
-        .addFunction("call", &FunctionSubscribe<void(CrazyGamesAdType)>::call)
-        .addFunction("add", (bool (FunctionSubscribe<void(CrazyGamesAdType)>::*)(const std::string&, lua_State*))&FunctionSubscribe<void(CrazyGamesAdType)>::add)
+        .beginClass<FunctionSubscribe<void(WebPortalAdType)>>("FunctionSubscribe_V_WPAT")
+        .addFunction("__call", &FunctionSubscribe<void(WebPortalAdType)>::call)
+        .addFunction("call", &FunctionSubscribe<void(WebPortalAdType)>::call)
+        .addFunction("add", (bool (FunctionSubscribe<void(WebPortalAdType)>::*)(const std::string&, lua_State*))&FunctionSubscribe<void(WebPortalAdType)>::add)
         .endClass();
 
     luabridge::getGlobalNamespace(L)
-        .beginClass<FunctionSubscribe<void(CrazyGamesAdType,std::string,std::string)>>("FunctionSubscribe_V_CGATSS")
-        .addFunction("__call", &FunctionSubscribe<void(CrazyGamesAdType,std::string,std::string)>::call)
-        .addFunction("call", &FunctionSubscribe<void(CrazyGamesAdType,std::string,std::string)>::call)
-        .addFunction("add", (bool (FunctionSubscribe<void(CrazyGamesAdType,std::string,std::string)>::*)(const std::string&, lua_State*))&FunctionSubscribe<void(CrazyGamesAdType,std::string,std::string)>::add)
+        .beginClass<FunctionSubscribe<void(WebPortalAdType,std::string,std::string)>>("FunctionSubscribe_V_WPATSS")
+        .addFunction("__call", &FunctionSubscribe<void(WebPortalAdType,std::string,std::string)>::call)
+        .addFunction("call", &FunctionSubscribe<void(WebPortalAdType,std::string,std::string)>::call)
+        .addFunction("add", (bool (FunctionSubscribe<void(WebPortalAdType,std::string,std::string)>::*)(const std::string&, lua_State*))&FunctionSubscribe<void(WebPortalAdType,std::string,std::string)>::add)
         .endClass();
 
 #ifdef DORIAX_PHYSICS_2D
@@ -1366,21 +1373,22 @@ void LuaBinding::registerCoreClasses(lua_State *L){
         .endClass();
 
     luabridge::getGlobalNamespace(L)
-        .beginClass<CrazyGames>("CrazyGames")
-        .addStaticFunction("initialize", &CrazyGames::initialize)
-        .addStaticFunction("getEnvironment", &CrazyGames::getEnvironment)
-        .addStaticFunction("isAvailable", &CrazyGames::isAvailable)
-        .addStaticFunction("requestAd", &CrazyGames::requestAd)
-        .addStaticFunction("gameplayStart", &CrazyGames::gameplayStart)
-        .addStaticFunction("gameplayStop", &CrazyGames::gameplayStop)
-        .addStaticFunction("loadingStart", &CrazyGames::loadingStart)
-        .addStaticFunction("loadingStop", &CrazyGames::loadingStop)
-        .addStaticFunction("happytime", &CrazyGames::happytime)
+        .beginClass<WebPortal>("WebPortal")
+        .addStaticFunction("getPortal", &WebPortal::getPortal)
+        .addStaticFunction("initialize", &WebPortal::initialize)
+        .addStaticFunction("getEnvironment", &WebPortal::getEnvironment)
+        .addStaticFunction("isAvailable", &WebPortal::isAvailable)
+        .addStaticFunction("requestAd", &WebPortal::requestAd)
+        .addStaticFunction("gameplayStart", &WebPortal::gameplayStart)
+        .addStaticFunction("gameplayStop", &WebPortal::gameplayStop)
+        .addStaticFunction("loadingStart", &WebPortal::loadingStart)
+        .addStaticFunction("loadingStop", &WebPortal::loadingStop)
+        .addStaticFunction("happytime", &WebPortal::happytime)
 
-        .addStaticProperty("onInitialized", [] () { return &CrazyGames::onInitialized; }, [] (lua_State* L) { CrazyGames::onInitialized = L; })
-        .addStaticProperty("onAdStarted", [] () { return &CrazyGames::onAdStarted; }, [] (lua_State* L) { CrazyGames::onAdStarted = L; })
-        .addStaticProperty("onAdFinished", [] () { return &CrazyGames::onAdFinished; }, [] (lua_State* L) { CrazyGames::onAdFinished = L; })
-        .addStaticProperty("onAdError", [] () { return &CrazyGames::onAdError; }, [] (lua_State* L) { CrazyGames::onAdError = L; })
+        .addStaticProperty("onInitialized", [] () { return &WebPortal::onInitialized; }, [] (lua_State* L) { WebPortal::onInitialized = L; })
+        .addStaticProperty("onAdStarted", [] () { return &WebPortal::onAdStarted; }, [] (lua_State* L) { WebPortal::onAdStarted = L; })
+        .addStaticProperty("onAdFinished", [] () { return &WebPortal::onAdFinished; }, [] (lua_State* L) { WebPortal::onAdFinished = L; })
+        .addStaticProperty("onAdError", [] () { return &WebPortal::onAdError; }, [] (lua_State* L) { WebPortal::onAdError = L; })
         .endClass();
 
 #endif //DISABLE_LUA_BINDINGS

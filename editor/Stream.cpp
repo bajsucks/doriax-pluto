@@ -892,6 +892,21 @@ ProgressbarType editor::Stream::stringToProgressbarType(const std::string& str) 
     return ProgressbarType::HORIZONTAL;
 }
 
+std::string editor::Stream::webPortalTypeToString(WebPortalType type) {
+    switch (type) {
+        case WebPortalType::CRAZYGAMES: return "crazygames";
+        case WebPortalType::POKI: return "poki";
+        case WebPortalType::NONE:
+        default: return "none";
+    }
+}
+
+WebPortalType editor::Stream::stringToWebPortalType(const std::string& str) {
+    if (str == "crazygames") return WebPortalType::CRAZYGAMES;
+    if (str == "poki") return WebPortalType::POKI;
+    return WebPortalType::NONE;
+}
+
 std::string editor::Stream::scalingModeToString(Scaling mode) {
     switch (mode) {
         case Scaling::FITWIDTH: return "fitwidth";
@@ -1963,6 +1978,7 @@ YAML::Node editor::Stream::encodeProject(Project* project) {
         if (!web.headInclude.empty()) webNode["headInclude"] = web.headInclude;
         if (web.resizeCanvasToWindow != defaultWeb.resizeCanvasToWindow) webNode["resizeCanvasToWindow"] = web.resizeCanvasToWindow;
         if (web.hideEmscriptenUI != defaultWeb.hideEmscriptenUI) webNode["hideEmscriptenUI"] = web.hideEmscriptenUI;
+        if (web.portal != defaultWeb.portal) webNode["portal"] = webPortalTypeToString(web.portal);
         if (webNode.size() != 0) root["web"] = webNode;
     }
 
@@ -2297,6 +2313,7 @@ void editor::Stream::decodeProject(Project* project, const YAML::Node& node, con
         if (webNode["headInclude"]) web.headInclude = webNode["headInclude"].as<std::string>();
         if (webNode["resizeCanvasToWindow"].IsDefined()) web.resizeCanvasToWindow = webNode["resizeCanvasToWindow"].as<bool>();
         if (webNode["hideEmscriptenUI"].IsDefined()) web.hideEmscriptenUI = webNode["hideEmscriptenUI"].as<bool>();
+        if (webNode["portal"]) web.portal = stringToWebPortalType(webNode["portal"].as<std::string>());
     }
 
     if (node["linux"] && node["linux"].IsMap()) {

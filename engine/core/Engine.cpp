@@ -6,8 +6,8 @@
 #include "Scene.h"
 #include "Input.h"
 #include "service/AdMob.h"
-#include "service/CrazyGames.h"
 #include "service/InAppPurchase.h"
+#include "service/WebPortal.h"
 #include "render/SystemRender.h"
 #include "script/LuaBinding.h"
 #include "manager/SceneManager.h"
@@ -812,7 +812,7 @@ void Engine::removeSubscriptionsByTag(const std::string& substring) {
 
     AdMob::removeSubscriptionsByTag(substring);
     InAppPurchase::removeSubscriptionsByTag(substring);
-    CrazyGames::removeSubscriptionsByTag(substring);
+    WebPortal::removeSubscriptionsByTag(substring);
 }
 
 void Engine::clearAllSubscriptions(bool includeLifecycle) {
@@ -846,7 +846,7 @@ void Engine::clearAllSubscriptions(bool includeLifecycle) {
 
     AdMob::clearSubscriptions();
     InAppPurchase::clearSubscriptions();
-    CrazyGames::clearSubscriptions();
+    WebPortal::clearSubscriptions();
 
     if (includeLifecycle) {
         onViewLoaded.clear();
@@ -1108,7 +1108,7 @@ void Engine::systemDraw(){
     // ad and purchase results the platform sent since the last frame
     AdMob::dispatchEvents();
     InAppPurchase::dispatchEvents();
-    CrazyGames::dispatchEvents();
+    WebPortal::dispatchEvents();
 
     // a transition requested during the last frame; one requested by its factory waits again
     SceneManager::applyPendingLoad();
@@ -1264,8 +1264,8 @@ void Engine::systemShutdown(){
     AdMob::reset();
     InAppPurchase::clearSubscriptions();
     InAppPurchase::reset();
-    CrazyGames::clearSubscriptions();
-    CrazyGames::reset();
+    WebPortal::clearSubscriptions();
+    WebPortal::reset();
 
     LuaBinding::cleanup();
 
