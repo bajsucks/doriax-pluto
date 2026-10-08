@@ -1099,6 +1099,19 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
         install(DIRECTORY ${LUA_DEST_DIR} DESTINATION bin)
     endif()
 
+    # iOS reads the assets and scripts from inside the app
+    if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+        foreach(PROJECT_CONTENT assets lua)
+            if(EXISTS "${PROJECT_ROOT}/${PROJECT_CONTENT}")
+                add_custom_command(
+                    TARGET ${APP_NAME} POST_BUILD
+                    COMMAND "${CMAKE_COMMAND}" -E remove_directory $<TARGET_BUNDLE_DIR:${APP_NAME}>/${PROJECT_CONTENT}
+                    COMMAND "${CMAKE_COMMAND}" -E copy_directory ${PROJECT_ROOT}/${PROJECT_CONTENT} $<TARGET_BUNDLE_DIR:${APP_NAME}>/${PROJECT_CONTENT}
+                )
+            endif()
+        endforeach()
+    endif()
+
     set_target_properties(
         ${APP_NAME}
 
