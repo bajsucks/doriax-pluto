@@ -57,6 +57,8 @@ public:
 
     // iOS builds with DORIAX_ADMOB only
     virtual doriax::AdMobBackend* getAdMobBackend() override;
+    // iOS builds with DORIAX_STOREKIT only
+    virtual doriax::InAppPurchaseBackend* getInAppPurchaseBackend() override;
 };
 
 

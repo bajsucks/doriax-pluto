@@ -2173,6 +2173,7 @@ bool editor::Exporter::copyEngine() {
         projectSettings += indent + std::string("set(DORIAX_PHYSICS_2D ") + (project->isPhysics2DEnabled() ? "ON" : "OFF") + ")";
         projectSettings += indent + std::string("set(DORIAX_PHYSICS_3D ") + (project->isPhysics3DEnabled() ? "ON" : "OFF") + ")";
         projectSettings += indent + std::string("set(DORIAX_ADMOB ") + (project->getIOSProjectSettings().admobEnabled ? "ON" : "OFF") + ")";
+        projectSettings += indent + std::string("set(DORIAX_STOREKIT ") + (project->getIOSProjectSettings().storeKitEnabled ? "ON" : "OFF") + ")";
         projectSettings += indent + "set(DORIAX_WEB_PORTAL " + Stream::webPortalTypeToString(project->getWebProjectSettings().portal) + ")";
         projectSettings += indent + "set(DORIAX_WEB_PORTAL_GAME_ID \"" + escapeCMakeCString(project->getWebProjectSettings().portalGameId) + "\")";
         cmakeContent.replace(projectSettingsPos, projectSettingsMarker.size(), projectSettings);
@@ -2850,19 +2851,30 @@ bool editor::Exporter::writeAppleProjectSettings() {
         if (!unlinkBackend("joltphysics")) return false;
     }
 
+    // "<id> /* StoreKitAdapter.swift in Sources */ = {isa = PBXBuildFile; ...}" and its build phase entry
+    auto removeBuildFile = [&](const std::string& buildFile) {
+        const size_t match = xcodeProject.find("/* " + buildFile + " */ = {isa = PBXBuildFile;");
+        if (match == std::string::npos) {
+            setError("Apple export template has no " + buildFile + " entry to remove");
+            return false;
+        }
+        const size_t lineStart = xcodeProject.rfind('\n', match) + 1;
+        return removeProjectEntriesWithId(leadingObjectId(xcodeProject.substr(lineStart, match - lineStart)));
+    };
+
     // Without AdMob the iOS app neither links Google Mobile Ads nor compiles its adapter
     if (!ios.admobEnabled) {
         removeProjectLinesContaining("DORIAX_ADMOB,");
         for (const char* buildFile : {"GoogleMobileAds.xcframework in Frameworks",
                 "UserMessagingPlatform.xcframework in Frameworks", "GoogleMobileAdsPlaceholder.swift in Sources"}) {
-            const size_t match = xcodeProject.find(std::string("/* ") + buildFile + " */ = {isa = PBXBuildFile;");
-            if (match == std::string::npos) {
-                setError(std::string("Apple export template has no ") + buildFile + " entry to remove");
-                return false;
-            }
-            const size_t lineStart = xcodeProject.rfind('\n', match) + 1;
-            if (!removeProjectEntriesWithId(leadingObjectId(xcodeProject.substr(lineStart, match - lineStart)))) return false;
+            if (!removeBuildFile(buildFile)) return false;
         }
+    }
+    // Without App Store purchases it compiles no StoreKit adapter, nor its bridging header
+    if (!ios.storeKitEnabled) {
+        removeProjectLinesContaining("DORIAX_STOREKIT,");
+        removeProjectLinesContaining("SWIFT_OBJC_BRIDGING_HEADER = ");
+        if (!removeBuildFile("StoreKitAdapter.swift in Sources")) return false;
     }
 
     std::string excludedSources;

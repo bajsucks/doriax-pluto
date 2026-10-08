@@ -9,6 +9,7 @@ endif()
 option(DORIAX_PHYSICS_2D "Enable Box2D-based 2D physics" ON)
 option(DORIAX_PHYSICS_3D "Enable Jolt-based 3D physics" ON)
 option(DORIAX_ADMOB "Link Google Mobile Ads into iOS builds" ON)
+option(DORIAX_STOREKIT "Compile StoreKit in-app purchases into iOS builds" ON)
 set(DORIAX_WEB_PORTALS none crazygames poki gamedistribution yandex youtube)
 set(DORIAX_WEB_PORTAL none CACHE STRING "Game portal SDK of web builds")
 set_property(CACHE DORIAX_WEB_PORTAL PROPERTY STRINGS ${DORIAX_WEB_PORTALS})
@@ -596,6 +597,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
             ${PLATFORM_ROOT}/ios/ViewController.m
             ${PLATFORM_ROOT}/ios/AdMobAdapter.h
             ${PLATFORM_ROOT}/ios/AdMobAdapter.m
+            ${PLATFORM_ROOT}/ios/StoreKitAdapter.h
             ${PLATFORM_ROOT}/Renderer.h
             ${PLATFORM_ROOT}/Renderer.mm
             ${PLATFORM_ROOT}/DoriaxApple.h
@@ -642,7 +644,21 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
                     ${GOOGLE_MOBILE_ADS_ROOT}/UserMessagingPlatform.xcframework/ios-arm64_x86_64-simulator/UserMessagingPlatform.framework
                 )
             endif()
+        endif()
 
+        if(DORIAX_STOREKIT)
+            add_definitions("-DDORIAX_STOREKIT")
+
+            # StoreKit 2 is Swift only; the adapter implements its header, which needs Swift 6.1
+            enable_language(Swift)
+            list(APPEND PLATFORM_SOURCE ${PLATFORM_ROOT}/ios/StoreKitAdapter.swift)
+
+            list(APPEND PLATFORM_PROPERTIES
+                XCODE_ATTRIBUTE_SWIFT_OBJC_BRIDGING_HEADER "${PLATFORM_ROOT}/ios/StoreKitAdapter.h"
+            )
+        endif()
+
+        if(DORIAX_ADMOB OR DORIAX_STOREKIT)
             list(APPEND PLATFORM_PROPERTIES
                 XCODE_ATTRIBUTE_SWIFT_VERSION "5.0"
                 XCODE_ATTRIBUTE_LD_RUNPATH_SEARCH_PATHS "/usr/lib/swift @executable_path/Frameworks"
@@ -654,7 +670,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fobjc-arc")
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fobjc-arc")
-        # Xcode 27 starts at iOS 15
+        # StoreKit 2 and Xcode 27 start at iOS 15
         set(CMAKE_OSX_DEPLOYMENT_TARGET "15.0")
 
         list(APPEND PLATFORM_PROPERTIES

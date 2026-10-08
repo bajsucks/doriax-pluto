@@ -251,6 +251,8 @@ namespace doriax::editor{
         std::string admobAppId;
         // NSUserTrackingUsageDescription, which the consent form's IDFA message needs
         std::string trackingUsageDescription;
+        // StoreKit 2 for InAppPurchase is compiled only when enabled
+        bool storeKitEnabled = false;
     };
 
     enum class AndroidOrientation {

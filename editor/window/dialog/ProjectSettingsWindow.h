@@ -85,6 +85,7 @@ namespace doriax::editor {
         bool m_iosAdmobEnabled = false;
         char m_iosAdmobAppIdBuffer[128] = {0};
         char m_iosTrackingUsageDescriptionBuffer[512] = {0};
+        bool m_iosStoreKitEnabled = false;
         char m_androidApplicationNameBuffer[256] = {0};
         char m_androidPackageNameBuffer[256] = {0};
         char m_androidVersionNameBuffer[64] = {0};

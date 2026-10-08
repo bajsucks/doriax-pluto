@@ -11,7 +11,6 @@
 #include "service/InAppPurchase.h"
 #include "Log.h"
 #include "util/StringUtils.h"
-#include "json.hpp"
 
 #include <cstdint>
 
@@ -122,103 +121,6 @@ namespace {
         return !clearException(env) && value;
     }
 
-    using Json = nlohmann::json;
-
-    std::string jsonString(const Json& json, const char* key){
-        auto it = json.find(key);
-        return (it != json.end() && it->is_string()) ? it->get<std::string>() : std::string();
-    }
-
-    long long jsonInteger(const Json& json, const char* key){
-        auto it = json.find(key);
-        return (it != json.end() && it->is_number_integer()) ? it->get<long long>() : 0;
-    }
-
-    bool jsonBool(const Json& json, const char* key){
-        auto it = json.find(key);
-        return it != json.end() && it->is_boolean() && it->get<bool>();
-    }
-
-    std::vector<std::string> jsonStrings(const Json& json, const char* key){
-        std::vector<std::string> values;
-        auto it = json.find(key);
-        if (it != json.end() && it->is_array()){
-            for (const Json& item : *it){
-                if (item.is_string()) values.push_back(item.get<std::string>());
-            }
-        }
-        return values;
-    }
-
-    ProductDetails parseProduct(const Json& json){
-        ProductDetails product;
-        product.productId = jsonString(json, "productId");
-        product.type = static_cast<ProductType>(jsonInteger(json, "type"));
-        product.title = jsonString(json, "title");
-        product.name = jsonString(json, "name");
-        product.description = jsonString(json, "description");
-        product.price = jsonString(json, "price");
-        product.priceMicros = jsonInteger(json, "priceMicros");
-        product.currencyCode = jsonString(json, "currencyCode");
-
-        auto offers = json.find("offers");
-        if (offers != json.end() && offers->is_array()){
-            for (const Json& offerJson : *offers){
-                ProductOffer offer;
-                offer.offerToken = jsonString(offerJson, "offerToken");
-                offer.offerId = jsonString(offerJson, "offerId");
-                offer.basePlanId = jsonString(offerJson, "basePlanId");
-                offer.tags = jsonStrings(offerJson, "tags");
-
-                auto phases = offerJson.find("pricingPhases");
-                if (phases != offerJson.end() && phases->is_array()){
-                    for (const Json& phaseJson : *phases){
-                        PricingPhase phase;
-                        phase.price = jsonString(phaseJson, "price");
-                        phase.priceMicros = jsonInteger(phaseJson, "priceMicros");
-                        phase.currencyCode = jsonString(phaseJson, "currencyCode");
-                        phase.billingPeriod = jsonString(phaseJson, "billingPeriod");
-                        phase.billingCycleCount = static_cast<int>(jsonInteger(phaseJson, "billingCycleCount"));
-                        phase.recurrenceMode = static_cast<RecurrenceMode>(jsonInteger(phaseJson, "recurrenceMode"));
-                        offer.pricingPhases.push_back(phase);
-                    }
-                }
-                product.offers.push_back(offer);
-            }
-        }
-
-        return product;
-    }
-
-    PurchaseDetails parsePurchase(const Json& json){
-        PurchaseDetails purchase;
-        purchase.orderId = jsonString(json, "orderId");
-        purchase.productIds = jsonStrings(json, "productIds");
-        purchase.productId = purchase.productIds.empty() ? "" : purchase.productIds[0];
-        purchase.productType = static_cast<ProductType>(jsonInteger(json, "productType"));
-        purchase.purchaseToken = jsonString(json, "purchaseToken");
-        purchase.purchaseTime = jsonInteger(json, "purchaseTime");
-        purchase.state = static_cast<PurchaseState>(jsonInteger(json, "state"));
-        purchase.quantity = static_cast<int>(jsonInteger(json, "quantity"));
-        purchase.acknowledged = jsonBool(json, "acknowledged");
-        purchase.autoRenewing = jsonBool(json, "autoRenewing");
-        purchase.suspended = jsonBool(json, "suspended");
-        purchase.packageName = jsonString(json, "packageName");
-        purchase.obfuscatedAccountId = jsonString(json, "obfuscatedAccountId");
-        purchase.obfuscatedProfileId = jsonString(json, "obfuscatedProfileId");
-        purchase.originalJson = jsonString(json, "originalJson");
-        purchase.signature = jsonString(json, "signature");
-        return purchase;
-    }
-
-    Json parseJson(JNIEnv* env, jstring text){
-        Json json = Json::parse(toString(env, text), nullptr, false);
-        if (json.is_discarded()){
-            Log::error("Google Play Billing sent unreadable data");
-        }
-        return json;
-    }
-
     // AdMobWrapper natives
 
     void JNICALL admobOnInitialized(JNIEnv* env, jclass cls){
@@ -295,20 +197,13 @@ namespace {
     }
 
     void JNICALL billingOnProductsQueried(JNIEnv* env, jclass cls, jint responseCode, jstring message, jstring productsJson){
-        std::vector<ProductDetails> products;
-        Json json = parseJson(env, productsJson);
-        if (json.is_array()){
-            for (const Json& item : json){
-                if (item.is_object()) products.push_back(parseProduct(item));
-            }
-        }
-        InAppPurchase::systemProductsQueried(static_cast<BillingResponse>(responseCode), toString(env, message), products);
+        InAppPurchase::systemProductsQueried(static_cast<BillingResponse>(responseCode), toString(env, message),
+            InAppPurchase::productsFromJson(toString(env, productsJson)));
     }
 
     void JNICALL billingOnPurchaseUpdated(JNIEnv* env, jclass cls, jstring purchaseJson){
-        Json json = parseJson(env, purchaseJson);
-        if (json.is_object()){
-            InAppPurchase::systemPurchaseUpdated(parsePurchase(json));
+        for (const PurchaseDetails& purchase : InAppPurchase::purchasesFromJson(toString(env, purchaseJson))){
+            InAppPurchase::systemPurchaseUpdated(purchase);
         }
     }
 
@@ -317,14 +212,8 @@ namespace {
     }
 
     void JNICALL billingOnPurchasesQueried(JNIEnv* env, jclass cls, jint productType, jint responseCode, jstring message, jstring purchasesJson){
-        std::vector<PurchaseDetails> purchases;
-        Json json = parseJson(env, purchasesJson);
-        if (json.is_array()){
-            for (const Json& item : json){
-                if (item.is_object()) purchases.push_back(parsePurchase(item));
-            }
-        }
-        InAppPurchase::systemPurchasesQueried(static_cast<ProductType>(productType), static_cast<BillingResponse>(responseCode), toString(env, message), purchases);
+        InAppPurchase::systemPurchasesQueried(static_cast<ProductType>(productType), static_cast<BillingResponse>(responseCode), toString(env, message),
+            InAppPurchase::purchasesFromJson(toString(env, purchasesJson)));
     }
 
     void JNICALL billingOnPurchaseAcknowledged(JNIEnv* env, jclass cls, jstring purchaseToken, jint responseCode, jstring message){
@@ -449,6 +338,7 @@ namespace {
         virtual void acknowledgePurchase(const std::string& purchaseToken) override;
         virtual void consumePurchase(const std::string& purchaseToken) override;
         virtual void queryPurchases(ProductType type) override;
+        virtual void restorePurchases() override;
         virtual void openSubscriptionManagement(const std::string& productId) override;
         virtual void showInAppMessages() override;
 
@@ -673,6 +563,12 @@ void AndroidInAppPurchase::consumePurchase(const std::string& purchaseToken){
 
 void AndroidInAppPurchase::queryPurchases(ProductType type){
     callVoid(wrapper, queryPurchasesMethod, static_cast<jint>(type));
+}
+
+void AndroidInAppPurchase::restorePurchases(){
+    // Google Play keeps the purchases of the account in sync
+    queryPurchases(ProductType::INAPP);
+    queryPurchases(ProductType::SUBS);
 }
 
 void AndroidInAppPurchase::openSubscriptionManagement(const std::string& productId){

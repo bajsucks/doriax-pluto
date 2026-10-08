@@ -2037,6 +2037,7 @@ YAML::Node editor::Stream::encodeProject(Project* project) {
         if (ios.admobEnabled != defaultIOS.admobEnabled) iosNode["admobEnabled"] = ios.admobEnabled;
         if (!ios.admobAppId.empty()) iosNode["admobAppId"] = ios.admobAppId;
         if (!ios.trackingUsageDescription.empty()) iosNode["trackingUsageDescription"] = ios.trackingUsageDescription;
+        if (ios.storeKitEnabled != defaultIOS.storeKitEnabled) iosNode["storeKitEnabled"] = ios.storeKitEnabled;
         if (iosNode.size() != 0) root["ios"] = iosNode;
     }
 
@@ -2366,6 +2367,7 @@ void editor::Stream::decodeProject(Project* project, const YAML::Node& node, con
         if (iosNode["admobEnabled"].IsDefined()) ios.admobEnabled = iosNode["admobEnabled"].as<bool>();
         if (iosNode["admobAppId"]) ios.admobAppId = iosNode["admobAppId"].as<std::string>();
         if (iosNode["trackingUsageDescription"]) ios.trackingUsageDescription = iosNode["trackingUsageDescription"].as<std::string>();
+        if (iosNode["storeKitEnabled"].IsDefined()) ios.storeKitEnabled = iosNode["storeKitEnabled"].as<bool>();
     }
 
     if (node["android"] && node["android"].IsMap()) {

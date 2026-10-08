@@ -4,7 +4,9 @@
 #include "DoriaxApple.h"
 
 #include "Engine.h"
+#include "Log.h"
 #include "service/AdMob.h"
+#include "service/InAppPurchase.h"
 
 #import "Renderer.h"
 #import <Foundation/Foundation.h>
@@ -22,9 +24,15 @@
 #if TARGET_OS_IPHONE && defined(DORIAX_ADMOB)
 #define DORIAX_IOS_ADMOB
 #import "ios/AdMobAdapter.h"
+#endif
 
-static AdMobAdapter* admob = nil;
+// The StoreKit adapter is compiled into iOS builds that keep App Store purchases
+#if TARGET_OS_IPHONE && defined(DORIAX_STOREKIT)
+#define DORIAX_IOS_STOREKIT
+#import "ios/StoreKitAdapter.h"
+#endif
 
+#if defined(DORIAX_IOS_ADMOB) || defined(DORIAX_IOS_STOREKIT)
 static NSString* toNSString(const std::string& text){
     NSString* value = [NSString stringWithUTF8String:text.c_str()];
     return value ? value : @"";
@@ -37,6 +45,10 @@ static NSArray<NSString*>* toNSArray(const std::vector<std::string>& values){
     }
     return array;
 }
+#endif
+
+#ifdef DORIAX_IOS_ADMOB
+static AdMobAdapter* admob = nil;
 
 extern "C" {
 void DoriaxAdMobInitialized(void){
@@ -170,6 +182,98 @@ namespace {
 }
 #endif
 
+#ifdef DORIAX_IOS_STOREKIT
+static StoreKitAdapter* storeKit = nil;
+
+extern "C" {
+void DoriaxStoreKitInitialized(int responseCode, const char* message){
+    doriax::InAppPurchase::systemInitialized(static_cast<doriax::BillingResponse>(responseCode), message);
+}
+
+void DoriaxStoreKitProductsQueried(int responseCode, const char* message, const char* productsJson){
+    doriax::InAppPurchase::systemProductsQueried(static_cast<doriax::BillingResponse>(responseCode), message,
+        doriax::InAppPurchase::productsFromJson(productsJson));
+}
+
+void DoriaxStoreKitPurchaseUpdated(const char* purchaseJson){
+    for (const doriax::PurchaseDetails& purchase : doriax::InAppPurchase::purchasesFromJson(purchaseJson)){
+        doriax::InAppPurchase::systemPurchaseUpdated(purchase);
+    }
+}
+
+void DoriaxStoreKitPurchaseFailed(const char* productId, int responseCode, const char* message){
+    doriax::InAppPurchase::systemPurchaseFailed(productId, static_cast<doriax::BillingResponse>(responseCode), message);
+}
+
+void DoriaxStoreKitPurchasesQueried(int productType, int responseCode, const char* message, const char* purchasesJson){
+    doriax::InAppPurchase::systemPurchasesQueried(static_cast<doriax::ProductType>(productType), static_cast<doriax::BillingResponse>(responseCode), message,
+        doriax::InAppPurchase::purchasesFromJson(purchasesJson));
+}
+
+void DoriaxStoreKitPurchaseAcknowledged(const char* purchaseToken, int responseCode, const char* message){
+    doriax::InAppPurchase::systemPurchaseAcknowledged(purchaseToken, static_cast<doriax::BillingResponse>(responseCode), message);
+}
+
+void DoriaxStoreKitPurchaseConsumed(const char* purchaseToken, int responseCode, const char* message){
+    doriax::InAppPurchase::systemPurchaseConsumed(purchaseToken, static_cast<doriax::BillingResponse>(responseCode), message);
+}
+}
+
+namespace {
+    // StoreKit 2 through StoreKitAdapter
+    class AppleInAppPurchase: public doriax::InAppPurchaseBackend{
+    public:
+        virtual void initialize() override{
+            [storeKit initializeStore];
+        }
+
+        virtual bool isReady() override{
+            return [storeKit isReady];
+        }
+
+        virtual void queryProducts(const std::vector<std::string>& productIds, doriax::ProductType type) override{
+            [storeKit queryProducts:toNSArray(productIds) type:static_cast<int>(type)];
+        }
+
+        // The App Store has no offer tokens or replacement modes
+        virtual void purchase(const doriax::PurchaseParams& params) override{
+            NSString* accountToken = toNSString(params.obfuscatedAccountId);
+            if (accountToken.length > 0 && ![[NSUUID alloc] initWithUUIDString:accountToken]){
+                doriax::Log::warn("The App Store takes the obfuscated account id only as a UUID, so it is left out");
+                accountToken = @"";
+            }
+            [storeKit purchase:toNSString(params.productId) accountToken:accountToken];
+        }
+
+        virtual void acknowledgePurchase(const std::string& purchaseToken) override{
+            [storeKit finishPurchase:toNSString(purchaseToken) consume:NO];
+        }
+
+        virtual void consumePurchase(const std::string& purchaseToken) override{
+            [storeKit finishPurchase:toNSString(purchaseToken) consume:YES];
+        }
+
+        virtual void queryPurchases(doriax::ProductType type) override{
+            [storeKit queryPurchases:static_cast<int>(type)];
+        }
+
+        virtual void restorePurchases() override{
+            [storeKit restorePurchases];
+        }
+
+        virtual void openSubscriptionManagement(const std::string& productId) override{
+            [storeKit openSubscriptionManagement:toNSString(productId)];
+        }
+
+        virtual void showInAppMessages() override{
+            // StoreKit shows them by itself
+        }
+    };
+
+    AppleInAppPurchase appleInAppPurchase;
+}
+#endif
+
 #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
 static bool appleMouseLocked = false;
 static bool appleCursorHidden = false;
@@ -193,6 +297,10 @@ DoriaxApple::DoriaxApple(){
     if (!admob)
         admob = [[AdMobAdapter alloc]init];
 #endif
+#ifdef DORIAX_IOS_STOREKIT
+    if (!storeKit)
+        storeKit = [[StoreKitAdapter alloc]init];
+#endif
 }
 
 DoriaxApple::~DoriaxApple(){
@@ -203,6 +311,9 @@ DoriaxApple::~DoriaxApple(){
 #endif
 #ifdef DORIAX_IOS_ADMOB
     admob = nil;
+#endif
+#ifdef DORIAX_IOS_STOREKIT
+    storeKit = nil;
 #endif
 }
 
@@ -487,6 +598,14 @@ void DoriaxApple::removeKey(const char *key){
 doriax::AdMobBackend* DoriaxApple::getAdMobBackend(){
 #ifdef DORIAX_IOS_ADMOB
     return &appleAdMob;
+#else
+    return nullptr;
+#endif
+}
+
+doriax::InAppPurchaseBackend* DoriaxApple::getInAppPurchaseBackend(){
+#ifdef DORIAX_IOS_STOREKIT
+    return &appleInAppPurchase;
 #else
     return nullptr;
 #endif

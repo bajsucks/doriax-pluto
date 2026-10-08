@@ -892,6 +892,7 @@ void ProjectSettingsWindow::open(Project* project) {
     m_iosAdmobEnabled = ios.admobEnabled;
     snprintf(m_iosAdmobAppIdBuffer, sizeof(m_iosAdmobAppIdBuffer), "%s", ios.admobAppId.c_str());
     snprintf(m_iosTrackingUsageDescriptionBuffer, sizeof(m_iosTrackingUsageDescriptionBuffer), "%s", ios.trackingUsageDescription.c_str());
+    m_iosStoreKitEnabled = ios.storeKitEnabled;
 
     const AndroidProjectSettings& android = project->getAndroidProjectSettings();
     snprintf(m_androidApplicationNameBuffer, sizeof(m_androidApplicationNameBuffer), "%s", android.applicationName.c_str());
@@ -1548,6 +1549,12 @@ void ProjectSettingsWindow::drawIOSSettings() {
     ImGui::InputTextWithHint("##IOSTrackingDescription", "Not asked", m_iosTrackingUsageDescriptionBuffer, sizeof(m_iosTrackingUsageDescriptionBuffer));
     endSettingsRow("NSUserTrackingUsageDescription. Needed when the consent message asks for tracking permission.");
     ImGui::EndDisabled();
+
+    if (beginSettingsRow("App Store Purchases", m_iosStoreKitEnabled)) {
+        m_iosStoreKitEnabled = false;
+    }
+    ImGui::Checkbox("##IOSStoreKit", &m_iosStoreKitEnabled);
+    endSettingsRow("Compiles in StoreKit 2 for the InAppPurchase class. Needs Xcode 16.3 or later.");
 }
 
 void ProjectSettingsWindow::drawAndroidSettings() {
@@ -1786,6 +1793,7 @@ bool ProjectSettingsWindow::applySettings() {
     ios.admobEnabled = m_iosAdmobEnabled;
     applyTextBuffer(ios.admobAppId, m_iosAdmobAppIdBuffer);
     applyTextBuffer(ios.trackingUsageDescription, m_iosTrackingUsageDescriptionBuffer);
+    ios.storeKitEnabled = m_iosStoreKitEnabled;
 
     AndroidProjectSettings& android = m_project->getAndroidProjectSettings();
     applyOverride(android.applicationName, m_androidApplicationNameBuffer, inheritedName);
