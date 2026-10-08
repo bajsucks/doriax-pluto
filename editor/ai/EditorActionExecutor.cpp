@@ -2619,7 +2619,9 @@ ActionResult EditorActionExecutor::createEntity(const Json& arguments) {
             cmd->addProperty<Vector3>(ComponentType::Transform, "position", position);
         }
     }
-    CommandHandle::get(sceneId)->addCommandNoMerge(cmd);
+    if (!CommandHandle::get(sceneId)->addCommandNoMerge(cmd)) {
+        return failResult("Failed to create the entity.");
+    }
 
     return okResult("Created entity through the command history.",
                     Json{{"scene_id", sceneId}, {"entity_id", cmd->getEntity()}});
@@ -2682,7 +2684,10 @@ ActionResult EditorActionExecutor::duplicateEntity(const Json& arguments) {
     Entity entity = resolveEntity(sceneProject, arguments);
     if (entity == NULL_ENTITY) return failResult("Entity not found.");
     auto* cmd = new DuplicateEntityCmd(project, sceneId, std::vector<Entity>{entity});
-    CommandHandle::get(sceneId)->addCommandNoMerge(cmd);
+    if (!CommandHandle::get(sceneId)->addCommandNoMerge(cmd)) {
+        return failResult("Failed to duplicate the entity.");
+    }
+
     Json created = Json::array();
     for (Entity createdEntity : cmd->getCreatedEntities()) created.push_back(createdEntity);
     return okResult("Duplicated entity through the command history.", Json{{"created_entities", created}});
@@ -4379,10 +4384,17 @@ ActionResult EditorActionExecutor::importBundleInstance(const Json& arguments) {
     }
 
     auto* cmd = new ImportEntityBundleCmd(project, sceneId, bundleRel, parent, true);
-    CommandHandle::get(sceneId)->addCommandNoMerge(cmd);
+    if (!CommandHandle::get(sceneId)->addCommandNoMerge(cmd)) {
+        return failResult("Failed to import " + bundleRel.string() + ".");
+    }
+
+    Entity root = cmd->getRootEntity();
     Json imported = Json::array();
     for (Entity importedEntity : cmd->getImportedEntities()) imported.push_back(importedEntity);
-    return okResult("Imported bundle instance through the command history.", Json{{"imported_entities", imported}});
+    return okResult("Imported bundle instance through the command history.", Json{
+        {"instance_root_id", root},
+        {"instance_root_name", sceneProject->scene->getEntityName(root)},
+        {"imported_entities", imported}});
 }
 
 ActionResult EditorActionExecutor::addEntityToBundle(const Json& arguments) {
@@ -5627,6 +5639,7 @@ ActionResult EditorActionExecutor::setProjectSettings(const Json& arguments) {
         project->setWindowSize(arguments.value("window_width", project->getWindowWidth()),
                                arguments.value("window_height", project->getWindowHeight()));
     }
+    if (arguments.contains("vsync")) project->setVSyncEnabled(arguments["vsync"].get<bool>());
 
     LoadingSettings& loading = project->getLoadingSettings();
     if (arguments.contains("loading_scene_id")) loading.sceneId = arguments["loading_scene_id"].get<uint32_t>();
@@ -5646,6 +5659,7 @@ ActionResult EditorActionExecutor::setProjectSettings(const Json& arguments) {
         {"canvas", {{"width", project->getCanvasWidth()}, {"height", project->getCanvasHeight()}}},
         {"scaling_mode", Stream::scalingModeToString(project->getScalingMode())},
         {"window", {{"width", project->getWindowWidth()}, {"height", project->getWindowHeight()}}},
+        {"vsync", project->isVSyncEnabled()},
         {"loading", loadingSettingsJson(project->getLoadingSettings())},
         {"web", {{"resize_canvas", web.resizeCanvasToWindow}, {"hide_emscripten_ui", web.hideEmscriptenUI}}}});
 }

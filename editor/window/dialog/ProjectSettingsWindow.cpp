@@ -27,6 +27,10 @@ static const char* windowModeNames[] = { "Windowed", "Maximized", "Fullscreen" }
 static const WindowMode windowModeValues[] = { WindowMode::WINDOWED, WindowMode::MAXIMIZED, WindowMode::FULLSCREEN };
 static const int windowModeCount = sizeof(windowModeValues) / sizeof(windowModeValues[0]);
 
+static const char* webPortalNames[] = { "None", "CrazyGames", "Poki", "GameDistribution", "Yandex Games", "YouTube Playables" };
+static const WebPortalType webPortalValues[] = { WebPortalType::NONE, WebPortalType::CRAZYGAMES, WebPortalType::POKI, WebPortalType::GAMEDISTRIBUTION, WebPortalType::YANDEX, WebPortalType::YOUTUBE };
+static const int webPortalCount = sizeof(webPortalValues) / sizeof(webPortalValues[0]);
+
 static const char* cxxStandardNames[] = { "C++17", "C++20", "C++23" };
 static const int cxxStandardCount = sizeof(cxxStandardNames) / sizeof(cxxStandardNames[0]);
 static_assert(std::size(cxxStandardNames) == std::size(cxxStandards));
@@ -149,6 +153,13 @@ static int findCxxStandardIndex(int standard) {
     return 0;
 }
 
+static int findWebPortalIndex(WebPortalType portal) {
+    for (int i = 0; i < webPortalCount; i++) {
+        if (webPortalValues[i] == portal) return i;
+    }
+    return 0;
+}
+
 static int findAndroidOrientationIndex(AndroidOrientation orientation) {
     for (int i = 0; i < androidOrientationCount; i++) {
         if (androidOrientationValues[i] == orientation) return i;
@@ -162,6 +173,20 @@ static void applyTextBuffer(std::string& value, const char (&buffer)[N]) {
     if (value.compare(0, N - 1, buffer) != 0) {
         value = buffer;
     }
+}
+
+// ca-app-pub-<publisher>~<app>; ad unit ids have a slash instead
+static bool isAdMobAppIdValid(const std::string& value) {
+    const std::string prefix = "ca-app-pub-";
+    if (value.compare(0, prefix.size(), prefix) != 0) return false;
+
+    const size_t tilde = value.find('~', prefix.size());
+    if (tilde == std::string::npos || tilde == prefix.size() || tilde + 1 == value.size()) return false;
+
+    for (size_t i = prefix.size(); i < value.size(); i++) {
+        if (i != tilde && !std::isdigit(static_cast<unsigned char>(value[i]))) return false;
+    }
+    return true;
 }
 
 static bool isIdentifierPartValid(const std::string& value, size_t start, size_t end) {
@@ -847,6 +872,8 @@ void ProjectSettingsWindow::open(Project* project) {
     snprintf(m_webHeadIncludeBuffer, sizeof(m_webHeadIncludeBuffer), "%s", web.headInclude.c_str());
     m_webResizeCanvasToWindow = web.resizeCanvasToWindow;
     m_webHideEmscriptenUI = web.hideEmscriptenUI;
+    m_webPortalIndex = findWebPortalIndex(web.portal);
+    snprintf(m_webPortalGameIdBuffer, sizeof(m_webPortalGameIdBuffer), "%s", web.portalGameId.c_str());
 
     const LinuxProjectSettings& linuxSettings = project->getLinuxProjectSettings();
     snprintf(m_linuxApplicationNameBuffer, sizeof(m_linuxApplicationNameBuffer), "%s", linuxSettings.applicationName.c_str());
@@ -876,6 +903,9 @@ void ProjectSettingsWindow::open(Project* project) {
     m_iosHideStatusBar = ios.hideStatusBar;
     m_iosHideHomeIndicator = ios.hideHomeIndicator;
     m_iosSupportsHighRefreshRate = ios.supportsHighRefreshRate;
+    m_iosAdmobEnabled = ios.admobEnabled;
+    snprintf(m_iosAdmobAppIdBuffer, sizeof(m_iosAdmobAppIdBuffer), "%s", ios.admobAppId.c_str());
+    snprintf(m_iosTrackingUsageDescriptionBuffer, sizeof(m_iosTrackingUsageDescriptionBuffer), "%s", ios.trackingUsageDescription.c_str());
 
     const AndroidProjectSettings& android = project->getAndroidProjectSettings();
     snprintf(m_androidApplicationNameBuffer, sizeof(m_androidApplicationNameBuffer), "%s", android.applicationName.c_str());
@@ -900,6 +930,9 @@ void ProjectSettingsWindow::open(Project* project) {
     m_androidAllowBackup = android.allowBackup;
     m_androidFullscreen = android.fullscreen;
     m_androidKeepScreenOn = android.keepScreenOn;
+    m_androidAdmobEnabled = android.admobEnabled;
+    snprintf(m_androidAdmobAppIdBuffer, sizeof(m_androidAdmobAppIdBuffer), "%s", android.admobAppId.c_str());
+    m_androidBillingEnabled = android.billingEnabled;
 
     m_startSceneId = project->getStartSceneId();
     const SceneProject* startScene = project->getScene(m_startSceneId);
@@ -1399,6 +1432,16 @@ void ProjectSettingsWindow::drawWebSettings() {
     }
     ImGui::Checkbox("##WebHideEmscriptenUI", &m_webHideEmscriptenUI);
     endSettingsRow("Hide the standard logo, status, controls and output console. Runtime scripts remain active. Custom HTML elements are not removed.");
+
+    drawComboSetting("Game Portal", "##WebPortal", webPortalNames, webPortalCount, m_webPortalIndex, findWebPortalIndex(WebPortalType::NONE),
+        "Loads this portal's SDK for the WebPortal class: ads and gameplay events. Each portal needs its own export.");
+
+    ImGui::BeginDisabled(webPortalValues[m_webPortalIndex] != WebPortalType::GAMEDISTRIBUTION);
+    beginSettingsRow("Portal Game ID");
+    ImGui::SetNextItemWidth(-helpMarkerWidth());
+    ImGui::InputText("##WebPortalGameId", m_webPortalGameIdBuffer, sizeof(m_webPortalGameIdBuffer));
+    endSettingsRow("Game ID from the GameDistribution developer dashboard. Without it, the portal SDK is not loaded.");
+    ImGui::EndDisabled();
 }
 
 void ProjectSettingsWindow::drawLinuxSettings() {
@@ -1509,6 +1552,26 @@ void ProjectSettingsWindow::drawIOSSettings() {
     }
     ImGui::Checkbox("##IOSHighRefreshRate", &m_iosSupportsHighRefreshRate);
     endSettingsRow("Allow 120 Hz displays when supported.");
+
+    if (beginSettingsRow("Google AdMob", m_iosAdmobEnabled)) {
+        m_iosAdmobEnabled = false;
+    }
+    ImGui::Checkbox("##IOSAdMob", &m_iosAdmobEnabled);
+    endSettingsRow("Links Google Mobile Ads for the AdMob class. Without it, AdMob calls report errors.");
+
+    ImGui::BeginDisabled(!m_iosAdmobEnabled);
+    beginSettingsRow("AdMob App ID");
+    ImGui::SetNextItemWidth(-helpMarkerWidth());
+    ImGui::InputTextWithHint("##IOSAdMobAppId", iosSampleAdMobAppId, m_iosAdmobAppIdBuffer, sizeof(m_iosAdmobAppIdBuffer));
+    endSettingsRow("GADApplicationIdentifier from the AdMob console. Empty means Google's sample app, which only shows test ads.");
+    drawOverrideWarning(m_iosAdmobAppIdBuffer, isAdMobAppIdValid,
+        "Use the app ID (with ~), not an ad unit ID (with /).");
+
+    beginSettingsRow("Tracking Description");
+    ImGui::SetNextItemWidth(-helpMarkerWidth());
+    ImGui::InputTextWithHint("##IOSTrackingDescription", "Not asked", m_iosTrackingUsageDescriptionBuffer, sizeof(m_iosTrackingUsageDescriptionBuffer));
+    endSettingsRow("NSUserTrackingUsageDescription. Needed when the consent message asks for tracking permission.");
+    ImGui::EndDisabled();
 }
 
 void ProjectSettingsWindow::drawAndroidSettings() {
@@ -1608,6 +1671,33 @@ void ProjectSettingsWindow::drawAndroidSettings() {
     ImGui::Checkbox("Fullscreen", &m_androidFullscreen);
     ImGui::SetItemTooltip("Uses the fullscreen Android theme and hides system bars in MainActivity.");
     endSettingsRow("Android screen/window behavior.");
+
+    if (beginSettingsRow("Google AdMob", m_androidAdmobEnabled != defaults.admobEnabled)) {
+        m_androidAdmobEnabled = defaults.admobEnabled;
+    }
+    ImGui::Checkbox("##AndroidAdMob", &m_androidAdmobEnabled);
+    endSettingsRow("Compiles in Google Mobile Ads for the AdMob class. Declare ads and Ad ID use in the Play Console.");
+
+    ImGui::BeginDisabled(!m_androidAdmobEnabled);
+    beginSettingsRow("AdMob App ID");
+    ImGui::SetNextItemWidth(-helpMarkerWidth());
+    ImGui::InputTextWithHint("##AndroidAdMobAppId", androidSampleAdMobAppId, m_androidAdmobAppIdBuffer, sizeof(m_androidAdmobAppIdBuffer));
+    endSettingsRow("APPLICATION_ID from the AdMob console. Empty means Google's sample app, which only shows test ads.");
+    drawOverrideWarning(m_androidAdmobAppIdBuffer, isAdMobAppIdValid,
+        "Use the app ID (with ~), not an ad unit ID (with /).");
+    ImGui::EndDisabled();
+
+    if (beginSettingsRow("Google Play Billing", m_androidBillingEnabled != defaults.billingEnabled)) {
+        m_androidBillingEnabled = defaults.billingEnabled;
+    }
+    ImGui::Checkbox("##AndroidBilling", &m_androidBillingEnabled);
+    endSettingsRow("Compiles in Google Play Billing for the InAppPurchase class.");
+
+    const int requiredMinSdk = static_cast<int>(std::max(m_androidAdmobEnabled ? admobMinAndroidSdk : 0u,
+        m_androidBillingEnabled ? billingMinAndroidSdk : 0u));
+    if (m_androidMinSdk < requiredMinSdk) {
+        ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Exports raise Min SDK to %d for these services.", requiredMinSdk);
+    }
 }
 
 bool ProjectSettingsWindow::applySettings() {
@@ -1679,6 +1769,8 @@ bool ProjectSettingsWindow::applySettings() {
     applyTextBuffer(web.headInclude, m_webHeadIncludeBuffer);
     web.resizeCanvasToWindow = m_webResizeCanvasToWindow;
     web.hideEmscriptenUI = m_webHideEmscriptenUI;
+    web.portal = webPortalValues[std::clamp(m_webPortalIndex, 0, webPortalCount - 1)];
+    applyTextBuffer(web.portalGameId, m_webPortalGameIdBuffer);
 
     LinuxProjectSettings& linuxSettings = m_project->getLinuxProjectSettings();
     applyOverride(linuxSettings.applicationName, m_linuxApplicationNameBuffer, inheritedName);
@@ -1723,6 +1815,9 @@ bool ProjectSettingsWindow::applySettings() {
     ios.hideStatusBar = m_iosHideStatusBar;
     ios.hideHomeIndicator = m_iosHideHomeIndicator;
     ios.supportsHighRefreshRate = m_iosSupportsHighRefreshRate;
+    ios.admobEnabled = m_iosAdmobEnabled;
+    applyTextBuffer(ios.admobAppId, m_iosAdmobAppIdBuffer);
+    applyTextBuffer(ios.trackingUsageDescription, m_iosTrackingUsageDescriptionBuffer);
 
     AndroidProjectSettings& android = m_project->getAndroidProjectSettings();
     applyOverride(android.applicationName, m_androidApplicationNameBuffer, inheritedName);
@@ -1748,6 +1843,9 @@ bool ProjectSettingsWindow::applySettings() {
     android.allowBackup = m_androidAllowBackup;
     android.fullscreen = m_androidFullscreen;
     android.keepScreenOn = m_androidKeepScreenOn;
+    android.admobEnabled = m_androidAdmobEnabled;
+    applyTextBuffer(android.admobAppId, m_androidAdmobAppIdBuffer);
+    android.billingEnabled = m_androidBillingEnabled;
 
     const SceneProject* startScene = m_project->getScene(m_startSceneId);
     if (startScene && !startScene->filepath.empty()) {

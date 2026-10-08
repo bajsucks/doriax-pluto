@@ -45,6 +45,7 @@ namespace doriax::editor{
         bool mergeWith(Command* otherCommand) override;
 
         std::vector<Entity> getImportedEntities() const;
+        Entity getRootEntity() const;
 
         // Terrain object placement: the root is transformed on every execute, so redo lands
         // in the same spot

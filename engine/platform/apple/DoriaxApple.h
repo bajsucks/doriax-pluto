@@ -55,11 +55,8 @@ public:
 
     virtual void removeKey(const char *key) override;
 
-    virtual void initializeAdMob(bool tagForChildDirectedTreatment, bool tagForUnderAgeOfConsent) override;
-    virtual void setMaxAdContentRating(doriax::AdMobRating rating) override;
-    virtual void loadInterstitialAd(const std::string& adUnitID) override;
-    virtual bool isInterstitialAdLoaded() override;
-    virtual void showInterstitialAd() override;
+    // iOS builds with DORIAX_ADMOB only
+    virtual doriax::AdMobBackend* getAdMobBackend() override;
 };
 
 

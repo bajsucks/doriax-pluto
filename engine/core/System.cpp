@@ -257,45 +257,14 @@ void System::removeKey(const char *key){
     XMLUtils::removeKey(USERSETTINGS_XML_FILE, USERSETTINGS_ROOT, key);
 }
 
-void System::initializeAdMob(bool tagForChildDirectedTreatment, bool tagForUnderAgeOfConsent){
-    Log::error("Cannot initialize AdMob in this system");
+AdMobBackend* System::getAdMobBackend(){
+    return nullptr;
 }
 
-void System::setMaxAdContentRating(AdMobRating rating){
-    Log::error("Cannot set AdMob rating in this system");
+InAppPurchaseBackend* System::getInAppPurchaseBackend(){
+    return nullptr;
 }
 
-void System::loadInterstitialAd(const std::string& adUnitID){
-    Log::error("Cannot load InterstitialAd in this system");
-}
-
-bool System::isInterstitialAdLoaded(){
-    return false;
-}
-
-void System::showInterstitialAd(){
-    Log::error("Cannot show InterstitialAd in this system");
-}
-
-void System::initializeCrazyGamesSDK(){
-    Log::error("Cannot initialize CrazyGames SDK in this system");
-}
-
-void System::showCrazyGamesAd(const std::string& type){
-    Log::error("Cannot show CrazyGames ad in this system");
-}
-
-void System::happytimeCrazyGames(){
-}
-
-void System::gameplayStartCrazyGames(){
-}
-
-void System::gameplayStopCrazyGames(){
-}
-
-void System::loadingStartCrazyGames(){
-}
-
-void System::loadingStopCrazyGames(){
+WebPortalBackend* System::getWebPortalBackend(){
+    return nullptr;
 }

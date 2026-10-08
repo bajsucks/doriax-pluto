@@ -61,6 +61,8 @@ namespace doriax::editor {
         char m_webHeadIncludeBuffer[2048] = {0};
         bool m_webResizeCanvasToWindow = true;
         bool m_webHideEmscriptenUI = false;
+        int m_webPortalIndex = 0;
+        char m_webPortalGameIdBuffer[128] = {0};
         char m_linuxApplicationNameBuffer[256] = {0};
         char m_linuxCommentBuffer[512] = {0};
         char m_linuxCategoriesBuffer[256] = {0};
@@ -82,6 +84,9 @@ namespace doriax::editor {
         bool m_iosHideStatusBar = true;
         bool m_iosHideHomeIndicator = true;
         bool m_iosSupportsHighRefreshRate = true;
+        bool m_iosAdmobEnabled = false;
+        char m_iosAdmobAppIdBuffer[128] = {0};
+        char m_iosTrackingUsageDescriptionBuffer[512] = {0};
         char m_androidApplicationNameBuffer[256] = {0};
         char m_androidPackageNameBuffer[256] = {0};
         char m_androidVersionNameBuffer[64] = {0};
@@ -100,6 +105,9 @@ namespace doriax::editor {
         bool m_androidAllowBackup = true;
         bool m_androidFullscreen = true;
         bool m_androidKeepScreenOn = false;
+        bool m_androidAdmobEnabled = false;
+        char m_androidAdmobAppIdBuffer[128] = {0};
+        bool m_androidBillingEnabled = false;
 
         void drawSettings();
         void drawGeneralSettings();

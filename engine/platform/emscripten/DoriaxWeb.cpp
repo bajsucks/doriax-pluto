@@ -71,24 +71,6 @@ extern "C" {
 		    doriax::Log::error("Failed to save in iDB file system: %s", err);
 	    }
     }
-
-    EMSCRIPTEN_KEEPALIVE 
-    void crazygamesad_started_callback() {
-        doriax::Engine::systemPause();
-    }
-
-    EMSCRIPTEN_KEEPALIVE 
-    void crazygamesad_finished_callback() {
-        doriax::Engine::systemResume();
-    }
-
-    EMSCRIPTEN_KEEPALIVE 
-    void crazygamesad_error_callback(const char* err) {
-	    if (!err || err[0]) {
-		    doriax::Log::error("Failed to load CrazyGames ad: %s", err);
-	    }
-        doriax::Engine::systemResume();
-    }
 }
 
 
@@ -960,71 +942,4 @@ void DoriaxWeb::removeKey(const char *key){
         var key = UTF8ToString($0);
         localStorage.removeItem(key);
     }, key);
-}
-
-void DoriaxWeb::initializeCrazyGamesSDK(){
-    EM_ASM(
-        function loadJS(FILE_URL, async = true) {
-            let scriptEle = document.createElement("script");
-
-            scriptEle.setAttribute("src", FILE_URL);
-            scriptEle.setAttribute("type", "text/javascript");
-            scriptEle.setAttribute("async", async);
-
-            document.body.appendChild(scriptEle);
-
-            // success event
-            scriptEle.addEventListener("load", () => {
-                //console.log("File loaded");
-            });
-            // error event
-            scriptEle.addEventListener("error", (ev) => {
-                console.log("Error on loading file", ev);
-            });
-        }
-
-        loadJS("https://sdk.crazygames.com/crazygames-sdk-v2.js", false);
-    );
-}
-
-void DoriaxWeb::showCrazyGamesAd(const std::string& type){
-    EM_ASM({
-        var adtype = UTF8ToString($0);
-        const callbacks = ({
-            adFinished: () => ccall('crazygamesad_finished_callback', null),
-            adError: (error) => ccall('crazygamesad_error_callback', null, ['string'], [error ? error.message : ""]),
-            adStarted: () => ccall('crazygamesad_started_callback', null)
-        });
-        window.CrazyGames.SDK.ad.requestAd(adtype, callbacks);
-    }, type.c_str());
-}
-
-void DoriaxWeb::happytimeCrazyGames(){
-    EM_ASM(
-        window.CrazyGames.SDK.game.happytime();
-    );
-}
-
-void DoriaxWeb::gameplayStartCrazyGames(){
-    EM_ASM(
-        window.CrazyGames.SDK.game.gameplayStart();
-    );
-}
-
-void DoriaxWeb::gameplayStopCrazyGames(){
-    EM_ASM(
-        window.CrazyGames.SDK.game.gameplayStop();
-    );
-}
-
-void DoriaxWeb::loadingStartCrazyGames(){
-    EM_ASM(
-        window.CrazyGames.SDK.game.sdkGameLoadingStart();
-    );
-}
-
-void DoriaxWeb::loadingStopCrazyGames(){
-    EM_ASM(
-        window.CrazyGames.SDK.game.sdkGameLoadingStop();
-    );
 }

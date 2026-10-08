@@ -6,6 +6,9 @@
 
 #include "Scene.h"
 #include "Input.h"
+#include "service/AdMob.h"
+#include "service/InAppPurchase.h"
+#include "service/WebPortal.h"
 #include "FileData.h"
 #include "thread/ResourceProgress.h"
 #include "texture/Material.h"
@@ -39,6 +42,25 @@ namespace luabridge
         }
     };
 
+    // EnumWrapper casts through size_t, which breaks negative values on 32-bit
+    template <class T>
+    struct SignedEnumWrapper : EnumWrapper<T>
+    {
+        static auto push(lua_State* L, T value) -> std::enable_if_t<std::is_enum_v<T>, luabridge::Result>
+        {
+            lua_pushinteger(L, static_cast<lua_Integer>(value));
+            return {};
+        }
+
+        static auto isInstance(lua_State* L, int index) -> std::enable_if_t<std::is_enum_v<T>, bool>
+        {
+            if (lua_type(L, index) == LUA_TNUMBER)
+                return luabridge::is_integral_representable_by<int>(L, index);
+
+            return false;
+        }
+    };
+
     template<> struct Stack<Scaling> : EnumWrapper<Scaling>{};
     template<> struct Stack<Platform> : EnumWrapper<Platform>{};
     template<> struct Stack<GraphicBackend> : EnumWrapper<GraphicBackend>{};
@@ -51,7 +73,23 @@ namespace luabridge
     template<> struct Stack<MaterialAlphaMode> : EnumWrapper<MaterialAlphaMode>{};
     template<> struct Stack<TextureFilter> : EnumWrapper<TextureFilter>{};
     template<> struct Stack<TextureWrap> : EnumWrapper<TextureWrap>{};
+    template<> struct Stack<AdMobFormat> : EnumWrapper<AdMobFormat>{};
+    template<> struct Stack<AdMobBannerSize> : EnumWrapper<AdMobBannerSize>{};
+    template<> struct Stack<AdMobBannerPosition> : EnumWrapper<AdMobBannerPosition>{};
     template<> struct Stack<AdMobRating> : EnumWrapper<AdMobRating>{};
+    template<> struct Stack<AdMobAgeRestriction> : EnumWrapper<AdMobAgeRestriction>{};
+    template<> struct Stack<AdMobPersonalization> : EnumWrapper<AdMobPersonalization>{};
+    template<> struct Stack<AdMobConsentStatus> : EnumWrapper<AdMobConsentStatus>{};
+    template<> struct Stack<AdMobDebugGeography> : EnumWrapper<AdMobDebugGeography>{};
+    template<> struct Stack<AdMobPrecision> : EnumWrapper<AdMobPrecision>{};
+    template<> struct Stack<ProductType> : EnumWrapper<ProductType>{};
+    template<> struct Stack<WebPortalType> : EnumWrapper<WebPortalType>{};
+    template<> struct Stack<WebPortalAdType> : EnumWrapper<WebPortalAdType>{};
+    template<> struct Stack<WebPortalEnvironment> : EnumWrapper<WebPortalEnvironment>{};
+    template<> struct Stack<PurchaseState> : EnumWrapper<PurchaseState>{};
+    template<> struct Stack<BillingResponse> : SignedEnumWrapper<BillingResponse>{};
+    template<> struct Stack<RecurrenceMode> : EnumWrapper<RecurrenceMode>{};
+    template<> struct Stack<SubscriptionReplacementMode> : EnumWrapper<SubscriptionReplacementMode>{};
     template<> struct Stack<CursorType> : EnumWrapper<CursorType>{};
     template<> struct Stack<MouseMode> : EnumWrapper<MouseMode>{};
     template<> struct Stack<ResourceLoadState> : EnumWrapper<ResourceLoadState>{};

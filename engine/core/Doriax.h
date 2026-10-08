@@ -187,6 +187,10 @@
 #include "script/ScriptBase.h"
 #include "script/ScriptProperty.h"
 
+#include "service/AdMob.h"
+#include "service/InAppPurchase.h"
+#include "service/WebPortal.h"
+
 #include "shader/ShaderData.h"
 #include "shader/ShaderDataSerializer.h"
 

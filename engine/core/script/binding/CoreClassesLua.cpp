@@ -15,6 +15,9 @@
 #include "BundleManager.h"
 #include "Input.h"
 #include "System.h"
+#include "AdMob.h"
+#include "InAppPurchase.h"
+#include "WebPortal.h"
 #ifdef DORIAX_PHYSICS_2D
 #include "Body2D.h"
 #include "Contact2D.h"
@@ -142,11 +145,151 @@ void LuaBinding::registerCoreClasses(lua_State *L){
         .endNamespace();
 
     luabridge::getGlobalNamespace(L)
+        .beginNamespace("AdMobFormat")
+        .addVariable("BANNER", AdMobFormat::BANNER)
+        .addVariable("INTERSTITIAL", AdMobFormat::INTERSTITIAL)
+        .addVariable("REWARDED", AdMobFormat::REWARDED)
+        .addVariable("REWARDED_INTERSTITIAL", AdMobFormat::REWARDED_INTERSTITIAL)
+        .addVariable("APP_OPEN", AdMobFormat::APP_OPEN)
+        .endNamespace();
+
+    luabridge::getGlobalNamespace(L)
+        .beginNamespace("AdMobBannerSize")
+        .addVariable("ADAPTIVE", AdMobBannerSize::ADAPTIVE)
+        .addVariable("BANNER", AdMobBannerSize::BANNER)
+        .addVariable("LARGE_BANNER", AdMobBannerSize::LARGE_BANNER)
+        .addVariable("MEDIUM_RECTANGLE", AdMobBannerSize::MEDIUM_RECTANGLE)
+        .addVariable("FULL_BANNER", AdMobBannerSize::FULL_BANNER)
+        .addVariable("LEADERBOARD", AdMobBannerSize::LEADERBOARD)
+        .endNamespace();
+
+    luabridge::getGlobalNamespace(L)
+        .beginNamespace("AdMobBannerPosition")
+        .addVariable("TOP", AdMobBannerPosition::TOP)
+        .addVariable("BOTTOM", AdMobBannerPosition::BOTTOM)
+        .addVariable("TOP_LEFT", AdMobBannerPosition::TOP_LEFT)
+        .addVariable("TOP_RIGHT", AdMobBannerPosition::TOP_RIGHT)
+        .addVariable("BOTTOM_LEFT", AdMobBannerPosition::BOTTOM_LEFT)
+        .addVariable("BOTTOM_RIGHT", AdMobBannerPosition::BOTTOM_RIGHT)
+        .addVariable("CENTER", AdMobBannerPosition::CENTER)
+        .endNamespace();
+
+    luabridge::getGlobalNamespace(L)
         .beginNamespace("AdMobRating")
-        .addVariable("General", AdMobRating::General)
-        .addVariable("ParentalGuidance", AdMobRating::ParentalGuidance)
-        .addVariable("Teen", AdMobRating::Teen)
-        .addVariable("MatureAudience", AdMobRating::MatureAudience)
+        .addVariable("UNSPECIFIED", AdMobRating::UNSPECIFIED)
+        .addVariable("GENERAL", AdMobRating::GENERAL)
+        .addVariable("PARENTAL_GUIDANCE", AdMobRating::PARENTAL_GUIDANCE)
+        .addVariable("TEEN", AdMobRating::TEEN)
+        .addVariable("MATURE_AUDIENCE", AdMobRating::MATURE_AUDIENCE)
+        .endNamespace();
+
+    luabridge::getGlobalNamespace(L)
+        .beginNamespace("AdMobAgeRestriction")
+        .addVariable("UNSPECIFIED", AdMobAgeRestriction::UNSPECIFIED)
+        .addVariable("CHILD", AdMobAgeRestriction::CHILD)
+        .addVariable("TEEN", AdMobAgeRestriction::TEEN)
+        .endNamespace();
+
+    luabridge::getGlobalNamespace(L)
+        .beginNamespace("AdMobPersonalization")
+        .addVariable("DEFAULT", AdMobPersonalization::DEFAULT)
+        .addVariable("ENABLED", AdMobPersonalization::ENABLED)
+        .addVariable("DISABLED", AdMobPersonalization::DISABLED)
+        .endNamespace();
+
+    luabridge::getGlobalNamespace(L)
+        .beginNamespace("AdMobConsentStatus")
+        .addVariable("UNKNOWN", AdMobConsentStatus::UNKNOWN)
+        .addVariable("REQUIRED", AdMobConsentStatus::REQUIRED)
+        .addVariable("NOT_REQUIRED", AdMobConsentStatus::NOT_REQUIRED)
+        .addVariable("OBTAINED", AdMobConsentStatus::OBTAINED)
+        .endNamespace();
+
+    luabridge::getGlobalNamespace(L)
+        .beginNamespace("AdMobDebugGeography")
+        .addVariable("DISABLED", AdMobDebugGeography::DISABLED)
+        .addVariable("EEA", AdMobDebugGeography::EEA)
+        .addVariable("REGULATED_US_STATE", AdMobDebugGeography::REGULATED_US_STATE)
+        .addVariable("OTHER", AdMobDebugGeography::OTHER)
+        .endNamespace();
+
+    luabridge::getGlobalNamespace(L)
+        .beginNamespace("AdMobPrecision")
+        .addVariable("UNKNOWN", AdMobPrecision::UNKNOWN)
+        .addVariable("ESTIMATED", AdMobPrecision::ESTIMATED)
+        .addVariable("PUBLISHER_PROVIDED", AdMobPrecision::PUBLISHER_PROVIDED)
+        .addVariable("PRECISE", AdMobPrecision::PRECISE)
+        .endNamespace();
+
+    luabridge::getGlobalNamespace(L)
+        .beginNamespace("ProductType")
+        .addVariable("INAPP", ProductType::INAPP)
+        .addVariable("SUBS", ProductType::SUBS)
+        .endNamespace();
+
+    luabridge::getGlobalNamespace(L)
+        .beginNamespace("PurchaseState")
+        .addVariable("UNSPECIFIED", PurchaseState::UNSPECIFIED)
+        .addVariable("PURCHASED", PurchaseState::PURCHASED)
+        .addVariable("PENDING", PurchaseState::PENDING)
+        .endNamespace();
+
+    luabridge::getGlobalNamespace(L)
+        .beginNamespace("BillingResponse")
+        .addVariable("SERVICE_TIMEOUT", BillingResponse::SERVICE_TIMEOUT)
+        .addVariable("FEATURE_NOT_SUPPORTED", BillingResponse::FEATURE_NOT_SUPPORTED)
+        .addVariable("SERVICE_DISCONNECTED", BillingResponse::SERVICE_DISCONNECTED)
+        .addVariable("OK", BillingResponse::OK)
+        .addVariable("USER_CANCELED", BillingResponse::USER_CANCELED)
+        .addVariable("SERVICE_UNAVAILABLE", BillingResponse::SERVICE_UNAVAILABLE)
+        .addVariable("BILLING_UNAVAILABLE", BillingResponse::BILLING_UNAVAILABLE)
+        .addVariable("ITEM_UNAVAILABLE", BillingResponse::ITEM_UNAVAILABLE)
+        .addVariable("DEVELOPER_ERROR", BillingResponse::DEVELOPER_ERROR)
+        .addVariable("FATAL_ERROR", BillingResponse::FATAL_ERROR)
+        .addVariable("ITEM_ALREADY_OWNED", BillingResponse::ITEM_ALREADY_OWNED)
+        .addVariable("ITEM_NOT_OWNED", BillingResponse::ITEM_NOT_OWNED)
+        .addVariable("NETWORK_ERROR", BillingResponse::NETWORK_ERROR)
+        .endNamespace();
+
+    luabridge::getGlobalNamespace(L)
+        .beginNamespace("RecurrenceMode")
+        .addVariable("INFINITE_RECURRING", RecurrenceMode::INFINITE_RECURRING)
+        .addVariable("FINITE_RECURRING", RecurrenceMode::FINITE_RECURRING)
+        .addVariable("NON_RECURRING", RecurrenceMode::NON_RECURRING)
+        .endNamespace();
+
+    luabridge::getGlobalNamespace(L)
+        .beginNamespace("SubscriptionReplacementMode")
+        .addVariable("WITH_TIME_PRORATION", SubscriptionReplacementMode::WITH_TIME_PRORATION)
+        .addVariable("CHARGE_PRORATED_PRICE", SubscriptionReplacementMode::CHARGE_PRORATED_PRICE)
+        .addVariable("WITHOUT_PRORATION", SubscriptionReplacementMode::WITHOUT_PRORATION)
+        .addVariable("CHARGE_FULL_PRICE", SubscriptionReplacementMode::CHARGE_FULL_PRICE)
+        .addVariable("DEFERRED", SubscriptionReplacementMode::DEFERRED)
+        .addVariable("KEEP_EXISTING", SubscriptionReplacementMode::KEEP_EXISTING)
+        .endNamespace();
+
+    luabridge::getGlobalNamespace(L)
+        .beginNamespace("WebPortalType")
+        .addVariable("NONE", WebPortalType::NONE)
+        .addVariable("CRAZYGAMES", WebPortalType::CRAZYGAMES)
+        .addVariable("POKI", WebPortalType::POKI)
+        .addVariable("GAMEDISTRIBUTION", WebPortalType::GAMEDISTRIBUTION)
+        .addVariable("YANDEX", WebPortalType::YANDEX)
+        .addVariable("YOUTUBE", WebPortalType::YOUTUBE)
+        .endNamespace();
+
+    luabridge::getGlobalNamespace(L)
+        .beginNamespace("WebPortalAdType")
+        .addVariable("MIDGAME", WebPortalAdType::MIDGAME)
+        .addVariable("REWARDED", WebPortalAdType::REWARDED)
+        .endNamespace();
+
+    luabridge::getGlobalNamespace(L)
+        .beginNamespace("WebPortalEnvironment")
+        .addVariable("UNINITIALIZED", WebPortalEnvironment::UNINITIALIZED)
+        .addVariable("DISABLED", WebPortalEnvironment::DISABLED)
+        .addVariable("LOCAL", WebPortalEnvironment::LOCAL)
+        .addVariable("PORTAL", WebPortalEnvironment::PORTAL)
         .endNamespace();
 
     luabridge::getGlobalNamespace(L)
@@ -463,6 +606,97 @@ void LuaBinding::registerCoreClasses(lua_State *L){
         .addFunction("__call", &FunctionSubscribe<float(float)>::call)
         .addFunction("call", &FunctionSubscribe<float(float)>::call)
         .addFunction("add", (bool (FunctionSubscribe<float(float)>::*)(const std::string&, lua_State*))&FunctionSubscribe<float(float)>::add)
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
+        .beginClass<FunctionSubscribe<void(int,std::string)>>("FunctionSubscribe_V_IS")
+        .addFunction("__call", &FunctionSubscribe<void(int,std::string)>::call)
+        .addFunction("call", &FunctionSubscribe<void(int,std::string)>::call)
+        .addFunction("add", (bool (FunctionSubscribe<void(int,std::string)>::*)(const std::string&, lua_State*))&FunctionSubscribe<void(int,std::string)>::add)
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
+        .beginClass<FunctionSubscribe<void(AdMobFormat)>>("FunctionSubscribe_V_AMF")
+        .addFunction("__call", &FunctionSubscribe<void(AdMobFormat)>::call)
+        .addFunction("call", &FunctionSubscribe<void(AdMobFormat)>::call)
+        .addFunction("add", (bool (FunctionSubscribe<void(AdMobFormat)>::*)(const std::string&, lua_State*))&FunctionSubscribe<void(AdMobFormat)>::add)
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
+        .beginClass<FunctionSubscribe<void(AdMobFormat,int,std::string)>>("FunctionSubscribe_V_AMFIS")
+        .addFunction("__call", &FunctionSubscribe<void(AdMobFormat,int,std::string)>::call)
+        .addFunction("call", &FunctionSubscribe<void(AdMobFormat,int,std::string)>::call)
+        .addFunction("add", (bool (FunctionSubscribe<void(AdMobFormat,int,std::string)>::*)(const std::string&, lua_State*))&FunctionSubscribe<void(AdMobFormat,int,std::string)>::add)
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
+        .beginClass<FunctionSubscribe<void(AdMobFormat,std::string,int)>>("FunctionSubscribe_V_AMFSI")
+        .addFunction("__call", &FunctionSubscribe<void(AdMobFormat,std::string,int)>::call)
+        .addFunction("call", &FunctionSubscribe<void(AdMobFormat,std::string,int)>::call)
+        .addFunction("add", (bool (FunctionSubscribe<void(AdMobFormat,std::string,int)>::*)(const std::string&, lua_State*))&FunctionSubscribe<void(AdMobFormat,std::string,int)>::add)
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
+        .beginClass<FunctionSubscribe<void(AdMobFormat,long long,std::string,AdMobPrecision)>>("FunctionSubscribe_V_AMFLLSAMP")
+        .addFunction("__call", &FunctionSubscribe<void(AdMobFormat,long long,std::string,AdMobPrecision)>::call)
+        .addFunction("call", &FunctionSubscribe<void(AdMobFormat,long long,std::string,AdMobPrecision)>::call)
+        .addFunction("add", (bool (FunctionSubscribe<void(AdMobFormat,long long,std::string,AdMobPrecision)>::*)(const std::string&, lua_State*))&FunctionSubscribe<void(AdMobFormat,long long,std::string,AdMobPrecision)>::add)
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
+        .beginClass<FunctionSubscribe<void(BillingResponse,std::string)>>("FunctionSubscribe_V_BRS")
+        .addFunction("__call", &FunctionSubscribe<void(BillingResponse,std::string)>::call)
+        .addFunction("call", &FunctionSubscribe<void(BillingResponse,std::string)>::call)
+        .addFunction("add", (bool (FunctionSubscribe<void(BillingResponse,std::string)>::*)(const std::string&, lua_State*))&FunctionSubscribe<void(BillingResponse,std::string)>::add)
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
+        .beginClass<FunctionSubscribe<void(PurchaseDetails)>>("FunctionSubscribe_V_PD")
+        .addFunction("__call", &FunctionSubscribe<void(PurchaseDetails)>::call)
+        .addFunction("call", &FunctionSubscribe<void(PurchaseDetails)>::call)
+        .addFunction("add", (bool (FunctionSubscribe<void(PurchaseDetails)>::*)(const std::string&, lua_State*))&FunctionSubscribe<void(PurchaseDetails)>::add)
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
+        .beginClass<FunctionSubscribe<void(std::string,BillingResponse,std::string)>>("FunctionSubscribe_V_SBRS")
+        .addFunction("__call", &FunctionSubscribe<void(std::string,BillingResponse,std::string)>::call)
+        .addFunction("call", &FunctionSubscribe<void(std::string,BillingResponse,std::string)>::call)
+        .addFunction("add", (bool (FunctionSubscribe<void(std::string,BillingResponse,std::string)>::*)(const std::string&, lua_State*))&FunctionSubscribe<void(std::string,BillingResponse,std::string)>::add)
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
+        .beginClass<FunctionSubscribe<void(ProductType,BillingResponse,std::string)>>("FunctionSubscribe_V_PTBRS")
+        .addFunction("__call", &FunctionSubscribe<void(ProductType,BillingResponse,std::string)>::call)
+        .addFunction("call", &FunctionSubscribe<void(ProductType,BillingResponse,std::string)>::call)
+        .addFunction("add", (bool (FunctionSubscribe<void(ProductType,BillingResponse,std::string)>::*)(const std::string&, lua_State*))&FunctionSubscribe<void(ProductType,BillingResponse,std::string)>::add)
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
+        .beginClass<FunctionSubscribe<void(WebPortalEnvironment)>>("FunctionSubscribe_V_WPE")
+        .addFunction("__call", &FunctionSubscribe<void(WebPortalEnvironment)>::call)
+        .addFunction("call", &FunctionSubscribe<void(WebPortalEnvironment)>::call)
+        .addFunction("add", (bool (FunctionSubscribe<void(WebPortalEnvironment)>::*)(const std::string&, lua_State*))&FunctionSubscribe<void(WebPortalEnvironment)>::add)
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
+        .beginClass<FunctionSubscribe<void(WebPortalAdType)>>("FunctionSubscribe_V_WPAT")
+        .addFunction("__call", &FunctionSubscribe<void(WebPortalAdType)>::call)
+        .addFunction("call", &FunctionSubscribe<void(WebPortalAdType)>::call)
+        .addFunction("add", (bool (FunctionSubscribe<void(WebPortalAdType)>::*)(const std::string&, lua_State*))&FunctionSubscribe<void(WebPortalAdType)>::add)
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
+        .beginClass<FunctionSubscribe<void(WebPortalAdType,std::string,std::string)>>("FunctionSubscribe_V_WPATSS")
+        .addFunction("__call", &FunctionSubscribe<void(WebPortalAdType,std::string,std::string)>::call)
+        .addFunction("call", &FunctionSubscribe<void(WebPortalAdType,std::string,std::string)>::call)
+        .addFunction("add", (bool (FunctionSubscribe<void(WebPortalAdType,std::string,std::string)>::*)(const std::string&, lua_State*))&FunctionSubscribe<void(WebPortalAdType,std::string,std::string)>::add)
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
+        .beginClass<FunctionSubscribe<void(std::string)>>("FunctionSubscribe_V_S")
+        .addFunction("__call", &FunctionSubscribe<void(std::string)>::call)
+        .addFunction("call", &FunctionSubscribe<void(std::string)>::call)
+        .addFunction("add", (bool (FunctionSubscribe<void(std::string)>::*)(const std::string&, lua_State*))&FunctionSubscribe<void(std::string)>::add)
         .endClass();
 
 #ifdef DORIAX_PHYSICS_2D
@@ -989,20 +1223,187 @@ void LuaBinding::registerCoreClasses(lua_State *L){
         .addStaticFunction("getShaderPath", [] () { return System::instance().getShaderPath(); })
 
         //UserSettings not need here
+        .endClass();
 
-        .addStaticFunction("initializeAdMob", [] () { return System::instance().initializeAdMob(); })
-        .addStaticFunction("setMaxAdContentRating", [] (AdMobRating rating) { return System::instance().setMaxAdContentRating(rating); })
-        .addStaticFunction("loadInterstitialAd", [] (const std::string& adUnitID) { return System::instance().loadInterstitialAd(adUnitID); })
-        .addStaticFunction("isInterstitialAdLoaded", [] () { return System::instance().isInterstitialAdLoaded(); })
-        .addStaticFunction("showInterstitialAd", [] () { return System::instance().showInterstitialAd(); })
+    luabridge::getGlobalNamespace(L)
+        .beginClass<AdMob>("AdMob")
+        .addStaticProperty("errorNotAvailable", [] () -> int { return AdMob::errorNotAvailable; })
+        .addStaticProperty("errorNotLoaded", [] () -> int { return AdMob::errorNotLoaded; })
+        .addStaticFunction("initialize", &AdMob::initialize)
+        .addStaticFunction("isInitialized", &AdMob::isInitialized)
+        .addStaticFunction("setMaxAdContentRating", &AdMob::setMaxAdContentRating)
+        .addStaticFunction("getMaxAdContentRating", &AdMob::getMaxAdContentRating)
+        .addStaticFunction("setAgeRestriction", &AdMob::setAgeRestriction)
+        .addStaticFunction("getAgeRestriction", &AdMob::getAgeRestriction)
+        .addStaticFunction("setPersonalization", &AdMob::setPersonalization)
+        .addStaticFunction("getPersonalization", &AdMob::getPersonalization)
+        .addStaticFunction("setTestDeviceIds", &AdMob::setTestDeviceIds)
+        .addStaticFunction("getTestDeviceIds", &AdMob::getTestDeviceIds)
+        .addStaticFunction("requestConsent", &AdMob::requestConsent)
+        .addStaticFunction("setConsentDebugGeography", &AdMob::setConsentDebugGeography)
+        .addStaticFunction("getConsentDebugGeography", &AdMob::getConsentDebugGeography)
+        .addStaticFunction("getConsentStatus", &AdMob::getConsentStatus)
+        .addStaticFunction("canRequestAds", &AdMob::canRequestAds)
+        .addStaticFunction("isPrivacyOptionsRequired", &AdMob::isPrivacyOptionsRequired)
+        .addStaticFunction("showPrivacyOptionsForm", &AdMob::showPrivacyOptionsForm)
+        .addStaticFunction("resetConsent", &AdMob::resetConsent)
+        .addStaticFunction("loadBannerAd",
+            [] (const std::string& adUnitId) { AdMob::loadBannerAd(adUnitId); },
+            [] (const std::string& adUnitId, AdMobBannerSize size) { AdMob::loadBannerAd(adUnitId, size); },
+            [] (const std::string& adUnitId, AdMobBannerSize size, AdMobBannerPosition position) { AdMob::loadBannerAd(adUnitId, size, position); })
+        .addStaticFunction("isBannerAdLoaded", &AdMob::isBannerAdLoaded)
+        .addStaticFunction("showBannerAd", &AdMob::showBannerAd)
+        .addStaticFunction("hideBannerAd", &AdMob::hideBannerAd)
+        .addStaticFunction("isBannerAdVisible", &AdMob::isBannerAdVisible)
+        .addStaticFunction("setBannerAdPosition", &AdMob::setBannerAdPosition)
+        .addStaticFunction("getBannerAdPosition", &AdMob::getBannerAdPosition)
+        .addStaticFunction("removeBannerAd", &AdMob::removeBannerAd)
+        .addStaticFunction("getBannerAdWidth", &AdMob::getBannerAdWidth)
+        .addStaticFunction("getBannerAdHeight", &AdMob::getBannerAdHeight)
+        .addStaticFunction("loadInterstitialAd", &AdMob::loadInterstitialAd)
+        .addStaticFunction("isInterstitialAdLoaded", &AdMob::isInterstitialAdLoaded)
+        .addStaticFunction("showInterstitialAd", &AdMob::showInterstitialAd)
+        .addStaticFunction("loadRewardedAd", &AdMob::loadRewardedAd)
+        .addStaticFunction("isRewardedAdLoaded", &AdMob::isRewardedAdLoaded)
+        .addStaticFunction("showRewardedAd", &AdMob::showRewardedAd)
+        .addStaticFunction("loadRewardedInterstitialAd", &AdMob::loadRewardedInterstitialAd)
+        .addStaticFunction("isRewardedInterstitialAdLoaded", &AdMob::isRewardedInterstitialAdLoaded)
+        .addStaticFunction("showRewardedInterstitialAd", &AdMob::showRewardedInterstitialAd)
+        .addStaticFunction("loadAppOpenAd", &AdMob::loadAppOpenAd)
+        .addStaticFunction("isAppOpenAdLoaded", &AdMob::isAppOpenAdLoaded)
+        .addStaticFunction("showAppOpenAd", &AdMob::showAppOpenAd)
+        .addStaticFunction("setServerSideVerificationOptions",
+            [] (const std::string& userId) { AdMob::setServerSideVerificationOptions(userId, ""); },
+            [] (const std::string& userId, const std::string& customData) { AdMob::setServerSideVerificationOptions(userId, customData); })
+        .addStaticFunction("setAppVolume", &AdMob::setAppVolume)
+        .addStaticFunction("setAppMuted", &AdMob::setAppMuted)
+        .addStaticFunction("openAdInspector", &AdMob::openAdInspector)
 
-        .addStaticFunction("initializeCrazyGamesSDK", [] () { return System::instance().initializeCrazyGamesSDK(); })
-        .addStaticFunction("showCrazyGamesAd", [] (std::string type) { return System::instance().showCrazyGamesAd(type); })
-        .addStaticFunction("happytimeCrazyGames", [] () { return System::instance().happytimeCrazyGames(); })
-        .addStaticFunction("gameplayStartCrazyGames", [] () { return System::instance().gameplayStartCrazyGames(); })
-        .addStaticFunction("gameplayStopCrazyGames", [] () { return System::instance().gameplayStopCrazyGames(); })
-        .addStaticFunction("loadingStartCrazyGames", [] () { return System::instance().loadingStartCrazyGames(); })
-        .addStaticFunction("loadingStopCrazyGames", [] () { return System::instance().loadingStopCrazyGames(); })
+        .addStaticProperty("onInitialized", [] () { return &AdMob::onInitialized; }, [] (lua_State* L) { AdMob::onInitialized = L; })
+        .addStaticProperty("onConsentUpdated", [] () { return &AdMob::onConsentUpdated; }, [] (lua_State* L) { AdMob::onConsentUpdated = L; })
+        .addStaticProperty("onAdLoaded", [] () { return &AdMob::onAdLoaded; }, [] (lua_State* L) { AdMob::onAdLoaded = L; })
+        .addStaticProperty("onAdFailedToLoad", [] () { return &AdMob::onAdFailedToLoad; }, [] (lua_State* L) { AdMob::onAdFailedToLoad = L; })
+        .addStaticProperty("onAdShown", [] () { return &AdMob::onAdShown; }, [] (lua_State* L) { AdMob::onAdShown = L; })
+        .addStaticProperty("onAdFailedToShow", [] () { return &AdMob::onAdFailedToShow; }, [] (lua_State* L) { AdMob::onAdFailedToShow = L; })
+        .addStaticProperty("onAdDismissed", [] () { return &AdMob::onAdDismissed; }, [] (lua_State* L) { AdMob::onAdDismissed = L; })
+        .addStaticProperty("onAdClicked", [] () { return &AdMob::onAdClicked; }, [] (lua_State* L) { AdMob::onAdClicked = L; })
+        .addStaticProperty("onAdImpression", [] () { return &AdMob::onAdImpression; }, [] (lua_State* L) { AdMob::onAdImpression = L; })
+        .addStaticProperty("onUserEarnedReward", [] () { return &AdMob::onUserEarnedReward; }, [] (lua_State* L) { AdMob::onUserEarnedReward = L; })
+        .addStaticProperty("onAdPaid", [] () { return &AdMob::onAdPaid; }, [] (lua_State* L) { AdMob::onAdPaid = L; })
+        .addStaticProperty("onAdInspectorClosed", [] () { return &AdMob::onAdInspectorClosed; }, [] (lua_State* L) { AdMob::onAdInspectorClosed = L; })
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
+        .beginClass<PricingPhase>("PricingPhase")
+        .addProperty("price", &PricingPhase::price)
+        .addProperty("priceMicros", &PricingPhase::priceMicros)
+        .addProperty("currencyCode", &PricingPhase::currencyCode)
+        .addProperty("billingPeriod", &PricingPhase::billingPeriod)
+        .addProperty("billingCycleCount", &PricingPhase::billingCycleCount)
+        .addProperty("recurrenceMode", &PricingPhase::recurrenceMode)
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
+        .beginClass<ProductOffer>("ProductOffer")
+        .addProperty("offerToken", &ProductOffer::offerToken)
+        .addProperty("offerId", &ProductOffer::offerId)
+        .addProperty("basePlanId", &ProductOffer::basePlanId)
+        .addProperty("tags", &ProductOffer::tags)
+        .addProperty("pricingPhases", &ProductOffer::pricingPhases)
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
+        .beginClass<ProductDetails>("ProductDetails")
+        .addProperty("productId", &ProductDetails::productId)
+        .addProperty("type", &ProductDetails::type)
+        .addProperty("title", &ProductDetails::title)
+        .addProperty("name", &ProductDetails::name)
+        .addProperty("description", &ProductDetails::description)
+        .addProperty("price", &ProductDetails::price)
+        .addProperty("priceMicros", &ProductDetails::priceMicros)
+        .addProperty("currencyCode", &ProductDetails::currencyCode)
+        .addProperty("offers", &ProductDetails::offers)
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
+        .beginClass<PurchaseDetails>("PurchaseDetails")
+        .addProperty("orderId", &PurchaseDetails::orderId)
+        .addProperty("productId", &PurchaseDetails::productId)
+        .addProperty("productIds", &PurchaseDetails::productIds)
+        .addProperty("productType", &PurchaseDetails::productType)
+        .addProperty("purchaseToken", &PurchaseDetails::purchaseToken)
+        .addProperty("purchaseTime", &PurchaseDetails::purchaseTime)
+        .addProperty("state", &PurchaseDetails::state)
+        .addProperty("quantity", &PurchaseDetails::quantity)
+        .addProperty("acknowledged", &PurchaseDetails::acknowledged)
+        .addProperty("autoRenewing", &PurchaseDetails::autoRenewing)
+        .addProperty("suspended", &PurchaseDetails::suspended)
+        .addProperty("restored", &PurchaseDetails::restored)
+        .addProperty("packageName", &PurchaseDetails::packageName)
+        .addProperty("obfuscatedAccountId", &PurchaseDetails::obfuscatedAccountId)
+        .addProperty("obfuscatedProfileId", &PurchaseDetails::obfuscatedProfileId)
+        .addProperty("originalJson", &PurchaseDetails::originalJson)
+        .addProperty("signature", &PurchaseDetails::signature)
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
+        .beginClass<InAppPurchase>("InAppPurchase")
+        .addStaticFunction("initialize", &InAppPurchase::initialize)
+        .addStaticFunction("isReady", &InAppPurchase::isReady)
+        .addStaticFunction("queryProducts", &InAppPurchase::queryProducts)
+        .addStaticFunction("hasProduct", &InAppPurchase::hasProduct)
+        .addStaticFunction("getProduct", &InAppPurchase::getProduct)
+        .addStaticFunction("getProducts", &InAppPurchase::getProducts)
+        .addStaticFunction("purchase",
+            [] (const std::string& productId) { InAppPurchase::purchase(productId); },
+            [] (const std::string& productId, const std::string& offerToken) { InAppPurchase::purchase(productId, offerToken); })
+        .addStaticFunction("changeSubscription",
+            [] (const std::string& productId, const std::string& offerToken, const std::string& oldPurchaseToken) { InAppPurchase::changeSubscription(productId, offerToken, oldPurchaseToken); },
+            [] (const std::string& productId, const std::string& offerToken, const std::string& oldPurchaseToken, SubscriptionReplacementMode mode) { InAppPurchase::changeSubscription(productId, offerToken, oldPurchaseToken, mode); })
+        .addStaticFunction("acknowledgePurchase", &InAppPurchase::acknowledgePurchase)
+        .addStaticFunction("consumePurchase", &InAppPurchase::consumePurchase)
+        .addStaticFunction("queryPurchases", &InAppPurchase::queryPurchases)
+        .addStaticFunction("getPurchases", &InAppPurchase::getPurchases)
+        .addStaticFunction("isPurchased", &InAppPurchase::isPurchased)
+        .addStaticFunction("setObfuscatedAccountId", &InAppPurchase::setObfuscatedAccountId)
+        .addStaticFunction("setObfuscatedProfileId", &InAppPurchase::setObfuscatedProfileId)
+        .addStaticFunction("openSubscriptionManagement",
+            [] () { InAppPurchase::openSubscriptionManagement(); },
+            [] (const std::string& productId) { InAppPurchase::openSubscriptionManagement(productId); })
+        .addStaticFunction("showInAppMessages", &InAppPurchase::showInAppMessages)
+
+        .addStaticProperty("onInitialized", [] () { return &InAppPurchase::onInitialized; }, [] (lua_State* L) { InAppPurchase::onInitialized = L; })
+        .addStaticProperty("onDisconnected", [] () { return &InAppPurchase::onDisconnected; }, [] (lua_State* L) { InAppPurchase::onDisconnected = L; })
+        .addStaticProperty("onProductsQueried", [] () { return &InAppPurchase::onProductsQueried; }, [] (lua_State* L) { InAppPurchase::onProductsQueried = L; })
+        .addStaticProperty("onPurchaseUpdated", [] () { return &InAppPurchase::onPurchaseUpdated; }, [] (lua_State* L) { InAppPurchase::onPurchaseUpdated = L; })
+        .addStaticProperty("onPurchaseFailed", [] () { return &InAppPurchase::onPurchaseFailed; }, [] (lua_State* L) { InAppPurchase::onPurchaseFailed = L; })
+        .addStaticProperty("onPurchasesQueried", [] () { return &InAppPurchase::onPurchasesQueried; }, [] (lua_State* L) { InAppPurchase::onPurchasesQueried = L; })
+        .addStaticProperty("onPurchaseAcknowledged", [] () { return &InAppPurchase::onPurchaseAcknowledged; }, [] (lua_State* L) { InAppPurchase::onPurchaseAcknowledged = L; })
+        .addStaticProperty("onPurchaseConsumed", [] () { return &InAppPurchase::onPurchaseConsumed; }, [] (lua_State* L) { InAppPurchase::onPurchaseConsumed = L; })
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
+        .beginClass<WebPortal>("WebPortal")
+        .addStaticFunction("getPortal", &WebPortal::getPortal)
+        .addStaticFunction("initialize", &WebPortal::initialize)
+        .addStaticFunction("getEnvironment", &WebPortal::getEnvironment)
+        .addStaticFunction("isAvailable", &WebPortal::isAvailable)
+        .addStaticFunction("requestAd", &WebPortal::requestAd)
+        .addStaticFunction("gameplayStart", &WebPortal::gameplayStart)
+        .addStaticFunction("gameplayStop", &WebPortal::gameplayStop)
+        .addStaticFunction("loadingStart", &WebPortal::loadingStart)
+        .addStaticFunction("loadingStop", &WebPortal::loadingStop)
+        .addStaticFunction("happytime", &WebPortal::happytime)
+        .addStaticFunction("loadData", &WebPortal::loadData)
+        .addStaticFunction("saveData", &WebPortal::saveData)
+
+        .addStaticProperty("onInitialized", [] () { return &WebPortal::onInitialized; }, [] (lua_State* L) { WebPortal::onInitialized = L; })
+        .addStaticProperty("onAdStarted", [] () { return &WebPortal::onAdStarted; }, [] (lua_State* L) { WebPortal::onAdStarted = L; })
+        .addStaticProperty("onAdFinished", [] () { return &WebPortal::onAdFinished; }, [] (lua_State* L) { WebPortal::onAdFinished = L; })
+        .addStaticProperty("onAdError", [] () { return &WebPortal::onAdError; }, [] (lua_State* L) { WebPortal::onAdError = L; })
+        .addStaticProperty("onDataLoaded", [] () { return &WebPortal::onDataLoaded; }, [] (lua_State* L) { WebPortal::onDataLoaded = L; })
+        .addStaticProperty("onDataLoadFailed", [] () { return &WebPortal::onDataLoadFailed; }, [] (lua_State* L) { WebPortal::onDataLoadFailed = L; })
+        .addStaticProperty("onDataSaveFailed", [] () { return &WebPortal::onDataSaveFailed; }, [] (lua_State* L) { WebPortal::onDataSaveFailed = L; })
         .endClass();
 
 #endif //DISABLE_LUA_BINDINGS

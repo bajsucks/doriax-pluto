@@ -177,6 +177,10 @@ std::vector<Entity> editor::ImportEntityBundleCmd::getImportedEntities() const{
     return importedEntities;
 }
 
+Entity editor::ImportEntityBundleCmd::getRootEntity() const{
+    return rootEntity;
+}
+
 void editor::ImportEntityBundleCmd::setPlacement(const Vector3& position, const Quaternion& rotation, const Vector3& scale){
     hasPlacement = true;
     placementPosition = position;

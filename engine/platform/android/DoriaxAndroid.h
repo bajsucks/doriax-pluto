@@ -49,11 +49,9 @@ public:
 
     virtual void removeKey(const char* key) override;
 
-    virtual void initializeAdMob(bool tagForChildDirectedTreatment, bool tagForUnderAgeOfConsent) override;
-    virtual void setMaxAdContentRating(doriax::AdMobRating rating) override;
-    virtual void loadInterstitialAd(const std::string& adUnitID) override;
-    virtual bool isInterstitialAdLoaded() override;
-    virtual void showInterstitialAd() override;
+    // AndroidServices.cpp
+    virtual doriax::AdMobBackend* getAdMobBackend() override;
+    virtual doriax::InAppPurchaseBackend* getInAppPurchaseBackend() override;
 };
 
 #endif /* DoriaxAndroid_H_ */

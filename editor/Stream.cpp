@@ -892,6 +892,27 @@ ProgressbarType editor::Stream::stringToProgressbarType(const std::string& str) 
     return ProgressbarType::HORIZONTAL;
 }
 
+std::string editor::Stream::webPortalTypeToString(WebPortalType type) {
+    switch (type) {
+        case WebPortalType::CRAZYGAMES: return "crazygames";
+        case WebPortalType::POKI: return "poki";
+        case WebPortalType::GAMEDISTRIBUTION: return "gamedistribution";
+        case WebPortalType::YANDEX: return "yandex";
+        case WebPortalType::YOUTUBE: return "youtube";
+        case WebPortalType::NONE:
+        default: return "none";
+    }
+}
+
+WebPortalType editor::Stream::stringToWebPortalType(const std::string& str) {
+    if (str == "crazygames") return WebPortalType::CRAZYGAMES;
+    if (str == "poki") return WebPortalType::POKI;
+    if (str == "gamedistribution") return WebPortalType::GAMEDISTRIBUTION;
+    if (str == "yandex") return WebPortalType::YANDEX;
+    if (str == "youtube") return WebPortalType::YOUTUBE;
+    return WebPortalType::NONE;
+}
+
 std::string editor::Stream::scalingModeToString(Scaling mode) {
     switch (mode) {
         case Scaling::FITWIDTH: return "fitwidth";
@@ -1968,6 +1989,8 @@ YAML::Node editor::Stream::encodeProject(Project* project) {
         if (!web.headInclude.empty()) webNode["headInclude"] = web.headInclude;
         if (web.resizeCanvasToWindow != defaultWeb.resizeCanvasToWindow) webNode["resizeCanvasToWindow"] = web.resizeCanvasToWindow;
         if (web.hideEmscriptenUI != defaultWeb.hideEmscriptenUI) webNode["hideEmscriptenUI"] = web.hideEmscriptenUI;
+        if (web.portal != defaultWeb.portal) webNode["portal"] = webPortalTypeToString(web.portal);
+        if (!web.portalGameId.empty()) webNode["portalGameId"] = web.portalGameId;
         if (webNode.size() != 0) root["web"] = webNode;
     }
 
@@ -2016,6 +2039,9 @@ YAML::Node editor::Stream::encodeProject(Project* project) {
         if (ios.hideStatusBar != defaultIOS.hideStatusBar) iosNode["hideStatusBar"] = ios.hideStatusBar;
         if (ios.hideHomeIndicator != defaultIOS.hideHomeIndicator) iosNode["hideHomeIndicator"] = ios.hideHomeIndicator;
         if (ios.supportsHighRefreshRate != defaultIOS.supportsHighRefreshRate) iosNode["supportsHighRefreshRate"] = ios.supportsHighRefreshRate;
+        if (ios.admobEnabled != defaultIOS.admobEnabled) iosNode["admobEnabled"] = ios.admobEnabled;
+        if (!ios.admobAppId.empty()) iosNode["admobAppId"] = ios.admobAppId;
+        if (!ios.trackingUsageDescription.empty()) iosNode["trackingUsageDescription"] = ios.trackingUsageDescription;
         if (iosNode.size() != 0) root["ios"] = iosNode;
     }
 
@@ -2058,6 +2084,9 @@ YAML::Node editor::Stream::encodeProject(Project* project) {
         if (android.allowBackup != defaults.allowBackup) androidNode["allowBackup"] = android.allowBackup;
         if (android.fullscreen != defaults.fullscreen) androidNode["fullscreen"] = android.fullscreen;
         if (android.keepScreenOn != defaults.keepScreenOn) androidNode["keepScreenOn"] = android.keepScreenOn;
+        if (android.admobEnabled != defaults.admobEnabled) androidNode["admobEnabled"] = android.admobEnabled;
+        if (!android.admobAppId.empty()) androidNode["admobAppId"] = android.admobAppId;
+        if (android.billingEnabled != defaults.billingEnabled) androidNode["billingEnabled"] = android.billingEnabled;
         if (androidNode.size()) root["android"] = androidNode;
     }
 
@@ -2308,6 +2337,8 @@ void editor::Stream::decodeProject(Project* project, const YAML::Node& node, con
         if (webNode["headInclude"]) web.headInclude = webNode["headInclude"].as<std::string>();
         if (webNode["resizeCanvasToWindow"].IsDefined()) web.resizeCanvasToWindow = webNode["resizeCanvasToWindow"].as<bool>();
         if (webNode["hideEmscriptenUI"].IsDefined()) web.hideEmscriptenUI = webNode["hideEmscriptenUI"].as<bool>();
+        if (webNode["portal"]) web.portal = stringToWebPortalType(webNode["portal"].as<std::string>());
+        if (webNode["portalGameId"]) web.portalGameId = webNode["portalGameId"].as<std::string>();
     }
 
     if (node["linux"] && node["linux"].IsMap()) {
@@ -2349,6 +2380,9 @@ void editor::Stream::decodeProject(Project* project, const YAML::Node& node, con
         if (iosNode["hideStatusBar"].IsDefined()) ios.hideStatusBar = iosNode["hideStatusBar"].as<bool>();
         if (iosNode["hideHomeIndicator"].IsDefined()) ios.hideHomeIndicator = iosNode["hideHomeIndicator"].as<bool>();
         if (iosNode["supportsHighRefreshRate"].IsDefined()) ios.supportsHighRefreshRate = iosNode["supportsHighRefreshRate"].as<bool>();
+        if (iosNode["admobEnabled"].IsDefined()) ios.admobEnabled = iosNode["admobEnabled"].as<bool>();
+        if (iosNode["admobAppId"]) ios.admobAppId = iosNode["admobAppId"].as<std::string>();
+        if (iosNode["trackingUsageDescription"]) ios.trackingUsageDescription = iosNode["trackingUsageDescription"].as<std::string>();
     }
 
     if (node["android"] && node["android"].IsMap()) {
@@ -2384,6 +2418,9 @@ void editor::Stream::decodeProject(Project* project, const YAML::Node& node, con
         if (androidNode["allowBackup"].IsDefined()) android.allowBackup = androidNode["allowBackup"].as<bool>();
         if (androidNode["fullscreen"].IsDefined()) android.fullscreen = androidNode["fullscreen"].as<bool>();
         if (androidNode["keepScreenOn"].IsDefined()) android.keepScreenOn = androidNode["keepScreenOn"].as<bool>();
+        if (androidNode["admobEnabled"].IsDefined()) android.admobEnabled = androidNode["admobEnabled"].as<bool>();
+        if (androidNode["admobAppId"]) android.admobAppId = androidNode["admobAppId"].as<std::string>();
+        if (androidNode["billingEnabled"].IsDefined()) android.billingEnabled = androidNode["billingEnabled"].as<bool>();
     }
 
     if (node["startSceneId"]) {

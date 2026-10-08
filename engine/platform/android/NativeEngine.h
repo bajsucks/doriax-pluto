@@ -20,13 +20,9 @@ struct JniData{
     jclass gameActivityClsRef;
 
     jmethodID getUserSettingsRef;
-    jmethodID getAdMobWrapperRef;
 
     jobject userSettingsObjRef;
     jclass userSettingsClsRef;
-
-    jobject adMobWrapperObjRef;
-    jclass adMobWrapperClsRef;
 
     jmethodID getBoolForKeyRef;
     jmethodID getIntegerForKeyRef;
@@ -43,12 +39,6 @@ struct JniData{
     jmethodID setStringForKeyRef;
 
     jmethodID removeKeyRef;
-
-    jmethodID initializeAdMob;
-    jmethodID setMaxAdContentRating;
-    jmethodID loadInterstitialAd;
-    jmethodID isInterstitialAdLoaded;
-    jmethodID showInterstitialAd;
 };
 
 class NativeEngine {

@@ -1036,6 +1036,7 @@ void editor::Generator::writeSourceFiles(const fs::path& projectPath, const fs::
     cmakeContent += "    " + engineApiPathStr + "/core/registry\n";
     cmakeContent += "    " + engineApiPathStr + "/core/render\n";
     cmakeContent += "    " + engineApiPathStr + "/core/script\n";
+    cmakeContent += "    " + engineApiPathStr + "/core/service\n";
     cmakeContent += "    " + engineApiPathStr + "/core/shader\n";
     cmakeContent += "    " + engineApiPathStr + "/core/subsystem\n";
     cmakeContent += "    " + engineApiPathStr + "/core/texture\n";

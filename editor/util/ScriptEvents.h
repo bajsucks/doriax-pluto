@@ -19,7 +19,10 @@ namespace doriax::editor {
         Action,
         Sound,
         Physics2D,
-        Physics3D
+        Physics3D,
+        AdMob,
+        InAppPurchase,
+        WebPortal
     };
 
     struct ScriptEventParam {
@@ -42,9 +45,10 @@ namespace doriax::editor {
         const char* label;
         const char* icon;
         const char* include;
-        const char* component; // empty for engine and physics events
+        const char* component; // empty for engine, physics and class events
         const char* registerMacro;
         const char* luaObject;
+        const char* eventClass = ""; // class holding static events, like AdMob::onAdLoaded
     };
 
     struct ScriptEventScan {

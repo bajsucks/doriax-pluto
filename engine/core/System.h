@@ -19,12 +19,9 @@
 namespace doriax {
     class Engine;
 
-    enum class AdMobRating{
-        General,
-        ParentalGuidance,
-        Teen,
-        MatureAudience
-    };
+    class AdMobBackend;
+    class InAppPurchaseBackend;
+    class WebPortalBackend;
 
     enum class CursorType{
         ARROW, // default
@@ -144,21 +141,10 @@ namespace doriax {
 
         virtual void removeKey(const char *key);
 
-        // Google AdMob SDK
-        virtual void initializeAdMob(bool tagForChildDirectedTreatment = false, bool tagForUnderAgeOfConsent = false);
-        virtual void setMaxAdContentRating(AdMobRating rating);
-        virtual void loadInterstitialAd(const std::string& adUnitID);
-        virtual bool isInterstitialAdLoaded();
-        virtual void showInterstitialAd();
-
-        // CrazyGames SDK
-        virtual void initializeCrazyGamesSDK();
-        virtual void showCrazyGamesAd(const std::string& type);
-        virtual void happytimeCrazyGames();
-        virtual void gameplayStartCrazyGames();
-        virtual void gameplayStopCrazyGames();
-        virtual void loadingStartCrazyGames();
-        virtual void loadingStopCrazyGames();
+        // Services in core/service, null where the platform or the build has none
+        virtual AdMobBackend* getAdMobBackend();
+        virtual InAppPurchaseBackend* getInAppPurchaseBackend();
+        virtual WebPortalBackend* getWebPortalBackend();
     };
 
 }

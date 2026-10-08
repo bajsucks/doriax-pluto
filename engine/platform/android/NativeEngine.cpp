@@ -18,6 +18,7 @@
 #include <assert.h>
 #include <math.h>
 
+#include "AndroidServices.h"
 #include "DoriaxAndroid.h"
 #include "Engine.h"
 #include "Input.h"
@@ -346,6 +347,7 @@ NativeEngine::~NativeEngine() {
     killContext();
 
     if (mJniEnv) {
+    releaseServicesJNI(mJniEnv);
     mApp->activity->vm->DetachCurrentThread();
     mJniEnv = NULL;
     }
@@ -513,13 +515,9 @@ void NativeEngine::setupJNI(){
     mJniData.gameActivityClsRef = env->GetObjectClass(mJniData.gameActivityObjRef);
 
     mJniData.getUserSettingsRef = env->GetMethodID(mJniData.gameActivityClsRef, "getUserSettings", "()Lorg/doriaxengine/doriax/UserSettings;");
-    mJniData.getAdMobWrapperRef = env->GetMethodID(mJniData.gameActivityClsRef, "getAdMobWrapper", "()Lorg/doriaxengine/doriax/AdMobWrapper;");
 
     mJniData.userSettingsObjRef = env->CallObjectMethod(mJniData.gameActivityObjRef, mJniData.getUserSettingsRef);
     mJniData.userSettingsClsRef = env->GetObjectClass(mJniData.userSettingsObjRef);
-
-    mJniData.adMobWrapperObjRef = env->CallObjectMethod(mJniData.gameActivityObjRef, mJniData.getAdMobWrapperRef);
-    mJniData.adMobWrapperClsRef = env->GetObjectClass(mJniData.adMobWrapperObjRef);
 
     mJniData.getBoolForKeyRef = env->GetMethodID(mJniData.userSettingsClsRef, "getBoolForKey", "(Ljava/lang/String;Z)Z");
     mJniData.getIntegerForKeyRef = env->GetMethodID(mJniData.userSettingsClsRef, "getIntegerForKey", "(Ljava/lang/String;I)I");
@@ -537,11 +535,7 @@ void NativeEngine::setupJNI(){
 
     mJniData.removeKeyRef = env->GetMethodID(mJniData.userSettingsClsRef, "removeKey", "(Ljava/lang/String;)V");
 
-    mJniData.initializeAdMob = env->GetMethodID(mJniData.adMobWrapperClsRef, "initialize","(ZZ)V");
-    mJniData.setMaxAdContentRating = env->GetMethodID(mJniData.adMobWrapperClsRef, "setMaxAdContentRating","(I)V");
-    mJniData.loadInterstitialAd = env->GetMethodID(mJniData.adMobWrapperClsRef, "loadInterstitialAd","(Ljava/lang/String;)V");
-    mJniData.isInterstitialAdLoaded = env->GetMethodID(mJniData.adMobWrapperClsRef, "isInterstitialAdLoaded","()Z");
-    mJniData.showInterstitialAd = env->GetMethodID(mJniData.adMobWrapperClsRef, "showInterstitialAd","()V");
+    setupServicesJNI(env, mJniData.gameActivityObjRef, mJniData.gameActivityClsRef);
 }
 
 bool NativeEngine::initDisplay() {
