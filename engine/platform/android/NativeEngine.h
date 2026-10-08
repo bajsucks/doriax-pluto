@@ -24,10 +24,6 @@ struct JniData{
     jobject userSettingsObjRef;
     jclass userSettingsClsRef;
 
-    // Global references, null when the export leaves the service out
-    jobject adMobWrapperObjRef;
-    jobject billingWrapperObjRef;
-
     jmethodID getBoolForKeyRef;
     jmethodID getIntegerForKeyRef;
     jmethodID getLongForKeyRef;
@@ -43,35 +39,6 @@ struct JniData{
     jmethodID setStringForKeyRef;
 
     jmethodID removeKeyRef;
-
-    jmethodID admobInitialize;
-    jmethodID admobSetRequestConfiguration;
-    jmethodID admobRequestConsent;
-    jmethodID admobGetConsentStatus;
-    jmethodID admobCanRequestAds;
-    jmethodID admobIsPrivacyOptionsRequired;
-    jmethodID admobShowPrivacyOptionsForm;
-    jmethodID admobResetConsent;
-    jmethodID admobLoadAd;
-    jmethodID admobShowAd;
-    jmethodID admobLoadBanner;
-    jmethodID admobSetBannerVisible;
-    jmethodID admobSetBannerPosition;
-    jmethodID admobRemoveBanner;
-    jmethodID admobSetServerSideVerificationOptions;
-    jmethodID admobSetAppVolume;
-    jmethodID admobSetAppMuted;
-    jmethodID admobOpenAdInspector;
-
-    jmethodID billingInitialize;
-    jmethodID billingIsReady;
-    jmethodID billingQueryProducts;
-    jmethodID billingPurchase;
-    jmethodID billingAcknowledgePurchase;
-    jmethodID billingConsumePurchase;
-    jmethodID billingQueryPurchases;
-    jmethodID billingOpenSubscriptionManagement;
-    jmethodID billingShowInAppMessages;
 };
 
 class NativeEngine {

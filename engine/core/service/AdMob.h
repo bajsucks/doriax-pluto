@@ -84,6 +84,33 @@ namespace doriax {
         PRECISE
     };
 
+    // What a platform with Google Mobile Ads implements, see System::getAdMobBackend.
+    // Called from the engine thread, it answers through the AdMob::system* callbacks.
+    class DORIAX_API AdMobBackend {
+    public:
+        virtual ~AdMobBackend() = default;
+
+        virtual void initialize() = 0;
+        virtual void setRequestConfiguration(AdMobRating rating, AdMobAgeRestriction ageRestriction, AdMobPersonalization personalization, const std::vector<std::string>& testDeviceIds) = 0;
+        virtual void requestConsent(bool underAgeOfConsent, AdMobDebugGeography debugGeography, const std::vector<std::string>& testDeviceIds) = 0;
+        virtual AdMobConsentStatus getConsentStatus() = 0;
+        virtual bool canRequestAds() = 0;
+        virtual bool isPrivacyOptionsRequired() = 0;
+        virtual void showPrivacyOptionsForm() = 0;
+        virtual void resetConsent() = 0;
+        // generation goes back with the load result
+        virtual void loadAd(AdMobFormat format, const std::string& adUnitId, int generation) = 0;
+        virtual void showAd(AdMobFormat format) = 0;
+        virtual void loadBanner(const std::string& adUnitId, AdMobBannerSize size, AdMobBannerPosition position, bool visible, int generation) = 0;
+        virtual void setBannerVisible(bool visible) = 0;
+        virtual void setBannerPosition(AdMobBannerPosition position) = 0;
+        virtual void removeBanner() = 0;
+        virtual void setServerSideVerificationOptions(const std::string& userId, const std::string& customData) = 0;
+        virtual void setAppVolume(float volume) = 0;
+        virtual void setAppMuted(bool muted) = 0;
+        virtual void openAdInspector() = 0;
+    };
+
     // Google Mobile Ads on Android and iOS. Results arrive as events at the start of a frame,
     // and loading a format again replaces its ad.
     class DORIAX_API AdMob {

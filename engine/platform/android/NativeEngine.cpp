@@ -347,7 +347,7 @@ NativeEngine::~NativeEngine() {
     killContext();
 
     if (mJniEnv) {
-    releaseServicesJNI(mJniEnv, mJniData);
+    releaseServicesJNI(mJniEnv);
     mApp->activity->vm->DetachCurrentThread();
     mJniEnv = NULL;
     }
@@ -535,7 +535,7 @@ void NativeEngine::setupJNI(){
 
     mJniData.removeKeyRef = env->GetMethodID(mJniData.userSettingsClsRef, "removeKey", "(Ljava/lang/String;)V");
 
-    setupServicesJNI(env, mJniData);
+    setupServicesJNI(env, mJniData.gameActivityObjRef, mJniData.gameActivityClsRef);
 }
 
 bool NativeEngine::initDisplay() {

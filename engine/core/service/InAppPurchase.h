@@ -122,6 +122,23 @@ namespace doriax {
         std::string obfuscatedProfileId;
     };
 
+    // What a platform with an app store implements, see System::getInAppPurchaseBackend.
+    // Called from the engine thread, it answers through the InAppPurchase::system* callbacks.
+    class DORIAX_API InAppPurchaseBackend {
+    public:
+        virtual ~InAppPurchaseBackend() = default;
+
+        virtual void initialize() = 0;
+        virtual bool isReady() = 0;
+        virtual void queryProducts(const std::vector<std::string>& productIds, ProductType type) = 0;
+        virtual void purchase(const PurchaseParams& params) = 0;
+        virtual void acknowledgePurchase(const std::string& purchaseToken) = 0;
+        virtual void consumePurchase(const std::string& purchaseToken) = 0;
+        virtual void queryPurchases(ProductType type) = 0;
+        virtual void openSubscriptionManagement(const std::string& productId) = 0;
+        virtual void showInAppMessages() = 0;
+    };
+
     // Google Play Billing on Android. Results arrive as events at the start of a frame.
     // Acknowledge or consume a purchase within three days, or Google Play refunds it.
     class DORIAX_API InAppPurchase {

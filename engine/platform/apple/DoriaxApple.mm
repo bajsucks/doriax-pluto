@@ -87,6 +87,87 @@ void DoriaxAdMobAdInspectorClosed(int errorCode, const char* message){
     doriax::AdMob::systemAdInspectorClosed(errorCode, message);
 }
 }
+
+namespace {
+    // Google Mobile Ads through AdMobAdapter
+    class AppleAdMob: public doriax::AdMobBackend{
+    public:
+        virtual void initialize() override{
+            [admob initializeAdMob];
+        }
+
+        virtual void setRequestConfiguration(doriax::AdMobRating rating, doriax::AdMobAgeRestriction ageRestriction, doriax::AdMobPersonalization personalization, const std::vector<std::string>& testDeviceIds) override{
+            [admob setRequestConfigurationWithRating:static_cast<int>(rating) ageRestriction:static_cast<int>(ageRestriction)
+                personalization:static_cast<int>(personalization) testDeviceIds:toNSArray(testDeviceIds)];
+        }
+
+        virtual void requestConsent(bool underAgeOfConsent, doriax::AdMobDebugGeography debugGeography, const std::vector<std::string>& testDeviceIds) override{
+            [admob requestConsentUnderAge:underAgeOfConsent debugGeography:static_cast<int>(debugGeography) testDeviceIds:toNSArray(testDeviceIds)];
+        }
+
+        virtual doriax::AdMobConsentStatus getConsentStatus() override{
+            return static_cast<doriax::AdMobConsentStatus>([admob consentStatus]);
+        }
+
+        virtual bool canRequestAds() override{
+            return [admob canRequestAds];
+        }
+
+        virtual bool isPrivacyOptionsRequired() override{
+            return [admob isPrivacyOptionsRequired];
+        }
+
+        virtual void showPrivacyOptionsForm() override{
+            [admob showPrivacyOptionsForm];
+        }
+
+        virtual void resetConsent() override{
+            [admob resetConsent];
+        }
+
+        virtual void loadAd(doriax::AdMobFormat format, const std::string& adUnitId, int generation) override{
+            [admob loadAd:static_cast<int>(format) adUnitId:toNSString(adUnitId) generation:generation];
+        }
+
+        virtual void showAd(doriax::AdMobFormat format) override{
+            [admob showAd:static_cast<int>(format)];
+        }
+
+        virtual void loadBanner(const std::string& adUnitId, doriax::AdMobBannerSize size, doriax::AdMobBannerPosition position, bool visible, int generation) override{
+            [admob loadBanner:toNSString(adUnitId) size:static_cast<int>(size) position:static_cast<int>(position) visible:visible generation:generation];
+        }
+
+        virtual void setBannerVisible(bool visible) override{
+            [admob setBannerVisible:visible];
+        }
+
+        virtual void setBannerPosition(doriax::AdMobBannerPosition position) override{
+            [admob setBannerPosition:static_cast<int>(position)];
+        }
+
+        virtual void removeBanner() override{
+            [admob removeBanner];
+        }
+
+        virtual void setServerSideVerificationOptions(const std::string& userId, const std::string& customData) override{
+            [admob setServerSideVerificationUserId:toNSString(userId) customData:toNSString(customData)];
+        }
+
+        virtual void setAppVolume(float volume) override{
+            [admob setAppVolume:volume];
+        }
+
+        virtual void setAppMuted(bool muted) override{
+            [admob setAppMuted:muted];
+        }
+
+        virtual void openAdInspector() override{
+            [admob openAdInspector];
+        }
+    };
+
+    AppleAdMob appleAdMob;
+}
 #endif
 
 #if defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
@@ -403,141 +484,10 @@ void DoriaxApple::removeKey(const char *key){
     [[NSUserDefaults standardUserDefaults] removeObjectForKey:[NSString stringWithUTF8String:key]];
 }
 
-bool DoriaxApple::admobInitialize(){
+doriax::AdMobBackend* DoriaxApple::getAdMobBackend(){
 #ifdef DORIAX_IOS_ADMOB
-    [admob initializeAdMob];
-    return true;
+    return &appleAdMob;
 #else
-    return false;
-#endif
-}
-
-bool DoriaxApple::admobSetRequestConfiguration(doriax::AdMobRating rating, doriax::AdMobAgeRestriction ageRestriction, doriax::AdMobPersonalization personalization, const std::vector<std::string>& testDeviceIds){
-#ifdef DORIAX_IOS_ADMOB
-    [admob setRequestConfigurationWithRating:static_cast<int>(rating) ageRestriction:static_cast<int>(ageRestriction)
-        personalization:static_cast<int>(personalization) testDeviceIds:toNSArray(testDeviceIds)];
-    return true;
-#else
-    return false;
-#endif
-}
-
-bool DoriaxApple::admobRequestConsent(bool underAgeOfConsent, doriax::AdMobDebugGeography debugGeography, const std::vector<std::string>& testDeviceIds){
-#ifdef DORIAX_IOS_ADMOB
-    [admob requestConsentUnderAge:underAgeOfConsent debugGeography:static_cast<int>(debugGeography) testDeviceIds:toNSArray(testDeviceIds)];
-    return true;
-#else
-    return false;
-#endif
-}
-
-doriax::AdMobConsentStatus DoriaxApple::admobGetConsentStatus(){
-#ifdef DORIAX_IOS_ADMOB
-    return static_cast<doriax::AdMobConsentStatus>([admob consentStatus]);
-#else
-    return doriax::AdMobConsentStatus::UNKNOWN;
-#endif
-}
-
-bool DoriaxApple::admobCanRequestAds(){
-#ifdef DORIAX_IOS_ADMOB
-    return [admob canRequestAds];
-#else
-    return false;
-#endif
-}
-
-bool DoriaxApple::admobIsPrivacyOptionsRequired(){
-#ifdef DORIAX_IOS_ADMOB
-    return [admob isPrivacyOptionsRequired];
-#else
-    return false;
-#endif
-}
-
-bool DoriaxApple::admobShowPrivacyOptionsForm(){
-#ifdef DORIAX_IOS_ADMOB
-    [admob showPrivacyOptionsForm];
-    return true;
-#else
-    return false;
-#endif
-}
-
-void DoriaxApple::admobResetConsent(){
-#ifdef DORIAX_IOS_ADMOB
-    [admob resetConsent];
-#endif
-}
-
-bool DoriaxApple::admobLoadAd(doriax::AdMobFormat format, const std::string& adUnitId, int generation){
-#ifdef DORIAX_IOS_ADMOB
-    [admob loadAd:static_cast<int>(format) adUnitId:toNSString(adUnitId) generation:generation];
-    return true;
-#else
-    return false;
-#endif
-}
-
-bool DoriaxApple::admobShowAd(doriax::AdMobFormat format){
-#ifdef DORIAX_IOS_ADMOB
-    [admob showAd:static_cast<int>(format)];
-    return true;
-#else
-    return false;
-#endif
-}
-
-bool DoriaxApple::admobLoadBanner(const std::string& adUnitId, doriax::AdMobBannerSize size, doriax::AdMobBannerPosition position, bool visible, int generation){
-#ifdef DORIAX_IOS_ADMOB
-    [admob loadBanner:toNSString(adUnitId) size:static_cast<int>(size) position:static_cast<int>(position) visible:visible generation:generation];
-    return true;
-#else
-    return false;
-#endif
-}
-
-void DoriaxApple::admobSetBannerVisible(bool visible){
-#ifdef DORIAX_IOS_ADMOB
-    [admob setBannerVisible:visible];
-#endif
-}
-
-void DoriaxApple::admobSetBannerPosition(doriax::AdMobBannerPosition position){
-#ifdef DORIAX_IOS_ADMOB
-    [admob setBannerPosition:static_cast<int>(position)];
-#endif
-}
-
-void DoriaxApple::admobRemoveBanner(){
-#ifdef DORIAX_IOS_ADMOB
-    [admob removeBanner];
-#endif
-}
-
-void DoriaxApple::admobSetServerSideVerificationOptions(const std::string& userId, const std::string& customData){
-#ifdef DORIAX_IOS_ADMOB
-    [admob setServerSideVerificationUserId:toNSString(userId) customData:toNSString(customData)];
-#endif
-}
-
-void DoriaxApple::admobSetAppVolume(float volume){
-#ifdef DORIAX_IOS_ADMOB
-    [admob setAppVolume:volume];
-#endif
-}
-
-void DoriaxApple::admobSetAppMuted(bool muted){
-#ifdef DORIAX_IOS_ADMOB
-    [admob setAppMuted:muted];
-#endif
-}
-
-bool DoriaxApple::admobOpenAdInspector(){
-#ifdef DORIAX_IOS_ADMOB
-    [admob openAdInspector];
-    return true;
-#else
-    return false;
+    return nullptr;
 #endif
 }

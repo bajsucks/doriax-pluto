@@ -19,6 +19,10 @@ namespace {
         return static_cast<int>(format);
     }
 
+    AdMobBackend* getBackend(){
+        return System::instance().getAdMobBackend();
+    }
+
     // Wall clock, like Google's samples: ads keep aging while the device sleeps
     double wallTime(){
         return std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count();
@@ -139,14 +143,18 @@ void AdMob::reset(){
 }
 
 void AdMob::applyRequestConfiguration(){
-    System::instance().admobSetRequestConfiguration(maxAdContentRating, ageRestriction, personalization, testDeviceIds);
+    if (AdMobBackend* backend = getBackend()){
+        backend->setRequestConfiguration(maxAdContentRating, ageRestriction, personalization, testDeviceIds);
+    }
 }
 
 void AdMob::initialize(){
     // settings made before initialize reach the first requests
     applyRequestConfiguration();
 
-    if (!System::instance().admobInitialize()){
+    if (AdMobBackend* backend = getBackend()){
+        backend->initialize();
+    }else{
         warnNotAvailable();
     }
 }
@@ -194,7 +202,9 @@ std::vector<std::string> AdMob::getTestDeviceIds(){
 void AdMob::requestConsent(){
     const bool underAgeOfConsent = (ageRestriction == AdMobAgeRestriction::CHILD);
 
-    if (!System::instance().admobRequestConsent(underAgeOfConsent, debugGeography, testDeviceIds)){
+    if (AdMobBackend* backend = getBackend()){
+        backend->requestConsent(underAgeOfConsent, debugGeography, testDeviceIds);
+    }else{
         warnNotAvailable();
         postEvent([](){ onConsentUpdated.call(errorNotAvailable, notAvailableMessage); });
     }
@@ -209,33 +219,42 @@ AdMobDebugGeography AdMob::getConsentDebugGeography(){
 }
 
 AdMobConsentStatus AdMob::getConsentStatus(){
-    return System::instance().admobGetConsentStatus();
+    AdMobBackend* backend = getBackend();
+    return backend ? backend->getConsentStatus() : AdMobConsentStatus::UNKNOWN;
 }
 
 bool AdMob::canRequestAds(){
-    return System::instance().admobCanRequestAds();
+    AdMobBackend* backend = getBackend();
+    return backend && backend->canRequestAds();
 }
 
 bool AdMob::isPrivacyOptionsRequired(){
-    return System::instance().admobIsPrivacyOptionsRequired();
+    AdMobBackend* backend = getBackend();
+    return backend && backend->isPrivacyOptionsRequired();
 }
 
 void AdMob::showPrivacyOptionsForm(){
-    if (!System::instance().admobShowPrivacyOptionsForm()){
+    if (AdMobBackend* backend = getBackend()){
+        backend->showPrivacyOptionsForm();
+    }else{
         warnNotAvailable();
         postEvent([](){ onConsentUpdated.call(errorNotAvailable, notAvailableMessage); });
     }
 }
 
 void AdMob::resetConsent(){
-    System::instance().admobResetConsent();
+    if (AdMobBackend* backend = getBackend()){
+        backend->resetConsent();
+    }
 }
 
 void AdMob::loadAd(AdMobFormat format, const std::string& adUnitId){
     const int i = formatIndex(format);
     loaded[i] = false;
 
-    if (!System::instance().admobLoadAd(format, adUnitId, ++loadGenerations[i])){
+    if (AdMobBackend* backend = getBackend()){
+        backend->loadAd(format, adUnitId, ++loadGenerations[i]);
+    }else{
         warnNotAvailable();
         postEvent([format](){ onAdFailedToLoad.call(format, errorNotAvailable, notAvailableMessage); });
     }
@@ -262,7 +281,9 @@ void AdMob::showAd(AdMobFormat format){
     // a full screen ad is shown only once
     loaded[formatIndex(format)] = false;
 
-    if (!System::instance().admobShowAd(format)){
+    if (AdMobBackend* backend = getBackend()){
+        backend->showAd(format);
+    }else{
         warnNotAvailable();
         postEvent([format](){ onAdFailedToShow.call(format, errorNotAvailable, notAvailableMessage); });
     }
@@ -276,7 +297,9 @@ void AdMob::loadBannerAd(const std::string& adUnitId, AdMobBannerSize size, AdMo
     bannerWidth = 0;
     bannerHeight = 0;
 
-    if (!System::instance().admobLoadBanner(adUnitId, size, position, bannerVisible, ++loadGenerations[i])){
+    if (AdMobBackend* backend = getBackend()){
+        backend->loadBanner(adUnitId, size, position, bannerVisible, ++loadGenerations[i]);
+    }else{
         warnNotAvailable();
         postEvent([](){ onAdFailedToLoad.call(AdMobFormat::BANNER, errorNotAvailable, notAvailableMessage); });
     }
@@ -288,12 +311,16 @@ bool AdMob::isBannerAdLoaded(){
 
 void AdMob::showBannerAd(){
     bannerVisible = true;
-    System::instance().admobSetBannerVisible(true);
+    if (AdMobBackend* backend = getBackend()){
+        backend->setBannerVisible(true);
+    }
 }
 
 void AdMob::hideBannerAd(){
     bannerVisible = false;
-    System::instance().admobSetBannerVisible(false);
+    if (AdMobBackend* backend = getBackend()){
+        backend->setBannerVisible(false);
+    }
 }
 
 bool AdMob::isBannerAdVisible(){
@@ -302,7 +329,9 @@ bool AdMob::isBannerAdVisible(){
 
 void AdMob::setBannerAdPosition(AdMobBannerPosition position){
     bannerPosition = position;
-    System::instance().admobSetBannerPosition(position);
+    if (AdMobBackend* backend = getBackend()){
+        backend->setBannerPosition(position);
+    }
 }
 
 AdMobBannerPosition AdMob::getBannerAdPosition(){
@@ -318,7 +347,9 @@ void AdMob::removeBannerAd(){
     bannerWidth = 0;
     bannerHeight = 0;
 
-    System::instance().admobRemoveBanner();
+    if (AdMobBackend* backend = getBackend()){
+        backend->removeBanner();
+    }
 }
 
 int AdMob::getBannerAdWidth(){
@@ -378,19 +409,27 @@ void AdMob::showAppOpenAd(){
 }
 
 void AdMob::setServerSideVerificationOptions(const std::string& userId, const std::string& customData){
-    System::instance().admobSetServerSideVerificationOptions(userId, customData);
+    if (AdMobBackend* backend = getBackend()){
+        backend->setServerSideVerificationOptions(userId, customData);
+    }
 }
 
 void AdMob::setAppVolume(float volume){
-    System::instance().admobSetAppVolume(volume);
+    if (AdMobBackend* backend = getBackend()){
+        backend->setAppVolume(volume);
+    }
 }
 
 void AdMob::setAppMuted(bool muted){
-    System::instance().admobSetAppMuted(muted);
+    if (AdMobBackend* backend = getBackend()){
+        backend->setAppMuted(muted);
+    }
 }
 
 void AdMob::openAdInspector(){
-    if (!System::instance().admobOpenAdInspector()){
+    if (AdMobBackend* backend = getBackend()){
+        backend->openAdInspector();
+    }else{
         warnNotAvailable();
         postEvent([](){ onAdInspectorClosed.call(errorNotAvailable, notAvailableMessage); });
     }

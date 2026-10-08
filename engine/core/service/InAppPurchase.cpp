@@ -19,6 +19,10 @@ namespace {
             warned = true;
         }
     }
+
+    InAppPurchaseBackend* getBackend(){
+        return System::instance().getInAppPurchaseBackend();
+    }
 }
 
 std::map<std::string, ProductDetails> InAppPurchase::products;
@@ -90,14 +94,17 @@ void InAppPurchase::reset(){
 }
 
 void InAppPurchase::initialize(){
-    if (!System::instance().billingInitialize()){
+    if (InAppPurchaseBackend* backend = getBackend()){
+        backend->initialize();
+    }else{
         warnNotAvailable();
         postEvent([](){ onInitialized.call(BillingResponse::BILLING_UNAVAILABLE, notAvailableMessage); });
     }
 }
 
 bool InAppPurchase::isReady(){
-    return System::instance().billingIsReady();
+    InAppPurchaseBackend* backend = getBackend();
+    return backend && backend->isReady();
 }
 
 void InAppPurchase::queryProducts(const std::vector<std::string>& productIds, ProductType type){
@@ -106,7 +113,9 @@ void InAppPurchase::queryProducts(const std::vector<std::string>& productIds, Pr
         return;
     }
 
-    if (!System::instance().billingQueryProducts(productIds, type)){
+    if (InAppPurchaseBackend* backend = getBackend()){
+        backend->queryProducts(productIds, type);
+    }else{
         warnNotAvailable();
         postEvent([](){ onProductsQueried.call(BillingResponse::BILLING_UNAVAILABLE, notAvailableMessage); });
     }
@@ -133,7 +142,9 @@ std::vector<ProductDetails> InAppPurchase::getProducts(){
 }
 
 void InAppPurchase::launchPurchase(const PurchaseParams& params){
-    if (!System::instance().billingPurchase(params)){
+    if (InAppPurchaseBackend* backend = getBackend()){
+        backend->purchase(params);
+    }else{
         warnNotAvailable();
         const std::string productId = params.productId;
         postEvent([productId](){ onPurchaseFailed.call(productId, BillingResponse::BILLING_UNAVAILABLE, notAvailableMessage); });
@@ -174,21 +185,27 @@ void InAppPurchase::changeSubscription(const std::string& productId, const std::
 }
 
 void InAppPurchase::acknowledgePurchase(const std::string& purchaseToken){
-    if (!System::instance().billingAcknowledgePurchase(purchaseToken)){
+    if (InAppPurchaseBackend* backend = getBackend()){
+        backend->acknowledgePurchase(purchaseToken);
+    }else{
         warnNotAvailable();
         postEvent([purchaseToken](){ onPurchaseAcknowledged.call(purchaseToken, BillingResponse::BILLING_UNAVAILABLE, notAvailableMessage); });
     }
 }
 
 void InAppPurchase::consumePurchase(const std::string& purchaseToken){
-    if (!System::instance().billingConsumePurchase(purchaseToken)){
+    if (InAppPurchaseBackend* backend = getBackend()){
+        backend->consumePurchase(purchaseToken);
+    }else{
         warnNotAvailable();
         postEvent([purchaseToken](){ onPurchaseConsumed.call(purchaseToken, BillingResponse::BILLING_UNAVAILABLE, notAvailableMessage); });
     }
 }
 
 void InAppPurchase::queryPurchases(ProductType type){
-    if (!System::instance().billingQueryPurchases(type)){
+    if (InAppPurchaseBackend* backend = getBackend()){
+        backend->queryPurchases(type);
+    }else{
         warnNotAvailable();
         postEvent([type](){ onPurchasesQueried.call(type, BillingResponse::BILLING_UNAVAILABLE, notAvailableMessage); });
     }
@@ -217,13 +234,17 @@ void InAppPurchase::setObfuscatedProfileId(const std::string& profileId){
 }
 
 void InAppPurchase::openSubscriptionManagement(const std::string& productId){
-    if (!System::instance().billingOpenSubscriptionManagement(productId)){
+    if (InAppPurchaseBackend* backend = getBackend()){
+        backend->openSubscriptionManagement(productId);
+    }else{
         warnNotAvailable();
     }
 }
 
 void InAppPurchase::showInAppMessages(){
-    if (!System::instance().billingShowInAppMessages()){
+    if (InAppPurchaseBackend* backend = getBackend()){
+        backend->showInAppMessages();
+    }else{
         warnNotAvailable();
     }
 }

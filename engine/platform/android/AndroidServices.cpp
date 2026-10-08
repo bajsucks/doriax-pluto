@@ -1,7 +1,7 @@
 // (c) Eduardo Doria and contributors
 // SPDX-License-Identifier: MIT
 
-// DoriaxAndroid's AdMob and Google Play Billing hooks, and the natives of their Java wrappers
+// DoriaxAndroid's AdMob and Google Play Billing backends, and the natives of their Java wrappers
 
 #include "AndroidServices.h"
 
@@ -105,24 +105,21 @@ namespace {
         jobjectArray value = nullptr;
     };
 
-    JniData& jniData(){
-        return NativeEngine::getInstance()->getJniData();
-    }
-
     JNIEnv* jniEnv(){
         return NativeEngine::getInstance()->getJniEnv();
     }
 
-    // False when the export left the wrapper's service out
     template<typename... Args>
-    bool callVoid(jobject wrapper, jmethodID method, Args... args){
-        if (!wrapper)
-            return false;
-
+    void callVoid(jobject wrapper, jmethodID method, Args... args){
         JNIEnv* env = jniEnv();
         env->CallVoidMethod(wrapper, method, args...);
         clearException(env);
-        return true;
+    }
+
+    bool callBoolean(jobject wrapper, jmethodID method){
+        JNIEnv* env = jniEnv();
+        const jboolean value = env->CallBooleanMethod(wrapper, method);
+        return !clearException(env) && value;
     }
 
     using Json = nlohmann::json;
@@ -390,37 +387,95 @@ namespace {
         jclass cls;
         bool failed = false;
     };
+
+    // Google Mobile Ads through AdMobWrapper (java-admob)
+    class AndroidAdMob: public AdMobBackend{
+    public:
+        jobject wrapper = nullptr; // global reference, null when the export left AdMob out
+
+        void findMethods(MethodFinder& methods);
+
+        virtual void initialize() override;
+        virtual void setRequestConfiguration(AdMobRating rating, AdMobAgeRestriction ageRestriction, AdMobPersonalization personalization, const std::vector<std::string>& testDeviceIds) override;
+        virtual void requestConsent(bool underAgeOfConsent, AdMobDebugGeography debugGeography, const std::vector<std::string>& testDeviceIds) override;
+        virtual AdMobConsentStatus getConsentStatus() override;
+        virtual bool canRequestAds() override;
+        virtual bool isPrivacyOptionsRequired() override;
+        virtual void showPrivacyOptionsForm() override;
+        virtual void resetConsent() override;
+        virtual void loadAd(AdMobFormat format, const std::string& adUnitId, int generation) override;
+        virtual void showAd(AdMobFormat format) override;
+        virtual void loadBanner(const std::string& adUnitId, AdMobBannerSize size, AdMobBannerPosition position, bool visible, int generation) override;
+        virtual void setBannerVisible(bool visible) override;
+        virtual void setBannerPosition(AdMobBannerPosition position) override;
+        virtual void removeBanner() override;
+        virtual void setServerSideVerificationOptions(const std::string& userId, const std::string& customData) override;
+        virtual void setAppVolume(float volume) override;
+        virtual void setAppMuted(bool muted) override;
+        virtual void openAdInspector() override;
+
+    private:
+        jmethodID initializeMethod = nullptr;
+        jmethodID setRequestConfigurationMethod = nullptr;
+        jmethodID requestConsentMethod = nullptr;
+        jmethodID getConsentStatusMethod = nullptr;
+        jmethodID canRequestAdsMethod = nullptr;
+        jmethodID isPrivacyOptionsRequiredMethod = nullptr;
+        jmethodID showPrivacyOptionsFormMethod = nullptr;
+        jmethodID resetConsentMethod = nullptr;
+        jmethodID loadAdMethod = nullptr;
+        jmethodID showAdMethod = nullptr;
+        jmethodID loadBannerMethod = nullptr;
+        jmethodID setBannerVisibleMethod = nullptr;
+        jmethodID setBannerPositionMethod = nullptr;
+        jmethodID removeBannerMethod = nullptr;
+        jmethodID setServerSideVerificationOptionsMethod = nullptr;
+        jmethodID setAppVolumeMethod = nullptr;
+        jmethodID setAppMutedMethod = nullptr;
+        jmethodID openAdInspectorMethod = nullptr;
+    };
+
+    // Google Play Billing through BillingWrapper (java-billing)
+    class AndroidInAppPurchase: public InAppPurchaseBackend{
+    public:
+        jobject wrapper = nullptr; // global reference, null when the export left billing out
+
+        void findMethods(MethodFinder& methods);
+
+        virtual void initialize() override;
+        virtual bool isReady() override;
+        virtual void queryProducts(const std::vector<std::string>& productIds, ProductType type) override;
+        virtual void purchase(const PurchaseParams& params) override;
+        virtual void acknowledgePurchase(const std::string& purchaseToken) override;
+        virtual void consumePurchase(const std::string& purchaseToken) override;
+        virtual void queryPurchases(ProductType type) override;
+        virtual void openSubscriptionManagement(const std::string& productId) override;
+        virtual void showInAppMessages() override;
+
+    private:
+        jmethodID initializeMethod = nullptr;
+        jmethodID isReadyMethod = nullptr;
+        jmethodID queryProductsMethod = nullptr;
+        jmethodID purchaseMethod = nullptr;
+        jmethodID acknowledgePurchaseMethod = nullptr;
+        jmethodID consumePurchaseMethod = nullptr;
+        jmethodID queryPurchasesMethod = nullptr;
+        jmethodID openSubscriptionManagementMethod = nullptr;
+        jmethodID showInAppMessagesMethod = nullptr;
+    };
+
+    AndroidAdMob admob;
+    AndroidInAppPurchase inAppPurchase;
 }
 
-void setupServicesJNI(JNIEnv* env, JniData& jni){
-    jni.adMobWrapperObjRef = nullptr;
-    jni.billingWrapperObjRef = nullptr;
-
-    if (jobject wrapper = findWrapper(env, jni.gameActivityObjRef, jni.gameActivityClsRef, "getAdMobWrapper")){
+void setupServicesJNI(JNIEnv* env, jobject activity, jclass activityClass){
+    if (jobject wrapper = findWrapper(env, activity, activityClass, "getAdMobWrapper")){
         jclass cls = env->GetObjectClass(wrapper);
         MethodFinder methods(env, cls);
-
-        jni.admobInitialize = methods.find("initialize", "()V");
-        jni.admobSetRequestConfiguration = methods.find("setRequestConfiguration", "(III[Ljava/lang/String;)V");
-        jni.admobRequestConsent = methods.find("requestConsent", "(ZI[Ljava/lang/String;)V");
-        jni.admobGetConsentStatus = methods.find("getConsentStatus", "()I");
-        jni.admobCanRequestAds = methods.find("canRequestAds", "()Z");
-        jni.admobIsPrivacyOptionsRequired = methods.find("isPrivacyOptionsRequired", "()Z");
-        jni.admobShowPrivacyOptionsForm = methods.find("showPrivacyOptionsForm", "()V");
-        jni.admobResetConsent = methods.find("resetConsent", "()V");
-        jni.admobLoadAd = methods.find("loadAd", "(ILjava/lang/String;I)V");
-        jni.admobShowAd = methods.find("showAd", "(I)V");
-        jni.admobLoadBanner = methods.find("loadBanner", "(Ljava/lang/String;IIZI)V");
-        jni.admobSetBannerVisible = methods.find("setBannerVisible", "(Z)V");
-        jni.admobSetBannerPosition = methods.find("setBannerPosition", "(I)V");
-        jni.admobRemoveBanner = methods.find("removeBanner", "()V");
-        jni.admobSetServerSideVerificationOptions = methods.find("setServerSideVerificationOptions", "(Ljava/lang/String;Ljava/lang/String;)V");
-        jni.admobSetAppVolume = methods.find("setAppVolume", "(F)V");
-        jni.admobSetAppMuted = methods.find("setAppMuted", "(Z)V");
-        jni.admobOpenAdInspector = methods.find("openAdInspector", "()V");
+        admob.findMethods(methods);
 
         if (methods.ok() && registerNatives(env, cls, admobNatives, sizeof(admobNatives) / sizeof(admobNatives[0]))){
-            jni.adMobWrapperObjRef = env->NewGlobalRef(wrapper);
+            admob.wrapper = env->NewGlobalRef(wrapper);
         }else{
             Log::error("The AdMob Java wrapper does not match the engine, AdMob is disabled");
         }
@@ -429,22 +484,13 @@ void setupServicesJNI(JNIEnv* env, JniData& jni){
         env->DeleteLocalRef(wrapper);
     }
 
-    if (jobject wrapper = findWrapper(env, jni.gameActivityObjRef, jni.gameActivityClsRef, "getBillingWrapper")){
+    if (jobject wrapper = findWrapper(env, activity, activityClass, "getBillingWrapper")){
         jclass cls = env->GetObjectClass(wrapper);
         MethodFinder methods(env, cls);
-
-        jni.billingInitialize = methods.find("initialize", "()V");
-        jni.billingIsReady = methods.find("isReady", "()Z");
-        jni.billingQueryProducts = methods.find("queryProducts", "([Ljava/lang/String;I)V");
-        jni.billingPurchase = methods.find("purchase", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;)V");
-        jni.billingAcknowledgePurchase = methods.find("acknowledgePurchase", "(Ljava/lang/String;)V");
-        jni.billingConsumePurchase = methods.find("consumePurchase", "(Ljava/lang/String;)V");
-        jni.billingQueryPurchases = methods.find("queryPurchases", "(I)V");
-        jni.billingOpenSubscriptionManagement = methods.find("openSubscriptionManagement", "(Ljava/lang/String;)V");
-        jni.billingShowInAppMessages = methods.find("showInAppMessages", "()V");
+        inAppPurchase.findMethods(methods);
 
         if (methods.ok() && registerNatives(env, cls, billingNatives, sizeof(billingNatives) / sizeof(billingNatives[0]))){
-            jni.billingWrapperObjRef = env->NewGlobalRef(wrapper);
+            inAppPurchase.wrapper = env->NewGlobalRef(wrapper);
         }else{
             Log::error("The Google Play Billing Java wrapper does not match the engine, in-app purchases are disabled");
         }
@@ -454,152 +500,156 @@ void setupServicesJNI(JNIEnv* env, JniData& jni){
     }
 }
 
-void releaseServicesJNI(JNIEnv* env, JniData& jni){
+void releaseServicesJNI(JNIEnv* env){
     // the wrappers hold the activity
-    if (jni.adMobWrapperObjRef){
-        env->DeleteGlobalRef(jni.adMobWrapperObjRef);
-        jni.adMobWrapperObjRef = nullptr;
+    if (admob.wrapper){
+        env->DeleteGlobalRef(admob.wrapper);
+        admob.wrapper = nullptr;
     }
-    if (jni.billingWrapperObjRef){
-        env->DeleteGlobalRef(jni.billingWrapperObjRef);
-        jni.billingWrapperObjRef = nullptr;
+    if (inAppPurchase.wrapper){
+        env->DeleteGlobalRef(inAppPurchase.wrapper);
+        inAppPurchase.wrapper = nullptr;
     }
 }
 
-bool DoriaxAndroid::admobInitialize(){
-    JniData& jni = jniData();
-    return callVoid(jni.adMobWrapperObjRef, jni.admobInitialize);
+AdMobBackend* DoriaxAndroid::getAdMobBackend(){
+    return admob.wrapper ? &admob : nullptr;
 }
 
-bool DoriaxAndroid::admobSetRequestConfiguration(AdMobRating rating, AdMobAgeRestriction ageRestriction, AdMobPersonalization personalization, const std::vector<std::string>& testDeviceIds){
-    JniData& jni = jniData();
+InAppPurchaseBackend* DoriaxAndroid::getInAppPurchaseBackend(){
+    return inAppPurchase.wrapper ? &inAppPurchase : nullptr;
+}
+
+void AndroidAdMob::findMethods(MethodFinder& methods){
+    initializeMethod = methods.find("initialize", "()V");
+    setRequestConfigurationMethod = methods.find("setRequestConfiguration", "(III[Ljava/lang/String;)V");
+    requestConsentMethod = methods.find("requestConsent", "(ZI[Ljava/lang/String;)V");
+    getConsentStatusMethod = methods.find("getConsentStatus", "()I");
+    canRequestAdsMethod = methods.find("canRequestAds", "()Z");
+    isPrivacyOptionsRequiredMethod = methods.find("isPrivacyOptionsRequired", "()Z");
+    showPrivacyOptionsFormMethod = methods.find("showPrivacyOptionsForm", "()V");
+    resetConsentMethod = methods.find("resetConsent", "()V");
+    loadAdMethod = methods.find("loadAd", "(ILjava/lang/String;I)V");
+    showAdMethod = methods.find("showAd", "(I)V");
+    loadBannerMethod = methods.find("loadBanner", "(Ljava/lang/String;IIZI)V");
+    setBannerVisibleMethod = methods.find("setBannerVisible", "(Z)V");
+    setBannerPositionMethod = methods.find("setBannerPosition", "(I)V");
+    removeBannerMethod = methods.find("removeBanner", "()V");
+    setServerSideVerificationOptionsMethod = methods.find("setServerSideVerificationOptions", "(Ljava/lang/String;Ljava/lang/String;)V");
+    setAppVolumeMethod = methods.find("setAppVolume", "(F)V");
+    setAppMutedMethod = methods.find("setAppMuted", "(Z)V");
+    openAdInspectorMethod = methods.find("openAdInspector", "()V");
+}
+
+void AndroidAdMob::initialize(){
+    callVoid(wrapper, initializeMethod);
+}
+
+void AndroidAdMob::setRequestConfiguration(AdMobRating rating, AdMobAgeRestriction ageRestriction, AdMobPersonalization personalization, const std::vector<std::string>& testDeviceIds){
     JavaStringArray ids(jniEnv(), testDeviceIds);
-    return callVoid(jni.adMobWrapperObjRef, jni.admobSetRequestConfiguration,
+    callVoid(wrapper, setRequestConfigurationMethod,
         static_cast<jint>(rating), static_cast<jint>(ageRestriction), static_cast<jint>(personalization), ids.get());
 }
 
-bool DoriaxAndroid::admobRequestConsent(bool underAgeOfConsent, AdMobDebugGeography debugGeography, const std::vector<std::string>& testDeviceIds){
-    JniData& jni = jniData();
+void AndroidAdMob::requestConsent(bool underAgeOfConsent, AdMobDebugGeography debugGeography, const std::vector<std::string>& testDeviceIds){
     JavaStringArray ids(jniEnv(), testDeviceIds);
-    return callVoid(jni.adMobWrapperObjRef, jni.admobRequestConsent,
-        static_cast<jboolean>(underAgeOfConsent), static_cast<jint>(debugGeography), ids.get());
+    callVoid(wrapper, requestConsentMethod, static_cast<jboolean>(underAgeOfConsent), static_cast<jint>(debugGeography), ids.get());
 }
 
-AdMobConsentStatus DoriaxAndroid::admobGetConsentStatus(){
-    JniData& jni = jniData();
-    if (!jni.adMobWrapperObjRef) return AdMobConsentStatus::UNKNOWN;
-
+AdMobConsentStatus AndroidAdMob::getConsentStatus(){
     JNIEnv* env = jniEnv();
-    jint status = env->CallIntMethod(jni.adMobWrapperObjRef, jni.admobGetConsentStatus);
+    const jint status = env->CallIntMethod(wrapper, getConsentStatusMethod);
     if (clearException(env)) return AdMobConsentStatus::UNKNOWN;
     return static_cast<AdMobConsentStatus>(status);
 }
 
-bool DoriaxAndroid::admobCanRequestAds(){
-    JniData& jni = jniData();
-    if (!jni.adMobWrapperObjRef) return false;
-
-    JNIEnv* env = jniEnv();
-    jboolean value = env->CallBooleanMethod(jni.adMobWrapperObjRef, jni.admobCanRequestAds);
-    return !clearException(env) && value;
+bool AndroidAdMob::canRequestAds(){
+    return callBoolean(wrapper, canRequestAdsMethod);
 }
 
-bool DoriaxAndroid::admobIsPrivacyOptionsRequired(){
-    JniData& jni = jniData();
-    if (!jni.adMobWrapperObjRef) return false;
-
-    JNIEnv* env = jniEnv();
-    jboolean value = env->CallBooleanMethod(jni.adMobWrapperObjRef, jni.admobIsPrivacyOptionsRequired);
-    return !clearException(env) && value;
+bool AndroidAdMob::isPrivacyOptionsRequired(){
+    return callBoolean(wrapper, isPrivacyOptionsRequiredMethod);
 }
 
-bool DoriaxAndroid::admobShowPrivacyOptionsForm(){
-    JniData& jni = jniData();
-    return callVoid(jni.adMobWrapperObjRef, jni.admobShowPrivacyOptionsForm);
+void AndroidAdMob::showPrivacyOptionsForm(){
+    callVoid(wrapper, showPrivacyOptionsFormMethod);
 }
 
-void DoriaxAndroid::admobResetConsent(){
-    JniData& jni = jniData();
-    callVoid(jni.adMobWrapperObjRef, jni.admobResetConsent);
+void AndroidAdMob::resetConsent(){
+    callVoid(wrapper, resetConsentMethod);
 }
 
-bool DoriaxAndroid::admobLoadAd(AdMobFormat format, const std::string& adUnitId, int generation){
-    JniData& jni = jniData();
+void AndroidAdMob::loadAd(AdMobFormat format, const std::string& adUnitId, int generation){
     JavaString id(jniEnv(), adUnitId);
-    return callVoid(jni.adMobWrapperObjRef, jni.admobLoadAd, static_cast<jint>(format), id.get(), static_cast<jint>(generation));
+    callVoid(wrapper, loadAdMethod, static_cast<jint>(format), id.get(), static_cast<jint>(generation));
 }
 
-bool DoriaxAndroid::admobShowAd(AdMobFormat format){
-    JniData& jni = jniData();
-    return callVoid(jni.adMobWrapperObjRef, jni.admobShowAd, static_cast<jint>(format));
+void AndroidAdMob::showAd(AdMobFormat format){
+    callVoid(wrapper, showAdMethod, static_cast<jint>(format));
 }
 
-bool DoriaxAndroid::admobLoadBanner(const std::string& adUnitId, AdMobBannerSize size, AdMobBannerPosition position, bool visible, int generation){
-    JniData& jni = jniData();
+void AndroidAdMob::loadBanner(const std::string& adUnitId, AdMobBannerSize size, AdMobBannerPosition position, bool visible, int generation){
     JavaString id(jniEnv(), adUnitId);
-    return callVoid(jni.adMobWrapperObjRef, jni.admobLoadBanner, id.get(),
+    callVoid(wrapper, loadBannerMethod, id.get(),
         static_cast<jint>(size), static_cast<jint>(position), static_cast<jboolean>(visible), static_cast<jint>(generation));
 }
 
-void DoriaxAndroid::admobSetBannerVisible(bool visible){
-    JniData& jni = jniData();
-    callVoid(jni.adMobWrapperObjRef, jni.admobSetBannerVisible, static_cast<jboolean>(visible));
+void AndroidAdMob::setBannerVisible(bool visible){
+    callVoid(wrapper, setBannerVisibleMethod, static_cast<jboolean>(visible));
 }
 
-void DoriaxAndroid::admobSetBannerPosition(AdMobBannerPosition position){
-    JniData& jni = jniData();
-    callVoid(jni.adMobWrapperObjRef, jni.admobSetBannerPosition, static_cast<jint>(position));
+void AndroidAdMob::setBannerPosition(AdMobBannerPosition position){
+    callVoid(wrapper, setBannerPositionMethod, static_cast<jint>(position));
 }
 
-void DoriaxAndroid::admobRemoveBanner(){
-    JniData& jni = jniData();
-    callVoid(jni.adMobWrapperObjRef, jni.admobRemoveBanner);
+void AndroidAdMob::removeBanner(){
+    callVoid(wrapper, removeBannerMethod);
 }
 
-void DoriaxAndroid::admobSetServerSideVerificationOptions(const std::string& userId, const std::string& customData){
-    JniData& jni = jniData();
+void AndroidAdMob::setServerSideVerificationOptions(const std::string& userId, const std::string& customData){
     JavaString user(jniEnv(), userId);
     JavaString data(jniEnv(), customData);
-    callVoid(jni.adMobWrapperObjRef, jni.admobSetServerSideVerificationOptions, user.get(), data.get());
+    callVoid(wrapper, setServerSideVerificationOptionsMethod, user.get(), data.get());
 }
 
-void DoriaxAndroid::admobSetAppVolume(float volume){
-    JniData& jni = jniData();
-    callVoid(jni.adMobWrapperObjRef, jni.admobSetAppVolume, static_cast<jfloat>(volume));
+void AndroidAdMob::setAppVolume(float volume){
+    callVoid(wrapper, setAppVolumeMethod, static_cast<jfloat>(volume));
 }
 
-void DoriaxAndroid::admobSetAppMuted(bool muted){
-    JniData& jni = jniData();
-    callVoid(jni.adMobWrapperObjRef, jni.admobSetAppMuted, static_cast<jboolean>(muted));
+void AndroidAdMob::setAppMuted(bool muted){
+    callVoid(wrapper, setAppMutedMethod, static_cast<jboolean>(muted));
 }
 
-bool DoriaxAndroid::admobOpenAdInspector(){
-    JniData& jni = jniData();
-    return callVoid(jni.adMobWrapperObjRef, jni.admobOpenAdInspector);
+void AndroidAdMob::openAdInspector(){
+    callVoid(wrapper, openAdInspectorMethod);
 }
 
-bool DoriaxAndroid::billingInitialize(){
-    JniData& jni = jniData();
-    return callVoid(jni.billingWrapperObjRef, jni.billingInitialize);
+void AndroidInAppPurchase::findMethods(MethodFinder& methods){
+    initializeMethod = methods.find("initialize", "()V");
+    isReadyMethod = methods.find("isReady", "()Z");
+    queryProductsMethod = methods.find("queryProducts", "([Ljava/lang/String;I)V");
+    purchaseMethod = methods.find("purchase", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;)V");
+    acknowledgePurchaseMethod = methods.find("acknowledgePurchase", "(Ljava/lang/String;)V");
+    consumePurchaseMethod = methods.find("consumePurchase", "(Ljava/lang/String;)V");
+    queryPurchasesMethod = methods.find("queryPurchases", "(I)V");
+    openSubscriptionManagementMethod = methods.find("openSubscriptionManagement", "(Ljava/lang/String;)V");
+    showInAppMessagesMethod = methods.find("showInAppMessages", "()V");
 }
 
-bool DoriaxAndroid::billingIsReady(){
-    JniData& jni = jniData();
-    if (!jni.billingWrapperObjRef) return false;
-
-    JNIEnv* env = jniEnv();
-    jboolean value = env->CallBooleanMethod(jni.billingWrapperObjRef, jni.billingIsReady);
-    return !clearException(env) && value;
+void AndroidInAppPurchase::initialize(){
+    callVoid(wrapper, initializeMethod);
 }
 
-bool DoriaxAndroid::billingQueryProducts(const std::vector<std::string>& productIds, ProductType type){
-    JniData& jni = jniData();
+bool AndroidInAppPurchase::isReady(){
+    return callBoolean(wrapper, isReadyMethod);
+}
+
+void AndroidInAppPurchase::queryProducts(const std::vector<std::string>& productIds, ProductType type){
     JavaStringArray ids(jniEnv(), productIds);
-    return callVoid(jni.billingWrapperObjRef, jni.billingQueryProducts, ids.get(), static_cast<jint>(type));
+    callVoid(wrapper, queryProductsMethod, ids.get(), static_cast<jint>(type));
 }
 
-bool DoriaxAndroid::billingPurchase(const PurchaseParams& params){
-    JniData& jni = jniData();
+void AndroidInAppPurchase::purchase(const PurchaseParams& params){
     JNIEnv* env = jniEnv();
     JavaString productId(env, params.productId);
     JavaString offerToken(env, params.offerToken);
@@ -607,34 +657,29 @@ bool DoriaxAndroid::billingPurchase(const PurchaseParams& params){
     JavaString oldProductId(env, params.oldProductId);
     JavaString accountId(env, params.obfuscatedAccountId);
     JavaString profileId(env, params.obfuscatedProfileId);
-    return callVoid(jni.billingWrapperObjRef, jni.billingPurchase, productId.get(), offerToken.get(),
+    callVoid(wrapper, purchaseMethod, productId.get(), offerToken.get(),
         oldPurchaseToken.get(), oldProductId.get(), static_cast<jint>(params.replacementMode), accountId.get(), profileId.get());
 }
 
-bool DoriaxAndroid::billingAcknowledgePurchase(const std::string& purchaseToken){
-    JniData& jni = jniData();
+void AndroidInAppPurchase::acknowledgePurchase(const std::string& purchaseToken){
     JavaString token(jniEnv(), purchaseToken);
-    return callVoid(jni.billingWrapperObjRef, jni.billingAcknowledgePurchase, token.get());
+    callVoid(wrapper, acknowledgePurchaseMethod, token.get());
 }
 
-bool DoriaxAndroid::billingConsumePurchase(const std::string& purchaseToken){
-    JniData& jni = jniData();
+void AndroidInAppPurchase::consumePurchase(const std::string& purchaseToken){
     JavaString token(jniEnv(), purchaseToken);
-    return callVoid(jni.billingWrapperObjRef, jni.billingConsumePurchase, token.get());
+    callVoid(wrapper, consumePurchaseMethod, token.get());
 }
 
-bool DoriaxAndroid::billingQueryPurchases(ProductType type){
-    JniData& jni = jniData();
-    return callVoid(jni.billingWrapperObjRef, jni.billingQueryPurchases, static_cast<jint>(type));
+void AndroidInAppPurchase::queryPurchases(ProductType type){
+    callVoid(wrapper, queryPurchasesMethod, static_cast<jint>(type));
 }
 
-bool DoriaxAndroid::billingOpenSubscriptionManagement(const std::string& productId){
-    JniData& jni = jniData();
+void AndroidInAppPurchase::openSubscriptionManagement(const std::string& productId){
     JavaString id(jniEnv(), productId);
-    return callVoid(jni.billingWrapperObjRef, jni.billingOpenSubscriptionManagement, id.get());
+    callVoid(wrapper, openSubscriptionManagementMethod, id.get());
 }
 
-bool DoriaxAndroid::billingShowInAppMessages(){
-    JniData& jni = jniData();
-    return callVoid(jni.billingWrapperObjRef, jni.billingShowInAppMessages);
+void AndroidInAppPurchase::showInAppMessages(){
+    callVoid(wrapper, showInAppMessagesMethod);
 }

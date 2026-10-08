@@ -6,10 +6,8 @@
 
 #include <jni.h>
 
-struct JniData;
-
 // Finds the AdMob and Google Play Billing wrappers the export compiled in and registers their natives
-void setupServicesJNI(JNIEnv* env, JniData& jniData);
-void releaseServicesJNI(JNIEnv* env, JniData& jniData);
+void setupServicesJNI(JNIEnv* env, jobject activity, jclass activityClass);
+void releaseServicesJNI(JNIEnv* env);
 
 #endif /* AndroidServices_H_ */

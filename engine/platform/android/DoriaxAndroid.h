@@ -50,34 +50,8 @@ public:
     virtual void removeKey(const char* key) override;
 
     // AndroidServices.cpp
-    virtual bool admobInitialize() override;
-    virtual bool admobSetRequestConfiguration(doriax::AdMobRating rating, doriax::AdMobAgeRestriction ageRestriction, doriax::AdMobPersonalization personalization, const std::vector<std::string>& testDeviceIds) override;
-    virtual bool admobRequestConsent(bool underAgeOfConsent, doriax::AdMobDebugGeography debugGeography, const std::vector<std::string>& testDeviceIds) override;
-    virtual doriax::AdMobConsentStatus admobGetConsentStatus() override;
-    virtual bool admobCanRequestAds() override;
-    virtual bool admobIsPrivacyOptionsRequired() override;
-    virtual bool admobShowPrivacyOptionsForm() override;
-    virtual void admobResetConsent() override;
-    virtual bool admobLoadAd(doriax::AdMobFormat format, const std::string& adUnitId, int generation) override;
-    virtual bool admobShowAd(doriax::AdMobFormat format) override;
-    virtual bool admobLoadBanner(const std::string& adUnitId, doriax::AdMobBannerSize size, doriax::AdMobBannerPosition position, bool visible, int generation) override;
-    virtual void admobSetBannerVisible(bool visible) override;
-    virtual void admobSetBannerPosition(doriax::AdMobBannerPosition position) override;
-    virtual void admobRemoveBanner() override;
-    virtual void admobSetServerSideVerificationOptions(const std::string& userId, const std::string& customData) override;
-    virtual void admobSetAppVolume(float volume) override;
-    virtual void admobSetAppMuted(bool muted) override;
-    virtual bool admobOpenAdInspector() override;
-
-    virtual bool billingInitialize() override;
-    virtual bool billingIsReady() override;
-    virtual bool billingQueryProducts(const std::vector<std::string>& productIds, doriax::ProductType type) override;
-    virtual bool billingPurchase(const doriax::PurchaseParams& params) override;
-    virtual bool billingAcknowledgePurchase(const std::string& purchaseToken) override;
-    virtual bool billingConsumePurchase(const std::string& purchaseToken) override;
-    virtual bool billingQueryPurchases(doriax::ProductType type) override;
-    virtual bool billingOpenSubscriptionManagement(const std::string& productId) override;
-    virtual bool billingShowInAppMessages() override;
+    virtual doriax::AdMobBackend* getAdMobBackend() override;
+    virtual doriax::InAppPurchaseBackend* getInAppPurchaseBackend() override;
 };
 
 #endif /* DoriaxAndroid_H_ */
