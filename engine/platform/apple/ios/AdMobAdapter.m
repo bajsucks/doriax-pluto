@@ -119,12 +119,8 @@ static GADPaidEventHandler paidEventHandler(int format) {
 }
 
 - (UIViewController *)rootViewController {
-    UIWindow *window = nil;
-    id<UIApplicationDelegate> delegate = UIApplication.sharedApplication.delegate;
-    if ([delegate respondsToSelector:@selector(window)]) {
-        window = delegate.window;
-    }
-    UIViewController *controller = window.rootViewController ?: Renderer.view.window.rootViewController;
+    // the window of the engine's view
+    UIViewController *controller = Renderer.view.window.rootViewController;
     while (controller.presentedViewController && !controller.presentedViewController.isBeingDismissed) {
         controller = controller.presentedViewController;
     }
