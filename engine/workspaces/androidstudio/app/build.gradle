@@ -14,7 +14,7 @@ android {
     compileSdk 36
     defaultConfig {
         applicationId "com.yourcompany.project"
-        minSdkVersion 21
+        minSdkVersion 24
         targetSdkVersion 36
         versionCode 1
         versionName "1.0"
@@ -57,6 +57,8 @@ android {
     sourceSets {
         main {
             java.srcDirs = [doriaxRootAbs+'/platform/android/java']
+            java.srcDir doriaxRootAbs+'/platform/android/java-admob'
+            java.srcDir doriaxRootAbs+'/platform/android/java-billing'
             assets.srcDirs = [projectSourceRootAbs+'/assets',projectSourceRootAbs+'/lua']
         }
     }
@@ -65,8 +67,10 @@ android {
 }
 
 dependencies {
-    implementation "com.google.android.gms:play-services-ads:22.6.0"
     implementation "androidx.appcompat:appcompat:1.6.1"
     implementation "androidx.games:games-activity:2.0.2"
     implementation "androidx.games:games-frame-pacing:2.0.0"
+    implementation "com.google.android.gms:play-services-ads:25.5.0"
+    implementation "com.google.android.ump:user-messaging-platform:4.0.0"
+    implementation "com.android.billingclient:billing:9.1.0"
 }

@@ -19,12 +19,17 @@
 namespace doriax {
     class Engine;
 
-    enum class AdMobRating{
-        General,
-        ParentalGuidance,
-        Teen,
-        MatureAudience
-    };
+    // AdMob.h and InAppPurchase.h
+    enum class AdMobFormat;
+    enum class AdMobBannerSize;
+    enum class AdMobBannerPosition;
+    enum class AdMobRating;
+    enum class AdMobAgeRestriction;
+    enum class AdMobPersonalization;
+    enum class AdMobConsentStatus;
+    enum class AdMobDebugGeography;
+    enum class ProductType;
+    struct PurchaseParams;
 
     enum class CursorType{
         ARROW, // default
@@ -144,12 +149,37 @@ namespace doriax {
 
         virtual void removeKey(const char *key);
 
-        // Google AdMob SDK
-        virtual void initializeAdMob(bool tagForChildDirectedTreatment = false, bool tagForUnderAgeOfConsent = false);
-        virtual void setMaxAdContentRating(AdMobRating rating);
-        virtual void loadInterstitialAd(const std::string& adUnitID);
-        virtual bool isInterstitialAdLoaded();
-        virtual void showInterstitialAd();
+        // Used by the AdMob class; false where the platform or build has no AdMob
+        virtual bool admobInitialize();
+        virtual bool admobSetRequestConfiguration(AdMobRating rating, AdMobAgeRestriction ageRestriction, AdMobPersonalization personalization, const std::vector<std::string>& testDeviceIds);
+        virtual bool admobRequestConsent(bool underAgeOfConsent, AdMobDebugGeography debugGeography, const std::vector<std::string>& testDeviceIds);
+        virtual AdMobConsentStatus admobGetConsentStatus();
+        virtual bool admobCanRequestAds();
+        virtual bool admobIsPrivacyOptionsRequired();
+        virtual bool admobShowPrivacyOptionsForm();
+        virtual void admobResetConsent();
+        // generation goes back with the load result
+        virtual bool admobLoadAd(AdMobFormat format, const std::string& adUnitId, int generation);
+        virtual bool admobShowAd(AdMobFormat format);
+        virtual bool admobLoadBanner(const std::string& adUnitId, AdMobBannerSize size, AdMobBannerPosition position, bool visible, int generation);
+        virtual void admobSetBannerVisible(bool visible);
+        virtual void admobSetBannerPosition(AdMobBannerPosition position);
+        virtual void admobRemoveBanner();
+        virtual void admobSetServerSideVerificationOptions(const std::string& userId, const std::string& customData);
+        virtual void admobSetAppVolume(float volume);
+        virtual void admobSetAppMuted(bool muted);
+        virtual bool admobOpenAdInspector();
+
+        // Used by the InAppPurchase class; false where the platform or build has no billing
+        virtual bool billingInitialize();
+        virtual bool billingIsReady();
+        virtual bool billingQueryProducts(const std::vector<std::string>& productIds, ProductType type);
+        virtual bool billingPurchase(const PurchaseParams& params);
+        virtual bool billingAcknowledgePurchase(const std::string& purchaseToken);
+        virtual bool billingConsumePurchase(const std::string& purchaseToken);
+        virtual bool billingQueryPurchases(ProductType type);
+        virtual bool billingOpenSubscriptionManagement(const std::string& productId);
+        virtual bool billingShowInAppMessages();
 
         // CrazyGames SDK
         virtual void initializeCrazyGamesSDK();

@@ -342,6 +342,22 @@ namespace {
         plist.replace(stringStart, stringEnd - stringStart, escapeXmlAttribute(value));
     }
 
+    // Removes a top-level key holding a string, if present
+    void removePlistStringValue(std::string& plist, const std::string& key) {
+        const std::string keyTag = "\t<key>" + key + "</key>";
+        const size_t keyPos = plist.find(keyTag);
+        if (keyPos == std::string::npos) return;
+
+        const size_t valueStart = plist.find_first_not_of(" \t\r\n", keyPos + keyTag.size());
+        if (valueStart == std::string::npos || plist.compare(valueStart, 8, "<string>") != 0) return;
+        const size_t valueEnd = plist.find("</string>", valueStart);
+        if (valueEnd == std::string::npos) return;
+
+        size_t eraseEnd = valueEnd + std::string("</string>").size();
+        if (eraseEnd < plist.size() && plist[eraseEnd] == '\n') eraseEnd++;
+        plist.erase(keyPos, eraseEnd - keyPos);
+    }
+
     void replacePlistBoolValue(std::string& plist, const std::string& key, bool value) {
         const std::string keyTag = "\t<key>" + key + "</key>";
         const std::string boolTag = value ? "\t<true/>\n" : "\t<false/>\n";
@@ -2152,6 +2168,7 @@ bool editor::Exporter::copyEngine() {
         projectSettings += indent + "set(DORIAX_CXX_STANDARD " + std::to_string(project->getCxxStandard()) + ")";
         projectSettings += indent + std::string("set(DORIAX_PHYSICS_2D ") + (project->isPhysics2DEnabled() ? "ON" : "OFF") + ")";
         projectSettings += indent + std::string("set(DORIAX_PHYSICS_3D ") + (project->isPhysics3DEnabled() ? "ON" : "OFF") + ")";
+        projectSettings += indent + std::string("set(DORIAX_ADMOB ") + (project->getIOSProjectSettings().admobEnabled ? "ON" : "OFF") + ")";
         cmakeContent.replace(projectSettingsPos, projectSettingsMarker.size(), projectSettings);
     } else {
         Out::warning("Exported CMakeLists.txt is missing the project settings marker; using platform defaults");
@@ -2409,7 +2426,7 @@ bool editor::Exporter::writeAndroidProjectSettings() {
     std::string gradle;
     if (!readText(buildGradlePath, gradle)) return false;
     for (const char* marker : {"compileSdk 36", "applicationId \"com.yourcompany.project\"",
-            "minSdkVersion 21", "targetSdkVersion 36", "versionCode 1", "versionName \"1.0\"",
+            "minSdkVersion 24", "targetSdkVersion 36", "versionCode 1", "versionName \"1.0\"",
             "                abiFilters \"arm64-v8a\"\n"
             "                abiFilters \"x86\"\n"
             "                abiFilters \"armeabi-v7a\"\n"
@@ -2420,11 +2437,25 @@ bool editor::Exporter::writeAndroidProjectSettings() {
         }
     }
 
-    replaceAll(gradle, "compileSdk 36", "compileSdk " + std::to_string(android.targetSdk));
+    // The optional services set their own floor
+    unsigned int minSdk = android.minSdk;
+    if (android.admobEnabled && minSdk < admobMinAndroidSdk) {
+        Out::warning("Android Min SDK raised to %u, the lowest Google Mobile Ads supports", admobMinAndroidSdk);
+        minSdk = admobMinAndroidSdk;
+    }
+    if (android.billingEnabled && minSdk < billingMinAndroidSdk) {
+        Out::warning("Android Min SDK raised to %u, the lowest Google Play Billing supports", billingMinAndroidSdk);
+        minSdk = billingMinAndroidSdk;
+    }
+    const unsigned int targetSdk = std::max(android.targetSdk, minSdk);
+    // AndroidX libraries of the services need compileSdk 35
+    const unsigned int compileSdk = (android.admobEnabled || android.billingEnabled) ? std::max(targetSdk, 35u) : targetSdk;
+
+    replaceAll(gradle, "compileSdk 36", "compileSdk " + std::to_string(compileSdk));
     replaceAll(gradle, "applicationId \"com.yourcompany.project\"",
         "applicationId \"" + escapeGradleString(project->getApplicationIdentifier(android.packageName)) + "\"");
-    replaceAll(gradle, "minSdkVersion 21", "minSdkVersion " + std::to_string(android.minSdk));
-    replaceAll(gradle, "targetSdkVersion 36", "targetSdkVersion " + std::to_string(android.targetSdk));
+    replaceAll(gradle, "minSdkVersion 24", "minSdkVersion " + std::to_string(minSdk));
+    replaceAll(gradle, "targetSdkVersion 36", "targetSdkVersion " + std::to_string(targetSdk));
     replaceAll(gradle, "versionCode 1", "versionCode " + std::to_string(project->getApplicationVersionCode(android.versionCode)));
     replaceAll(gradle, "versionName \"1.0\"",
         "versionName \"" + escapeGradleString(project->getApplicationVersion(android.versionName)) + "\"");
@@ -2445,6 +2476,36 @@ bool editor::Exporter::writeAndroidProjectSettings() {
         "                abiFilters \"armeabi-v7a\"\n"
         "                abiFilters \"x86_64\"",
         abiLine);
+
+    // Matched without versions, so SDK updates in the template keep working
+    auto removeGradleLine = [&](const std::string& needle) -> bool {
+        const size_t match = gradle.find(needle);
+        if (match == std::string::npos) {
+            setError("Incompatible Android Gradle export template: missing " + needle);
+            return false;
+        }
+        const size_t lineStart = gradle.rfind('\n', match);
+        const size_t eraseStart = (lineStart == std::string::npos) ? 0 : lineStart + 1;
+        const size_t lineEnd = gradle.find('\n', match);
+        const size_t eraseEnd = (lineEnd == std::string::npos) ? gradle.size() : lineEnd + 1;
+        gradle.erase(eraseStart, eraseEnd - eraseStart);
+        return true;
+    };
+
+    // MainActivity creates the wrappers by name, so they go with their libraries
+    if (!android.admobEnabled) {
+        if (!removeGradleLine("/platform/android/java-admob'")
+                || !removeGradleLine("\"com.google.android.gms:play-services-ads:")
+                || !removeGradleLine("\"com.google.android.ump:user-messaging-platform:")) {
+            return false;
+        }
+    }
+    if (!android.billingEnabled) {
+        if (!removeGradleLine("/platform/android/java-billing'")
+                || !removeGradleLine("\"com.android.billingclient:billing:")) {
+            return false;
+        }
+    }
     FileUtils::writeIfChanged(buildGradlePath, gradle);
 
     const bool hasLauncherIcon = !android.launcherIcon.empty();
@@ -2498,9 +2559,16 @@ bool editor::Exporter::writeAndroidProjectSettings() {
     manifest += std::string("        android:allowBackup=\"") + (android.allowBackup ? "true" : "false") + "\"\n";
     manifest += "        android:icon=\"" + iconReference + "\"\n";
     manifest += "        android:label=\"@string/app_name\">\n\n";
-    manifest += "        <meta-data\n";
-    manifest += "            android:name=\"com.google.android.gms.ads.APPLICATION_ID\"\n";
-    manifest += "            android:value=\"ca-app-pub-3940256099942544~3347511713\"/>\n\n";
+    if (android.admobEnabled) {
+        std::string admobAppId = android.admobAppId;
+        if (admobAppId.empty()) {
+            Out::warning("Android AdMob App ID is empty, so the export uses Google's sample app, which only shows test ads");
+            admobAppId = androidSampleAdMobAppId;
+        }
+        manifest += "        <meta-data\n";
+        manifest += "            android:name=\"com.google.android.gms.ads.APPLICATION_ID\"\n";
+        manifest += "            android:value=\"" + escapeXmlAttribute(admobAppId) + "\"/>\n\n";
+    }
     manifest += "        <activity android:name=\".MainActivity\"\n";
     manifest += "            android:label=\"@string/app_name\"\n";
     manifest += "            android:configChanges=\"orientation|keyboardHidden|keyboard|screenSize\"\n";
@@ -2771,6 +2839,21 @@ bool editor::Exporter::writeAppleProjectSettings() {
         if (!unlinkBackend("joltphysics")) return false;
     }
 
+    // Without AdMob the iOS app neither links Google Mobile Ads nor compiles its adapter
+    if (!ios.admobEnabled) {
+        removeProjectLinesContaining("DORIAX_ADMOB,");
+        for (const char* buildFile : {"GoogleMobileAds.xcframework in Frameworks",
+                "UserMessagingPlatform.xcframework in Frameworks", "GoogleMobileAdsPlaceholder.swift in Sources"}) {
+            const size_t match = xcodeProject.find(std::string("/* ") + buildFile + " */ = {isa = PBXBuildFile;");
+            if (match == std::string::npos) {
+                setError(std::string("Apple export template has no ") + buildFile + " entry to remove");
+                return false;
+            }
+            const size_t lineStart = xcodeProject.rfind('\n', match) + 1;
+            if (!removeProjectEntriesWithId(leadingObjectId(xcodeProject.substr(lineStart, match - lineStart)))) return false;
+        }
+    }
+
     std::string excludedSources;
     for (const std::string& source : excludedPhysicsSources) {
         if (!excludedSources.empty()) excludedSources += " ";
@@ -2818,6 +2901,23 @@ bool editor::Exporter::writeAppleProjectSettings() {
             Project::toAppleVersion(project->getApplicationBuild(ios.buildNumber)));
         replacePlistBoolValue(iosPlist, "UIStatusBarHidden", ios.hideStatusBar);
         replacePlistBoolValue(iosPlist, "CADisableMinimumFrameDurationOnPhone", ios.supportsHighRefreshRate);
+
+        if (ios.admobEnabled) {
+            std::string admobAppId = ios.admobAppId;
+            if (admobAppId.empty()) {
+                Out::warning("iOS AdMob App ID is empty, so the export uses Google's sample app, which only shows test ads");
+                admobAppId = iosSampleAdMobAppId;
+            }
+            replacePlistStringValue(iosPlist, "GADApplicationIdentifier", admobAppId);
+        } else {
+            removePlistStringValue(iosPlist, "GADApplicationIdentifier");
+        }
+        // the tracking prompt text; without it the consent form skips the IDFA message
+        if (ios.admobEnabled && !ios.trackingUsageDescription.empty()) {
+            replacePlistStringValue(iosPlist, "NSUserTrackingUsageDescription", ios.trackingUsageDescription);
+        } else {
+            removePlistStringValue(iosPlist, "NSUserTrackingUsageDescription");
+        }
         FileUtils::writeIfChanged(iosPlistPath, iosPlist);
     }
 

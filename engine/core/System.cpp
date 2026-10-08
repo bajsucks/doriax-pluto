@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 #include "System.h"
+#include "service/AdMob.h"
+#include "service/InAppPurchase.h"
 #include "util/XMLUtils.h"
 #include "util/Base64.h"
 #include "Log.h"
@@ -257,24 +259,105 @@ void System::removeKey(const char *key){
     XMLUtils::removeKey(USERSETTINGS_XML_FILE, USERSETTINGS_ROOT, key);
 }
 
-void System::initializeAdMob(bool tagForChildDirectedTreatment, bool tagForUnderAgeOfConsent){
-    Log::error("Cannot initialize AdMob in this system");
-}
-
-void System::setMaxAdContentRating(AdMobRating rating){
-    Log::error("Cannot set AdMob rating in this system");
-}
-
-void System::loadInterstitialAd(const std::string& adUnitID){
-    Log::error("Cannot load InterstitialAd in this system");
-}
-
-bool System::isInterstitialAdLoaded(){
+bool System::admobInitialize(){
     return false;
 }
 
-void System::showInterstitialAd(){
-    Log::error("Cannot show InterstitialAd in this system");
+bool System::admobSetRequestConfiguration(AdMobRating rating, AdMobAgeRestriction ageRestriction, AdMobPersonalization personalization, const std::vector<std::string>& testDeviceIds){
+    return false;
+}
+
+bool System::admobRequestConsent(bool underAgeOfConsent, AdMobDebugGeography debugGeography, const std::vector<std::string>& testDeviceIds){
+    return false;
+}
+
+AdMobConsentStatus System::admobGetConsentStatus(){
+    return AdMobConsentStatus::UNKNOWN;
+}
+
+bool System::admobCanRequestAds(){
+    return false;
+}
+
+bool System::admobIsPrivacyOptionsRequired(){
+    return false;
+}
+
+bool System::admobShowPrivacyOptionsForm(){
+    return false;
+}
+
+void System::admobResetConsent(){
+}
+
+bool System::admobLoadAd(AdMobFormat format, const std::string& adUnitId, int generation){
+    return false;
+}
+
+bool System::admobShowAd(AdMobFormat format){
+    return false;
+}
+
+bool System::admobLoadBanner(const std::string& adUnitId, AdMobBannerSize size, AdMobBannerPosition position, bool visible, int generation){
+    return false;
+}
+
+void System::admobSetBannerVisible(bool visible){
+}
+
+void System::admobSetBannerPosition(AdMobBannerPosition position){
+}
+
+void System::admobRemoveBanner(){
+}
+
+void System::admobSetServerSideVerificationOptions(const std::string& userId, const std::string& customData){
+}
+
+void System::admobSetAppVolume(float volume){
+}
+
+void System::admobSetAppMuted(bool muted){
+}
+
+bool System::admobOpenAdInspector(){
+    return false;
+}
+
+bool System::billingInitialize(){
+    return false;
+}
+
+bool System::billingIsReady(){
+    return false;
+}
+
+bool System::billingQueryProducts(const std::vector<std::string>& productIds, ProductType type){
+    return false;
+}
+
+bool System::billingPurchase(const PurchaseParams& params){
+    return false;
+}
+
+bool System::billingAcknowledgePurchase(const std::string& purchaseToken){
+    return false;
+}
+
+bool System::billingConsumePurchase(const std::string& purchaseToken){
+    return false;
+}
+
+bool System::billingQueryPurchases(ProductType type){
+    return false;
+}
+
+bool System::billingOpenSubscriptionManagement(const std::string& productId){
+    return false;
+}
+
+bool System::billingShowInAppMessages(){
+    return false;
 }
 
 void System::initializeCrazyGamesSDK(){

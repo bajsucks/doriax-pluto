@@ -8,6 +8,7 @@ endif()
 
 option(DORIAX_PHYSICS_2D "Enable Box2D-based 2D physics" ON)
 option(DORIAX_PHYSICS_3D "Enable Jolt-based 3D physics" ON)
+option(DORIAX_ADMOB "Link Google Mobile Ads into iOS builds" ON)
 
 # =============================================================
 # STANDALONE PROJECT SETUP
@@ -278,6 +279,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
         list(APPEND PLATFORM_SOURCE
             ${PLATFORM_ROOT}/DoriaxAndroid.cpp
             ${PLATFORM_ROOT}/AndroidMain.cpp
+            ${PLATFORM_ROOT}/AndroidServices.cpp
             ${PLATFORM_ROOT}/NativeEngine.cpp
         )
 
@@ -597,27 +599,39 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 
             # GameController framework for gamepad input (DoriaxGameController.mm)
             "-framework GameController"
-
-            # To run on iOS simulator
-            ${PLATFORM_ROOT}/GoogleMobileAdsSdkiOS-10.14.0/FBLPromises.xcframework/ios-arm64_x86_64-simulator/FBLPromises.framework
-            ${PLATFORM_ROOT}/GoogleMobileAdsSdkiOS-10.14.0/GoogleAppMeasurement.xcframework/ios-arm64_x86_64-simulator/GoogleAppMeasurement.framework
-            ${PLATFORM_ROOT}/GoogleMobileAdsSdkiOS-10.14.0/GoogleAppMeasurementIdentitySupport.xcframework/ios-arm64_x86_64-simulator/GoogleAppMeasurementIdentitySupport.framework
-            ${PLATFORM_ROOT}/GoogleMobileAdsSdkiOS-10.14.0/GoogleMobileAds.xcframework/ios-arm64_x86_64-simulator/GoogleMobileAds.framework
-            ${PLATFORM_ROOT}/GoogleMobileAdsSdkiOS-10.14.0/GoogleUtilities.xcframework/ios-arm64_x86_64-simulator/GoogleUtilities.framework
-            ${PLATFORM_ROOT}/GoogleMobileAdsSdkiOS-10.14.0/UserMessagingPlatform.xcframework/ios-arm64_x86_64-simulator/UserMessagingPlatform.framework
-            ${PLATFORM_ROOT}/GoogleMobileAdsSdkiOS-10.14.0/nanopb.xcframework/ios-arm64_x86_64-simulator/nanopb.framework
-
-            # TODO: use here to run on real iOS devices
-            #${PLATFORM_ROOT}/GoogleMobileAdsSdkiOS-10.14.0/FBLPromises.xcframework/ios-arm64/FBLPromises.framework
-            #${PLATFORM_ROOT}/GoogleMobileAdsSdkiOS-10.14.0/GoogleAppMeasurement.xcframework/ios-arm64/GoogleAppMeasurement.framework
-            #${PLATFORM_ROOT}/GoogleMobileAdsSdkiOS-10.14.0/GoogleAppMeasurementIdentitySupport.xcframework/ios-arm64/GoogleAppMeasurementIdentitySupport.framework
-            #${PLATFORM_ROOT}/GoogleMobileAdsSdkiOS-10.14.0/GoogleMobileAds.xcframework/ios-arm64/GoogleMobileAds.framework
-            #${PLATFORM_ROOT}/GoogleMobileAdsSdkiOS-10.14.0/GoogleUtilities.xcframework/ios-arm64/GoogleUtilities.framework
-            #${PLATFORM_ROOT}/GoogleMobileAdsSdkiOS-10.14.0/UserMessagingPlatform.xcframework/ios-arm64_armv7/UserMessagingPlatform.framework
-            #${PLATFORM_ROOT}/GoogleMobileAdsSdkiOS-10.14.0/nanopb.xcframework/ios-arm64/nanopb.framework
         )
 
-        add_compile_options(-fmodules)
+        if(DORIAX_ADMOB)
+            add_definitions("-DDORIAX_ADMOB")
+
+            set(GOOGLE_MOBILE_ADS_ROOT ${PLATFORM_ROOT}/GoogleMobileAdsSdkiOS-13.11.0)
+
+            # a Swift source makes the app link the Swift libraries the SDK needs
+            enable_language(Swift)
+            list(APPEND PLATFORM_SOURCE ${GOOGLE_MOBILE_ADS_ROOT}/GoogleMobileAdsPlaceholder.swift)
+
+            if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.28)
+                # Xcode picks the device or simulator slice for each build
+                list(APPEND PLATFORM_LIBS
+                    ${GOOGLE_MOBILE_ADS_ROOT}/GoogleMobileAds.xcframework
+                    ${GOOGLE_MOBILE_ADS_ROOT}/UserMessagingPlatform.xcframework
+                )
+            else()
+                # simulator only; ios-arm64 holds the device slice
+                list(APPEND PLATFORM_LIBS
+                    ${GOOGLE_MOBILE_ADS_ROOT}/GoogleMobileAds.xcframework/ios-arm64_x86_64-simulator/GoogleMobileAds.framework
+                    ${GOOGLE_MOBILE_ADS_ROOT}/UserMessagingPlatform.xcframework/ios-arm64_x86_64-simulator/UserMessagingPlatform.framework
+                )
+            endif()
+
+            list(APPEND PLATFORM_PROPERTIES
+                XCODE_ATTRIBUTE_SWIFT_VERSION "5.0"
+                XCODE_ATTRIBUTE_LD_RUNPATH_SEARCH_PATHS "/usr/lib/swift @executable_path/Frameworks"
+            )
+        endif()
+
+        # Clang only: Swift rejects it
+        add_compile_options($<$<COMPILE_LANGUAGE:C,CXX,OBJC,OBJCXX>:-fmodules>)
 
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fobjc-arc")
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fobjc-arc")
@@ -683,6 +697,7 @@ include_directories(core/pool)
 include_directories(core/registry)
 include_directories(core/render)
 include_directories(core/script)
+include_directories(core/service)
 include_directories(core/shader)
 include_directories(core/subsystem)
 include_directories(core/texture)
@@ -863,6 +878,8 @@ set(DORIAX_SRCS
     core/script/binding/ObjectClassesLua.cpp
     core/script/binding/ThreadClassesLua.cpp
     core/script/binding/UtilClassesLua.cpp
+    core/service/AdMob.cpp
+    core/service/InAppPurchase.cpp
     core/shader/ShaderData.cpp
     core/shader/ShaderDataSerializer.cpp
     core/shader/ShaderUniforms.cpp

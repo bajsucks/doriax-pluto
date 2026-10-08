@@ -960,7 +960,8 @@ void editor::CodeEditor::showEventsButton(const EditorInstance& instance) {
     const bool lua = instance.languageType == SyntaxLanguage::Lua;
     const std::vector<ScriptEvent>& events = ScriptEvents::getEvents();
     for (const ScriptEventSourceInfo& source : ScriptEvents::getSources()) {
-        if (source.source == ScriptEventSource::UI || source.source == ScriptEventSource::Physics2D) {
+        if (source.source == ScriptEventSource::UI || source.source == ScriptEventSource::Physics2D ||
+                source.source == ScriptEventSource::AdMob) {
             ImGui::Separator();
         }
         if (!ImGui::BeginMenu((std::string(source.icon) + "  " + source.label).c_str())) continue;

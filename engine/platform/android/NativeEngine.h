@@ -20,13 +20,13 @@ struct JniData{
     jclass gameActivityClsRef;
 
     jmethodID getUserSettingsRef;
-    jmethodID getAdMobWrapperRef;
 
     jobject userSettingsObjRef;
     jclass userSettingsClsRef;
 
+    // Global references, null when the export leaves the service out
     jobject adMobWrapperObjRef;
-    jclass adMobWrapperClsRef;
+    jobject billingWrapperObjRef;
 
     jmethodID getBoolForKeyRef;
     jmethodID getIntegerForKeyRef;
@@ -44,11 +44,34 @@ struct JniData{
 
     jmethodID removeKeyRef;
 
-    jmethodID initializeAdMob;
-    jmethodID setMaxAdContentRating;
-    jmethodID loadInterstitialAd;
-    jmethodID isInterstitialAdLoaded;
-    jmethodID showInterstitialAd;
+    jmethodID admobInitialize;
+    jmethodID admobSetRequestConfiguration;
+    jmethodID admobRequestConsent;
+    jmethodID admobGetConsentStatus;
+    jmethodID admobCanRequestAds;
+    jmethodID admobIsPrivacyOptionsRequired;
+    jmethodID admobShowPrivacyOptionsForm;
+    jmethodID admobResetConsent;
+    jmethodID admobLoadAd;
+    jmethodID admobShowAd;
+    jmethodID admobLoadBanner;
+    jmethodID admobSetBannerVisible;
+    jmethodID admobSetBannerPosition;
+    jmethodID admobRemoveBanner;
+    jmethodID admobSetServerSideVerificationOptions;
+    jmethodID admobSetAppVolume;
+    jmethodID admobSetAppMuted;
+    jmethodID admobOpenAdInspector;
+
+    jmethodID billingInitialize;
+    jmethodID billingIsReady;
+    jmethodID billingQueryProducts;
+    jmethodID billingPurchase;
+    jmethodID billingAcknowledgePurchase;
+    jmethodID billingConsumePurchase;
+    jmethodID billingQueryPurchases;
+    jmethodID billingOpenSubscriptionManagement;
+    jmethodID billingShowInAppMessages;
 };
 
 class NativeEngine {

@@ -17,6 +17,11 @@ namespace doriax{
     class Body3D;
     class Contact3D;
     class CollideShapeResult3D;
+    enum class AdMobFormat;
+    enum class AdMobPrecision;
+    enum class BillingResponse;
+    enum class ProductType;
+    struct PurchaseDetails;
 
     // the base function wrapper class
     class LuaFunctionBase{
@@ -45,6 +50,7 @@ namespace doriax{
         void push_value(lua_State *vm, float n);
         void push_value(lua_State *vm, long n);
         void push_value(lua_State *vm, unsigned long n);
+        void push_value(lua_State *vm, long long n);
         void push_value(lua_State *vm, bool b);
         void push_value(lua_State *vm, const std::string &s);
         void push_value(lua_State *vm, wchar_t s);
@@ -56,6 +62,11 @@ namespace doriax{
         void push_value(lua_State *vm, Body3D o);
         void push_value(lua_State *vm, Contact3D o);
         void push_value(lua_State *vm, CollideShapeResult3D o);
+        void push_value(lua_State *vm, AdMobFormat o);
+        void push_value(lua_State *vm, AdMobPrecision o);
+        void push_value(lua_State *vm, BillingResponse o);
+        void push_value(lua_State *vm, ProductType o);
+        void push_value(lua_State *vm, const PurchaseDetails& o);
 
         // other overloads, for stuff like userdata or C functions
 

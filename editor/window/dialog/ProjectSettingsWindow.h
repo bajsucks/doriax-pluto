@@ -80,6 +80,9 @@ namespace doriax::editor {
         bool m_iosHideStatusBar = true;
         bool m_iosHideHomeIndicator = true;
         bool m_iosSupportsHighRefreshRate = true;
+        bool m_iosAdmobEnabled = false;
+        char m_iosAdmobAppIdBuffer[128] = {0};
+        char m_iosTrackingUsageDescriptionBuffer[512] = {0};
         char m_androidApplicationNameBuffer[256] = {0};
         char m_androidPackageNameBuffer[256] = {0};
         char m_androidVersionNameBuffer[64] = {0};
@@ -98,6 +101,9 @@ namespace doriax::editor {
         bool m_androidAllowBackup = true;
         bool m_androidFullscreen = true;
         bool m_androidKeepScreenOn = false;
+        bool m_androidAdmobEnabled = false;
+        char m_androidAdmobAppIdBuffer[128] = {0};
+        bool m_androidBillingEnabled = false;
 
         void drawSettings();
         void drawGeneralSettings();

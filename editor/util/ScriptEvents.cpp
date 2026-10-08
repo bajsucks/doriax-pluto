@@ -34,6 +34,8 @@ const std::vector<ScriptEventSourceInfo>& sourceList() {
         {S::Sound, "Sound", ICON_FA_VOLUME_HIGH, "SoundComponent.h", "SoundComponent", "REGISTER_COMPONENT_EVENT", "Sound"},
         {S::Physics2D, "Physics 2D", ICON_FA_CIRCLE, "PhysicsSystem.h", "", "REGISTER_EVENT", ""},
         {S::Physics3D, "Physics 3D", ICON_FA_CUBE, "PhysicsSystem.h", "", "REGISTER_EVENT", ""},
+        {S::AdMob, "AdMob", ICON_FA_RECTANGLE_AD, "AdMob.h", "", "REGISTER_EVENT", "", "AdMob"},
+        {S::InAppPurchase, "In-App Purchase", ICON_FA_CART_SHOPPING, "InAppPurchase.h", "", "REGISTER_EVENT", "", "InAppPurchase"},
     };
     return sources;
 }
@@ -48,6 +50,10 @@ const std::vector<ScriptEvent>& eventList() {
     static const std::vector<ScriptEventParam> contact2D = {{"Body2D", "bodyA"}, {"unsigned long", "shapeA"}, {"Body2D", "bodyB"}, {"unsigned long", "shapeB"}};
     static const std::vector<ScriptEventParam> sensor2D = {{"Body2D", "sensorBody"}, {"unsigned long", "sensorShape"}, {"Body2D", "visitorBody"}, {"unsigned long", "visitorShape"}};
     static const std::vector<ScriptEventParam> contact3D = {{"Body3D", "bodyA"}, {"Body3D", "bodyB"}, {"Contact3D", "contact"}};
+    static const std::vector<ScriptEventParam> adError = {{"AdMobFormat", "format"}, {"int", "errorCode"}, {"std::string", "message"}};
+    static const std::vector<ScriptEventParam> errorMessage = {{"int", "errorCode"}, {"std::string", "message"}};
+    static const std::vector<ScriptEventParam> billingResult = {{"BillingResponse", "response"}, {"std::string", "message"}};
+    static const std::vector<ScriptEventParam> tokenResult = {{"std::string", "purchaseToken"}, {"BillingResponse", "response"}, {"std::string", "message"}};
 
     static const std::vector<ScriptEvent> events = {
         {S::Engine, "onUpdate", "Frame", "Every frame, with a variable time step", {}},
@@ -134,6 +140,33 @@ const std::vector<ScriptEvent>& eventList() {
         {S::Physics3D, "onBodyDeactivated3D", "Bodies", "Any body goes to sleep", {{"Body3D", "body"}}},
         {S::Physics3D, "shouldCollide3D", "Filters", "Whether any two bodies collide, return false to skip them",
          {{"Body3D", "bodyA"}, {"Body3D", "bodyB"}, {"Vector3", "baseOffset"}, {"CollideShapeResult3D", "result"}}, true},
+
+        {S::AdMob, "onInitialized", "Setup", "Google Mobile Ads is ready to load ads", {}},
+        {S::AdMob, "onConsentUpdated", "Setup", "The consent request or privacy options form finished, errorCode is 0 on success", errorMessage},
+        {S::AdMob, "onAdInspectorClosed", "Setup", "The ad inspector closed", errorMessage},
+        {S::AdMob, "onAdLoaded", "Loading", "An ad loaded and can be shown", {{"AdMobFormat", "format"}}},
+        {S::AdMob, "onAdFailedToLoad", "Loading", "An ad failed to load", adError},
+        {S::AdMob, "onAdShown", "Showing", "A full screen ad opened, or a banner opened an overlay", {{"AdMobFormat", "format"}}},
+        {S::AdMob, "onAdFailedToShow", "Showing", "A full screen ad could not be shown", adError},
+        {S::AdMob, "onAdDismissed", "Showing", "A full screen ad or a banner overlay closed", {{"AdMobFormat", "format"}}},
+        {S::AdMob, "onAdClicked", "Showing", "An ad was clicked", {{"AdMobFormat", "format"}}},
+        {S::AdMob, "onAdImpression", "Showing", "An ad recorded an impression", {{"AdMobFormat", "format"}}},
+        {S::AdMob, "onUserEarnedReward", "Revenue", "The user earned the reward of a rewarded ad",
+         {{"AdMobFormat", "format"}, {"std::string", "rewardType"}, {"int", "amount"}}},
+        {S::AdMob, "onAdPaid", "Revenue", "An ad earned revenue, in micros of the currency",
+         {{"AdMobFormat", "format"}, {"long long", "valueMicros"}, {"std::string", "currencyCode"}, {"AdMobPrecision", "precision"}}},
+
+        {S::InAppPurchase, "onInitialized", "Connection", "The store connection is set up, check the response", billingResult},
+        {S::InAppPurchase, "onDisconnected", "Connection", "The store connection was lost", {}},
+        {S::InAppPurchase, "onProductsQueried", "Products", "Product details arrived, read them with getProducts", billingResult},
+        {S::InAppPurchase, "onPurchaseUpdated", "Purchases", "A purchase is new, changed or restored: grant it when purchased",
+         {{"PurchaseDetails", "purchase"}}},
+        {S::InAppPurchase, "onPurchaseFailed", "Purchases", "A purchase flow failed or was canceled",
+         {{"std::string", "productId"}, {"BillingResponse", "response"}, {"std::string", "message"}}},
+        {S::InAppPurchase, "onPurchasesQueried", "Purchases", "The owned purchases of a type were reported",
+         {{"ProductType", "productType"}, {"BillingResponse", "response"}, {"std::string", "message"}}},
+        {S::InAppPurchase, "onPurchaseAcknowledged", "Purchases", "A purchase was acknowledged", tokenResult},
+        {S::InAppPurchase, "onPurchaseConsumed", "Purchases", "A purchase was consumed and can be bought again", tokenResult},
     };
     return events;
 }
@@ -151,6 +184,10 @@ bool isEngineSource(ScriptEventSource source) {
 
 bool isPhysicsSource(ScriptEventSource source) {
     return source == S::Physics2D || source == S::Physics3D;
+}
+
+bool isClassSource(ScriptEventSource source) {
+    return *sourceInfo(source).eventClass != '\0';
 }
 
 const char* luaEventName(const ScriptEvent& event) {
@@ -262,6 +299,22 @@ std::string wordBefore(const std::string& text, size_t pos) {
 // "physics->beginContact2D" -> beginContact2D
 std::string lastIdentifier(const std::string& expression) {
     return wordBefore(expression, expression.size());
+}
+
+// "doriax::AdMob::onInitialized" or "AdMob.onInitialized", which InAppPurchase also has
+int findClassEvent(const std::string& expression, bool lua) {
+    const std::string name = lastIdentifier(expression);
+    if (name.empty()) return -1;
+
+    std::string qualifier = expression.substr(0, expression.rfind(name));
+    while (!qualifier.empty() && (qualifier.back() == ':' || qualifier.back() == '.' || isSpace(qualifier.back()))) {
+        qualifier.pop_back();
+    }
+    const std::string owner = lastIdentifier(qualifier);
+    for (const ScriptEventSourceInfo& source : sourceList()) {
+        if (*source.eventClass && owner == source.eventClass) return findEvent(source.source, name, lua);
+    }
+    return -1;
 }
 
 std::string unquote(const std::string& value) {
@@ -598,9 +651,11 @@ std::string handlerName(const ScriptEvent& event, bool lua, const std::vector<Re
     const std::string name = "on" + action;
     if (!registered.count(name) && findEvent(S::Engine, name, lua) < 0) return name;
 
-    // onSoundPause, onTextEditChange
-    const std::string component = sourceInfo(event.source).component;
-    const std::string base = "on" + component.substr(0, component.find("Component")) + action;
+    // onSoundPause, onTextEditChange, onAdMobInitialized
+    const ScriptEventSourceInfo& source = sourceInfo(event.source);
+    const std::string component = source.component;
+    const std::string owner = *source.eventClass ? source.eventClass : component.substr(0, component.find("Component"));
+    const std::string base = "on" + owner + action;
     std::string unique = base;
     for (int suffix = 2; registered.count(unique) || members.count(unique); suffix++) {
         unique = base + std::to_string(suffix);
@@ -850,7 +905,8 @@ std::vector<Registration> cppRegistrations(const CppScript& script) {
                 }
                 registration.method = args[2];
             } else if (word.text == "REGISTER_EVENT" && args.size() == 2) {
-                registration.event = findEventByName(lastIdentifier(args[0]), false);
+                registration.event = findClassEvent(args[0], false);
+                if (registration.event < 0) registration.event = findEventByName(lastIdentifier(args[0]), false);
                 registration.method = args[1];
             } else if (args.size() == 2) {
                 for (const ScriptEventSourceInfo& source : sourceList()) {
@@ -925,6 +981,9 @@ std::string cppRegistration(const ScriptEvent& event, const std::string& method,
     }
     if (isPhysicsSource(event.source)) {
         return macro + "(getScene()->getSystem<" + ns + "PhysicsSystem>()->" + event.name + ", " + method + ");";
+    }
+    if (isClassSource(event.source)) {
+        return macro + "(" + ns + source.eventClass + "::" + event.name + ", " + method + ");";
     }
     if (std::strcmp(source.registerMacro, "REGISTER_COMPONENT_EVENT") == 0) {
         return macro + "(" + ns + source.component + ", " + event.name + ", " + method + ");";
@@ -1134,6 +1193,7 @@ std::vector<Registration> luaRegistrations(const LuaScript& script) {
                     registration.event = findEvent(source.source, field, true);
                 }
             }
+            if (registration.event < 0) registration.event = findClassEvent(args[1], true);
             if (registration.event < 0) registration.event = findEventByName(field, true);
         } else {
             continue;
@@ -1161,6 +1221,9 @@ std::string luaRegistration(const ScriptEvent& event, const std::string& method)
     }
     if (isPhysicsSource(event.source)) {
         return "RegisterEvent(self, self.scene:getPhysicsSystem()." + field + ", \"" + method + "\")";
+    }
+    if (isClassSource(event.source)) {
+        return std::string("RegisterEvent(self, ") + source.eventClass + "." + field + ", \"" + method + "\")";
     }
     return std::string("RegisterEvent(self, ") + source.luaObject + "(self.scene, self.entity):get" + source.component +
            "()." + field + ", \"" + method + "\")";
@@ -1279,10 +1342,10 @@ ScriptEventChange ScriptEvents::addCpp(const std::vector<std::string>& documents
     const Document& classDoc = script.docs[script.cls.document];
     std::vector<TextEdit> edits;
 
-    // The physics types are used in the declaration, the other headers only by the macros
+    // Physics, AdMob and purchase types are used in the declaration, the other headers only by the macros
     size_t includeAt = includeOffset(classDoc, source.include);
     for (const Document& doc : script.docs) {
-        if (!isPhysicsSource(event.source) && includeOffset(doc, source.include) == npos) includeAt = npos;
+        if (!isPhysicsSource(event.source) && !isClassSource(event.source) && includeOffset(doc, source.include) == npos) includeAt = npos;
     }
     if (includeAt != npos) {
         edits.push_back({classDoc.index, includeAt, 0, "#include \"" + std::string(source.include) + "\"\n"});

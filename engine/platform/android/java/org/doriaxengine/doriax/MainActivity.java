@@ -1,5 +1,6 @@
 package org.doriaxengine.doriax;
 
+import android.app.Activity;
 import android.os.Build.VERSION;
 import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
@@ -11,6 +12,9 @@ import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.google.androidgamesdk.GameActivity;
 
+import java.util.ArrayList;
+import java.util.List;
+
 // A minimal extension of GameActivity. For this sample, it is only used to invoke
 // a workaround for loading the runtime shared library on old Android versions
 public class MainActivity extends GameActivity {
@@ -21,7 +25,10 @@ public class MainActivity extends GameActivity {
 	}
 
 	private UserSettings userSettings;
-	private AdMobWrapper admobWrapper;
+	// Null when the export leaves AdMob or Google Play Billing out
+	private Object adMobWrapper;
+	private Object billingWrapper;
+	private final List<ActivityListener> activityListeners = new ArrayList<>();
 
 	private void hideSystemUI() {
 		// This will put the game behind any cutouts and waterfalls on devices which have
@@ -41,6 +48,19 @@ public class MainActivity extends GameActivity {
 				WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
 	}
 
+	// The wrapper sources are compiled only when the export enables their service
+	private Object createOptionalWrapper(String className) {
+		try {
+			Object wrapper = Class.forName(className).getConstructor(Activity.class).newInstance(this);
+			if (wrapper instanceof ActivityListener) {
+				activityListeners.add((ActivityListener) wrapper);
+			}
+			return wrapper;
+		} catch (ReflectiveOperationException | LinkageError e) {
+			return null;
+		}
+	}
+
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		// When true, the app will fit inside any system UI windows.
@@ -49,7 +69,8 @@ public class MainActivity extends GameActivity {
 		hideSystemUI();
 
 		userSettings = new UserSettings(this);
-		admobWrapper = new AdMobWrapper(this);
+		adMobWrapper = createOptionalWrapper("org.doriaxengine.doriax.AdMobWrapper");
+		billingWrapper = createOptionalWrapper("org.doriaxengine.doriax.BillingWrapper");
 
 		super.onCreate(savedInstanceState);
 	}
@@ -58,13 +79,36 @@ public class MainActivity extends GameActivity {
 	protected void onResume() {
 		super.onResume();
 		hideSystemUI();
+		for (ActivityListener listener : activityListeners) {
+			listener.onActivityResume();
+		}
+	}
+
+	@Override
+	protected void onPause() {
+		for (ActivityListener listener : activityListeners) {
+			listener.onActivityPause();
+		}
+		super.onPause();
+	}
+
+	@Override
+	protected void onDestroy() {
+		for (ActivityListener listener : activityListeners) {
+			listener.onActivityDestroy();
+		}
+		super.onDestroy();
 	}
 
 	public UserSettings getUserSettings() {
 		return userSettings;
 	}
 
-	public AdMobWrapper getAdMobWrapper() {
-		return admobWrapper;
+	public Object getAdMobWrapper() {
+		return adMobWrapper;
+	}
+
+	public Object getBillingWrapper() {
+		return billingWrapper;
 	}
 }

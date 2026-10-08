@@ -241,6 +241,11 @@ namespace doriax::editor{
         bool hideStatusBar = true;
         bool hideHomeIndicator = true;
         bool supportsHighRefreshRate = true;
+        // Google Mobile Ads is linked only when enabled
+        bool admobEnabled = false;
+        std::string admobAppId;
+        // NSUserTrackingUsageDescription, which the consent form's IDFA message needs
+        std::string trackingUsageDescription;
     };
 
     enum class AndroidOrientation {
@@ -271,7 +276,19 @@ namespace doriax::editor{
         bool allowBackup = true;
         bool fullscreen = true;
         bool keepScreenOn = false;
+        // Google Mobile Ads and Google Play Billing are compiled in only when enabled
+        bool admobEnabled = false;
+        std::string admobAppId;
+        bool billingEnabled = false;
     };
+
+    // Google's sample AdMob apps, which only serve test ads. Exports fall back to them.
+    inline constexpr const char* androidSampleAdMobAppId = "ca-app-pub-3940256099942544~3347511713";
+    inline constexpr const char* iosSampleAdMobAppId = "ca-app-pub-3940256099942544~1458002511";
+
+    // Lowest Android API levels of Google Mobile Ads and Google Play Billing
+    inline constexpr unsigned int admobMinAndroidSdk = 24;
+    inline constexpr unsigned int billingMinAndroidSdk = 23;
 
     using SharedMoveRecovery = std::map<std::string, SharedMoveRecoveryEntry>;
 

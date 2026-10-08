@@ -16,6 +16,8 @@
 #include "object/physics/Contact3D.h"
 #include "object/physics/CollideShapeResult3D.h"
 #endif
+#include "service/AdMob.h"
+#include "service/InAppPurchase.h"
 #include "LuaBinding.h"
 #include "Log.h"
 
@@ -118,6 +120,31 @@ void LuaFunctionBase::push_value(lua_State *vm, long n){
 
 void LuaFunctionBase::push_value(lua_State *vm, unsigned long n){
     lua_pushnumber(vm, n); 
+}
+
+void LuaFunctionBase::push_value(lua_State *vm, long long n){
+    lua_pushinteger(vm, n);
+}
+
+void LuaFunctionBase::push_value(lua_State *vm, AdMobFormat o){
+    lua_pushinteger(vm, static_cast<lua_Integer>(o));
+}
+
+void LuaFunctionBase::push_value(lua_State *vm, AdMobPrecision o){
+    lua_pushinteger(vm, static_cast<lua_Integer>(o));
+}
+
+void LuaFunctionBase::push_value(lua_State *vm, BillingResponse o){
+    lua_pushinteger(vm, static_cast<lua_Integer>(o));
+}
+
+void LuaFunctionBase::push_value(lua_State *vm, ProductType o){
+    lua_pushinteger(vm, static_cast<lua_Integer>(o));
+}
+
+void LuaFunctionBase::push_value(lua_State *vm, const PurchaseDetails& o){
+    if (!luabridge::push<PurchaseDetails>(vm, o))
+        throw luabridge::makeErrorCode(luabridge::ErrorCode::LuaStackOverflow);
 }
 
 void LuaFunctionBase::push_value(lua_State *vm, bool b){

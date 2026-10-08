@@ -5,6 +5,8 @@
 #include "Log.h"
 #include "Scene.h"
 #include "Input.h"
+#include "service/AdMob.h"
+#include "service/InAppPurchase.h"
 #include "render/SystemRender.h"
 #include "script/LuaBinding.h"
 #include "manager/SceneManager.h"
@@ -806,6 +808,9 @@ void Engine::removeSubscriptionsByTag(const std::string& substring) {
     onResume.removeByTagSubstring(substring);
     onShutdown.removeByTagSubstring(substring);
     onSceneLoaded.removeByTagSubstring(substring);
+
+    AdMob::removeSubscriptionsByTag(substring);
+    InAppPurchase::removeSubscriptionsByTag(substring);
 }
 
 void Engine::clearAllSubscriptions(bool includeLifecycle) {
@@ -836,6 +841,9 @@ void Engine::clearAllSubscriptions(bool includeLifecycle) {
     onGamepadButtonDown.clear();
     onGamepadButtonUp.clear();
     onGamepadAxisMove.clear();
+
+    AdMob::clearSubscriptions();
+    InAppPurchase::clearSubscriptions();
 
     if (includeLifecycle) {
         onViewLoaded.clear();
@@ -1094,6 +1102,10 @@ void Engine::systemDraw(){
 
     frameRunning = true;
 
+    // ad and purchase results the platform sent since the last frame
+    AdMob::dispatchEvents();
+    InAppPurchase::dispatchEvents();
+
     // a transition requested during the last frame; one requested by its factory waits again
     SceneManager::applyPendingLoad();
 
@@ -1242,6 +1254,12 @@ void Engine::systemViewDestroyed(){
 
 void Engine::systemShutdown(){
     Engine::onShutdown.call();
+
+    // before the Lua state closes under their callbacks
+    AdMob::clearSubscriptions();
+    AdMob::reset();
+    InAppPurchase::clearSubscriptions();
+    InAppPurchase::reset();
 
     LuaBinding::cleanup();
 

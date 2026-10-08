@@ -55,11 +55,25 @@ public:
 
     virtual void removeKey(const char *key) override;
 
-    virtual void initializeAdMob(bool tagForChildDirectedTreatment, bool tagForUnderAgeOfConsent) override;
-    virtual void setMaxAdContentRating(doriax::AdMobRating rating) override;
-    virtual void loadInterstitialAd(const std::string& adUnitID) override;
-    virtual bool isInterstitialAdLoaded() override;
-    virtual void showInterstitialAd() override;
+    // iOS builds with DORIAX_ADMOB only
+    virtual bool admobInitialize() override;
+    virtual bool admobSetRequestConfiguration(doriax::AdMobRating rating, doriax::AdMobAgeRestriction ageRestriction, doriax::AdMobPersonalization personalization, const std::vector<std::string>& testDeviceIds) override;
+    virtual bool admobRequestConsent(bool underAgeOfConsent, doriax::AdMobDebugGeography debugGeography, const std::vector<std::string>& testDeviceIds) override;
+    virtual doriax::AdMobConsentStatus admobGetConsentStatus() override;
+    virtual bool admobCanRequestAds() override;
+    virtual bool admobIsPrivacyOptionsRequired() override;
+    virtual bool admobShowPrivacyOptionsForm() override;
+    virtual void admobResetConsent() override;
+    virtual bool admobLoadAd(doriax::AdMobFormat format, const std::string& adUnitId, int generation) override;
+    virtual bool admobShowAd(doriax::AdMobFormat format) override;
+    virtual bool admobLoadBanner(const std::string& adUnitId, doriax::AdMobBannerSize size, doriax::AdMobBannerPosition position, bool visible, int generation) override;
+    virtual void admobSetBannerVisible(bool visible) override;
+    virtual void admobSetBannerPosition(doriax::AdMobBannerPosition position) override;
+    virtual void admobRemoveBanner() override;
+    virtual void admobSetServerSideVerificationOptions(const std::string& userId, const std::string& customData) override;
+    virtual void admobSetAppVolume(float volume) override;
+    virtual void admobSetAppMuted(bool muted) override;
+    virtual bool admobOpenAdInspector() override;
 };
 
 

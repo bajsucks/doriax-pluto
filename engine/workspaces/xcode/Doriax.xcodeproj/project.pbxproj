@@ -389,11 +389,7 @@
 		71125F1C2E41845E006D11A1 /* EntityRegistry.h in Headers */ = {isa = PBXBuildFile; fileRef = 71125F172E41845E006D11A1 /* EntityRegistry.h */; };
 		711607082A0D1F0C0052A9C3 /* AdMobAdapter.m in Sources */ = {isa = PBXBuildFile; fileRef = 711607072A0D1F0C0052A9C3 /* AdMobAdapter.m */; };
 		7116070B2A0D84660052A9C3 /* GoogleMobileAds.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7116070A2A0D84660052A9C3 /* GoogleMobileAds.xcframework */; };
-		711607122A0D86500052A9C3 /* GoogleAppMeasurement.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7116070C2A0D864F0052A9C3 /* GoogleAppMeasurement.xcframework */; };
-		711607132A0D86500052A9C3 /* FBLPromises.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7116070D2A0D86500052A9C3 /* FBLPromises.xcframework */; };
-		711607142A0D86500052A9C3 /* GoogleUtilities.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7116070E2A0D86500052A9C3 /* GoogleUtilities.xcframework */; };
-		711607152A0D86500052A9C3 /* nanopb.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7116070F2A0D86500052A9C3 /* nanopb.xcframework */; };
-		711607162A0D86500052A9C3 /* GoogleAppMeasurementIdentitySupport.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 711607102A0D86500052A9C3 /* GoogleAppMeasurementIdentitySupport.xcframework */; };
+		FEA630402AD31C570E5F77CB /* GoogleMobileAdsPlaceholder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 866752E2CD937474824CEBFB /* GoogleMobileAdsPlaceholder.swift */; };
 		711607172A0D86500052A9C3 /* UserMessagingPlatform.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 711607112A0D86500052A9C3 /* UserMessagingPlatform.xcframework */; };
 		71165BBF282981BE00CF79C1 /* Base64.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 71165BBD282981BE00CF79C1 /* Base64.cpp */; };
 		71165BC0282981BE00CF79C1 /* Base64.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 71165BBD282981BE00CF79C1 /* Base64.cpp */; };
@@ -555,6 +551,10 @@
 		7162FD4A25963AE00075B97D /* Texture.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7162FC6C25962A0E0075B97D /* Texture.cpp */; };
 		7162FD4D25963AE00075B97D /* RenderSystem.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7162FC7025962A0E0075B97D /* RenderSystem.cpp */; };
 		7162FD4F25963AE00075B97D /* Engine.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7162FC7225962A0E0075B97D /* Engine.cpp */; };
+		28E52BA95CCC81E935E8C5C9 /* AdMob.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FFF5659A4A956B408AC2FB6E /* AdMob.cpp */; };
+		F84CC14AEBB190B5A8922A45 /* AdMob.cpp in Sources */ = {isa = PBXBuildFile; fileRef = FFF5659A4A956B408AC2FB6E /* AdMob.cpp */; };
+		9EE41A5717A3B925766DF671 /* InAppPurchase.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6C5792484E249F98EB4EF3CB /* InAppPurchase.cpp */; };
+		B5C14DF393F15D4646BB7F97 /* InAppPurchase.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6C5792484E249F98EB4EF3CB /* InAppPurchase.cpp */; };
 		7162FD5825963AE00075B97D /* InterleavedBuffer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7162FC7D25962A0E0075B97D /* InterleavedBuffer.cpp */; };
 		7162FD5925963AE00075B97D /* Buffer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7162FC7E25962A0E0075B97D /* Buffer.cpp */; };
 		7162FD5C25963AE00075B97D /* Attribute.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7162FC8125962A0E0075B97D /* Attribute.cpp */; };
@@ -1932,13 +1932,9 @@
 		71125F182E41845E006D11A1 /* EntityRegistry.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = EntityRegistry.cpp; sourceTree = "<group>"; };
 		711607072A0D1F0C0052A9C3 /* AdMobAdapter.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AdMobAdapter.m; sourceTree = "<group>"; };
 		711607092A0D1F360052A9C3 /* AdMobAdapter.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AdMobAdapter.h; sourceTree = "<group>"; };
-		7116070A2A0D84660052A9C3 /* GoogleMobileAds.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = GoogleMobileAds.xcframework; path = "../../platform/apple/GoogleMobileAdsSdkiOS-10.14.0/GoogleMobileAds.xcframework"; sourceTree = "<group>"; };
-		7116070C2A0D864F0052A9C3 /* GoogleAppMeasurement.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = GoogleAppMeasurement.xcframework; path = "../../platform/apple/GoogleMobileAdsSdkiOS-10.14.0/GoogleAppMeasurement.xcframework"; sourceTree = "<group>"; };
-		7116070D2A0D86500052A9C3 /* FBLPromises.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = FBLPromises.xcframework; path = "../../platform/apple/GoogleMobileAdsSdkiOS-10.14.0/FBLPromises.xcframework"; sourceTree = "<group>"; };
-		7116070E2A0D86500052A9C3 /* GoogleUtilities.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = GoogleUtilities.xcframework; path = "../../platform/apple/GoogleMobileAdsSdkiOS-10.14.0/GoogleUtilities.xcframework"; sourceTree = "<group>"; };
-		7116070F2A0D86500052A9C3 /* nanopb.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = nanopb.xcframework; path = "../../platform/apple/GoogleMobileAdsSdkiOS-10.14.0/nanopb.xcframework"; sourceTree = "<group>"; };
-		711607102A0D86500052A9C3 /* GoogleAppMeasurementIdentitySupport.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = GoogleAppMeasurementIdentitySupport.xcframework; path = "../../platform/apple/GoogleMobileAdsSdkiOS-10.14.0/GoogleAppMeasurementIdentitySupport.xcframework"; sourceTree = "<group>"; };
-		711607112A0D86500052A9C3 /* UserMessagingPlatform.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = UserMessagingPlatform.xcframework; path = "../../platform/apple/GoogleMobileAdsSdkiOS-10.14.0/UserMessagingPlatform.xcframework"; sourceTree = "<group>"; };
+		7116070A2A0D84660052A9C3 /* GoogleMobileAds.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = GoogleMobileAds.xcframework; path = "../../platform/apple/GoogleMobileAdsSdkiOS-13.11.0/GoogleMobileAds.xcframework"; sourceTree = "<group>"; };
+		866752E2CD937474824CEBFB /* GoogleMobileAdsPlaceholder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = GoogleMobileAdsPlaceholder.swift; path = "../../platform/apple/GoogleMobileAdsSdkiOS-13.11.0/GoogleMobileAdsPlaceholder.swift"; sourceTree = "<group>"; };
+		711607112A0D86500052A9C3 /* UserMessagingPlatform.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = UserMessagingPlatform.xcframework; path = "../../platform/apple/GoogleMobileAdsSdkiOS-13.11.0/UserMessagingPlatform.xcframework"; sourceTree = "<group>"; };
 		71165BBD282981BE00CF79C1 /* Base64.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Base64.cpp; sourceTree = "<group>"; };
 		71165BBE282981BE00CF79C1 /* Base64.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Base64.h; sourceTree = "<group>"; };
 		711BFE392E6E5AE500677D11 /* ScriptComponent.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ScriptComponent.h; sourceTree = "<group>"; };
@@ -2104,6 +2100,10 @@
 		7162FC7025962A0E0075B97D /* RenderSystem.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = RenderSystem.cpp; sourceTree = "<group>"; };
 		7162FC7125962A0E0075B97D /* RenderSystem.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = RenderSystem.h; sourceTree = "<group>"; };
 		7162FC7225962A0E0075B97D /* Engine.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = Engine.cpp; sourceTree = "<group>"; };
+		5F15A9476017C7274CB002E4 /* AdMob.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = AdMob.h; sourceTree = "<group>"; };
+		FFF5659A4A956B408AC2FB6E /* AdMob.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = AdMob.cpp; sourceTree = "<group>"; };
+		19E77A849E46C6CCDF490A80 /* InAppPurchase.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = InAppPurchase.h; sourceTree = "<group>"; };
+		6C5792484E249F98EB4EF3CB /* InAppPurchase.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = InAppPurchase.cpp; sourceTree = "<group>"; };
 		7162FC7A25962A0E0075B97D /* Doriax.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Doriax.h; sourceTree = "<group>"; };
 		7162FC7C25962A0E0075B97D /* IndexBuffer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = IndexBuffer.h; sourceTree = "<group>"; };
 		7162FC7D25962A0E0075B97D /* InterleavedBuffer.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = InterleavedBuffer.cpp; sourceTree = "<group>"; };
@@ -3053,11 +3053,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				711607122A0D86500052A9C3 /* GoogleAppMeasurement.xcframework in Frameworks */,
-				711607132A0D86500052A9C3 /* FBLPromises.xcframework in Frameworks */,
-				711607142A0D86500052A9C3 /* GoogleUtilities.xcframework in Frameworks */,
-				711607152A0D86500052A9C3 /* nanopb.xcframework in Frameworks */,
-				711607162A0D86500052A9C3 /* GoogleAppMeasurementIdentitySupport.xcframework in Frameworks */,
 				711607172A0D86500052A9C3 /* UserMessagingPlatform.xcframework in Frameworks */,
 				7116070B2A0D84660052A9C3 /* GoogleMobileAds.xcframework in Frameworks */,
 				713D82D7259D324700567F9F /* libdoriax-ios.a in Frameworks */,
@@ -3219,6 +3214,17 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		CAC81CE6E6C006848F308998 /* service */ = {
+			isa = PBXGroup;
+			children = (
+				5F15A9476017C7274CB002E4 /* AdMob.h */,
+				FFF5659A4A956B408AC2FB6E /* AdMob.cpp */,
+				19E77A849E46C6CCDF490A80 /* InAppPurchase.h */,
+				6C5792484E249F98EB4EF3CB /* InAppPurchase.cpp */,
+			);
+			path = service;
+			sourceTree = "<group>";
+		};
 		1787AD932F6C333300DB1D75 /* manager */ = {
 			isa = PBXGroup;
 			children = (
@@ -4036,6 +4042,7 @@
 				7162FC2D25962A0E0075B97D /* Scene.cpp */,
 				175DCCBA300FA22F008C19EC /* SceneSettings.h */,
 				71BE622C25B1DB9D006D6E02 /* script */,
+				CAC81CE6E6C006848F308998 /* service */,
 				71CC839D26B8C54A00EEBB93 /* shader */,
 				7162FC6F25962A0E0075B97D /* subsystem */,
 				71BE61FE25B1DB22006D6E02 /* System.h */,
@@ -4380,13 +4387,9 @@
 			children = (
 				717AD972290B67B8007D7DB5 /* AudioToolbox.framework */,
 				717AD970290B67A5007D7DB5 /* AVFoundation.framework */,
-				7116070D2A0D86500052A9C3 /* FBLPromises.xcframework */,
 				17995BF93003C40000411B78 /* GameController.framework */,
-				7116070C2A0D864F0052A9C3 /* GoogleAppMeasurement.xcframework */,
-				711607102A0D86500052A9C3 /* GoogleAppMeasurementIdentitySupport.xcframework */,
 				7116070A2A0D84660052A9C3 /* GoogleMobileAds.xcframework */,
-				7116070E2A0D86500052A9C3 /* GoogleUtilities.xcframework */,
-				7116070F2A0D86500052A9C3 /* nanopb.xcframework */,
+				866752E2CD937474824CEBFB /* GoogleMobileAdsPlaceholder.swift */,
 				711607112A0D86500052A9C3 /* UserMessagingPlatform.xcframework */,
 			);
 			name = Frameworks;
@@ -7226,6 +7229,8 @@
 				71ABBD4527A879D4001CE3AF /* Button.cpp in Sources */,
 				713D82AD259D307F00567F9F /* RenderSystem.cpp in Sources */,
 				713D82AE259D307F00567F9F /* Engine.cpp in Sources */,
+				28E52BA95CCC81E935E8C5C9 /* AdMob.cpp in Sources */,
+				9EE41A5717A3B925766DF671 /* InAppPurchase.cpp in Sources */,
 				71ABBD1D277A31BA001CE3AF /* Text.cpp in Sources */,
 				71ABBD4A27A87A2E001CE3AF /* MeshSystem.cpp in Sources */,
 				71ABBD25277A31E6001CE3AF /* UISystem.cpp in Sources */,
@@ -7294,6 +7299,7 @@
 				713D835B259D408C00567F9F /* AppDelegate.m in Sources */,
 				713D82E4259D32FE00567F9F /* DoriaxApple.mm in Sources */,
 				711607082A0D1F0C0052A9C3 /* AdMobAdapter.m in Sources */,
+				FEA630402AD31C570E5F77CB /* GoogleMobileAdsPlaceholder.swift in Sources */,
 				7158F43F259C2C82006E55D3 /* Renderer.mm in Sources */,
 				7162FEAC25993F810075B97D /* main.cpp in Sources */,
 				17995BF73003C3A800411B78 /* DoriaxGameController.mm in Sources */,
@@ -7438,6 +7444,8 @@
 				71E54503284D5BB700C68FAB /* ScaleTracks.cpp in Sources */,
 				7170A3D52818A8A30003E965 /* Bone.cpp in Sources */,
 				7162FD4F25963AE00075B97D /* Engine.cpp in Sources */,
+				F84CC14AEBB190B5A8922A45 /* AdMob.cpp in Sources */,
+				B5C14DF393F15D4646BB7F97 /* InAppPurchase.cpp in Sources */,
 				7105A55828B305910092EA05 /* Color.cpp in Sources */,
 				716803C92DF75E6F00ED71BE /* ThreadClassesLua.cpp in Sources */,
 				710506AE297F4483002DD23C /* Shape.cpp in Sources */,
@@ -8369,6 +8377,7 @@
 					"$(inherited)",
 					DORIAX_PHYSICS_2D,
 					DORIAX_PHYSICS_3D,
+					DORIAX_ADMOB,
 				);
 				HEADER_SEARCH_PATHS = (
 					"$(SRCROOT)/../../core",
@@ -8384,6 +8393,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
+					"/usr/lib/swift",
 					"@executable_path/Frameworks",
 				);
 				OTHER_CPLUSPLUSFLAGS = "$(OTHER_CFLAGS)";
@@ -8391,6 +8401,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = org.doriax.doriaxengine;
 				PRODUCT_NAME = Doriax;
 				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
@@ -8406,6 +8417,7 @@
 					"$(inherited)",
 					DORIAX_PHYSICS_2D,
 					DORIAX_PHYSICS_3D,
+					DORIAX_ADMOB,
 				);
 				HEADER_SEARCH_PATHS = (
 					"$(SRCROOT)/../../core",
@@ -8421,6 +8433,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
+					"/usr/lib/swift",
 					"@executable_path/Frameworks",
 				);
 				OTHER_CPLUSPLUSFLAGS = "$(OTHER_CFLAGS)";
@@ -8428,6 +8441,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = org.doriax.doriaxengine;
 				PRODUCT_NAME = Doriax;
 				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VALIDATE_PRODUCT = YES;
 			};
