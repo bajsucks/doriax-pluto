@@ -19,7 +19,8 @@ namespace doriax {
         CRAZYGAMES,
         POKI,
         GAMEDISTRIBUTION,
-        YANDEX
+        YANDEX,
+        YOUTUBE
     };
 
     // Sent to the platform as integers, so keep the order
@@ -50,6 +51,8 @@ namespace doriax {
         virtual void loadingStart() = 0;
         virtual void loadingStop() = 0;
         virtual void happytime() = 0;
+        virtual void loadData() = 0;
+        virtual void saveData(const std::string& data) = 0;
     };
 
     // Game portal SDKs of web exports, like CrazyGames and Poki. Results arrive as events
@@ -75,7 +78,8 @@ namespace doriax {
     public:
         static WebPortalType getPortal();
 
-        // Loads the portal SDK; onInitialized tells the environment it runs in
+        // Loads the portal SDK; call it at startup, as some portals pause or mute the game.
+        // onInitialized tells the environment it runs in.
         static void initialize();
         static WebPortalEnvironment getEnvironment();
         // Initialized on the portal or localhost
@@ -88,11 +92,15 @@ namespace doriax {
         // Gameplay starts at play and resume, and stops at every break: menus, pauses, level ends
         static void gameplayStart();
         static void gameplayStop();
-        // Around loading screens. Yandex Games requires loadingStop once the game is playable.
+        // Around loading screens; Yandex and YouTube require loadingStop once the game is playable
         static void loadingStart();
         static void loadingStop();
         // A happy moment, like a level completed
         static void happytime();
+
+        // Cloud save of one string. YouTube allows no other save, and refuses it before a loadData.
+        static void loadData();
+        static void saveData(const std::string& data);
 
         static FunctionSubscribe<void(WebPortalEnvironment)> onInitialized;
         static FunctionSubscribe<void(WebPortalAdType)> onAdStarted;
@@ -100,12 +108,19 @@ namespace doriax {
         // code: unfilled when no ad played, unavailable without a portal, other for other failures
         // (like a rewarded ad closed early), or a CrazyGames code like adCooldown
         static FunctionSubscribe<void(WebPortalAdType, std::string, std::string)> onAdError;
+        // data is empty when nothing was saved yet
+        static FunctionSubscribe<void(std::string)> onDataLoaded;
+        static FunctionSubscribe<void(std::string)> onDataLoadFailed;
+        static FunctionSubscribe<void(std::string)> onDataSaveFailed;
 
         // Platform callbacks, safe from any thread
         static void systemInitialized(WebPortalEnvironment environment, const std::string& error);
         static void systemAdStarted(WebPortalAdType type);
         static void systemAdFinished(WebPortalAdType type);
         static void systemAdError(WebPortalAdType type, const std::string& code, const std::string& message);
+        static void systemDataLoaded(const std::string& data);
+        static void systemDataLoadFailed(const std::string& message);
+        static void systemDataSaveFailed(const std::string& message);
     };
 
 }

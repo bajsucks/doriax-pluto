@@ -898,6 +898,7 @@ std::string editor::Stream::webPortalTypeToString(WebPortalType type) {
         case WebPortalType::POKI: return "poki";
         case WebPortalType::GAMEDISTRIBUTION: return "gamedistribution";
         case WebPortalType::YANDEX: return "yandex";
+        case WebPortalType::YOUTUBE: return "youtube";
         case WebPortalType::NONE:
         default: return "none";
     }
@@ -908,6 +909,7 @@ WebPortalType editor::Stream::stringToWebPortalType(const std::string& str) {
     if (str == "poki") return WebPortalType::POKI;
     if (str == "gamedistribution") return WebPortalType::GAMEDISTRIBUTION;
     if (str == "yandex") return WebPortalType::YANDEX;
+    if (str == "youtube") return WebPortalType::YOUTUBE;
     return WebPortalType::NONE;
 }
 

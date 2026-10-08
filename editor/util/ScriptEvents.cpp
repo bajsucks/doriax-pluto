@@ -174,6 +174,9 @@ const std::vector<ScriptEvent>& eventList() {
         {S::WebPortal, "onAdFinished", "Ads", "An ad finished: grant the reward of a rewarded ad", {{"WebPortalAdType", "type"}}},
         {S::WebPortal, "onAdError", "Ads", "No ad played, or it failed",
          {{"WebPortalAdType", "type"}, {"std::string", "code"}, {"std::string", "message"}}},
+        {S::WebPortal, "onDataLoaded", "Cloud Save", "The cloud save loaded; saving works from now on", {{"std::string", "data"}}},
+        {S::WebPortal, "onDataLoadFailed", "Cloud Save", "The cloud save could not be loaded", {{"std::string", "message"}}},
+        {S::WebPortal, "onDataSaveFailed", "Cloud Save", "Saving to the cloud failed", {{"std::string", "message"}}},
     };
     return events;
 }

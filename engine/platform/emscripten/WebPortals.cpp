@@ -7,33 +7,32 @@
 #include "DoriaxWeb.h"
 
 #include <emscripten/emscripten.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "Engine.h"
 #include "service/WebPortal.h"
+#include "subsystem/AudioSystem.h"
 
 using namespace doriax;
 
 namespace {
-    // Portals ask to pause and mute the game while an ad, or a screen of their own, shows
+    // The game stays paused while one of its ads plays or the portal asks for it
+    bool pausedForAd = false;
     bool pausedByPortal = false;
 
-    void pauseByPortal(){
-        if (!pausedByPortal){
-            pausedByPortal = true;
+    void setPaused(bool& reason, bool paused){
+        const bool wasPaused = pausedForAd || pausedByPortal;
+        reason = paused;
+        const bool isPaused = pausedForAd || pausedByPortal;
+        if (isPaused && !wasPaused){
             Engine::systemPause();
-        }
-    }
-
-    void resumeByPortal(){
-        if (pausedByPortal){
-            pausedByPortal = false;
+        }else if (wasPaused && !isPaused){
             Engine::systemResume();
         }
     }
 
-    // The adapter calls shared by the portals; they wait for the SDK and do nothing without it,
-    // or when the adapter lacks the method
+    // Calls shared by the adapters. They wait for the SDK; ads and saves report any failure.
     class ScriptPortal: public WebPortalBackend{
     public:
         virtual void requestAd(WebPortalAdType type) override{
@@ -62,6 +61,8 @@ namespace {
                         },
                         failed: fail
                     });
+                }).catch(function(error) {
+                    fail(started ? "other" : "unfilled", String((error && error.message) ? error.message : error));
                 });
             }, static_cast<int>(type));
         }
@@ -84,6 +85,53 @@ namespace {
 
         virtual void happytime() override{
             callAdapter("happytime");
+        }
+
+        virtual void loadData() override{
+            EM_ASM({
+                var fail = function(message) {
+                    ccall("webportal_data_load_failed_callback", null, ["string"], [message]);
+                };
+                if (!Module.webPortal) {
+                    fail("Call WebPortal.initialize first");
+                    return;
+                }
+                Module.webPortal.then(function(portal) {
+                    if (!portal.adapter || !portal.adapter.loadData) {
+                        throw new Error(portal.adapter ? "This portal has no cloud save" : "The portal SDK is not available here");
+                    }
+                    return portal.adapter.loadData();
+                }).then(function(data) {
+                    var text = data ? String(data) : "";
+                    var size = lengthBytesUTF8(text) + 1;
+                    var buffer = _malloc(size);
+                    stringToUTF8(text, buffer, size);
+                    ccall("webportal_data_loaded_callback", null, ["number"], [buffer]);
+                }, function(error) {
+                    fail(String((error && error.message) ? error.message : error));
+                });
+            });
+        }
+
+        virtual void saveData(const std::string& data) override{
+            EM_ASM({
+                var data = UTF8ToString($0);
+                var fail = function(message) {
+                    ccall("webportal_data_save_failed_callback", null, ["string"], [message]);
+                };
+                if (!Module.webPortal) {
+                    fail("Call WebPortal.initialize first");
+                    return;
+                }
+                Module.webPortal.then(function(portal) {
+                    if (!portal.adapter || !portal.adapter.saveData) {
+                        throw new Error(portal.adapter ? "This portal has no cloud save" : "The portal SDK is not available here");
+                    }
+                    return portal.adapter.saveData(data);
+                }).catch(function(error) {
+                    fail(String((error && error.message) ? error.message : error));
+                });
+            }, data.c_str());
         }
 
     private:
@@ -272,7 +320,7 @@ namespace {
                                         request.events.started();
                                     }
                                 } else if (event.name === "SDK_GAME_START") {
-                                    if (!request || !request.started) ccall("webportal_pause_callback", null, ["number"], [0]);
+                                    ccall("webportal_pause_callback", null, ["number"], [0]);
                                 } else if (event.name === "SDK_REWARDED_WATCH_COMPLETE") {
                                     if (request) request.rewarded = true;
                                 } else if (event.name === "AD_ERROR") {
@@ -382,6 +430,66 @@ namespace {
             });
         }
     };
+
+    // YouTube Playables loads its SDK in the page head, and pauses and mutes the game itself
+    class YouTubePortal: public ScriptPortal{
+    public:
+        virtual WebPortalType getType() override{
+            return WebPortalType::YOUTUBE;
+        }
+
+        virtual void initialize() override{
+            EM_ASM({
+                if (!Module.webPortal) {
+                    Module.webPortal = new Promise(function(resolve) {
+                        if (typeof ytgame === "undefined") {
+                            resolve({environment: "disabled", error: "The YouTube Playables SDK did not load", adapter: null});
+                            return;
+                        }
+                        if (!ytgame.IN_PLAYABLES_ENV) {
+                            resolve({environment: "disabled", error: "Not running inside YouTube Playables", adapter: null});
+                            return;
+                        }
+                        ytgame.system.onPause(function() {
+                            ccall("webportal_pause_callback", null, ["number"], [1]);
+                        });
+                        ytgame.system.onResume(function() {
+                            ccall("webportal_pause_callback", null, ["number"], [0]);
+                        });
+                        var updateAudio = function(enabled) {
+                            ccall("webportal_audio_callback", null, ["number"], [enabled ? 1 : 0]);
+                        };
+                        updateAudio(ytgame.system.isAudioEnabled());
+                        ytgame.system.onAudioEnabledChange(updateAudio);
+                        ytgame.game.firstFrameReady();
+                        var host = window.location.hostname;
+                        var environment = (host === "localhost" || host === "127.0.0.1" || host === "[::1]") ? "local" : "portal";
+                        var ready = false;
+                        resolve({environment: environment, error: "", adapter: {
+                            requestAd: function(rewarded, events) {
+                                var request = rewarded ? ytgame.ads.requestRewardedAd("reward") : ytgame.ads.requestInterstitialAd();
+                                request.then(function(earned) {
+                                    if (!rewarded || earned) events.finished();
+                                    else events.failed("other", "The ad did not grant a reward");
+                                }, function(error) {
+                                    events.failed("unfilled", (error && error.message) ? String(error.message) : "No ad played");
+                                });
+                            },
+                            loadingStop: function() {
+                                if (!ready) ytgame.game.gameReady();
+                                ready = true;
+                            },
+                            loadData: function() { return ytgame.game.loadData(); },
+                            saveData: function(data) { return ytgame.game.saveData(data); }
+                        }});
+                    });
+                }
+                Module.webPortal.then(function(portal) {
+                    ccall("webportal_initialized_callback", null, ["string", "string"], [portal.environment, portal.error]);
+                });
+            });
+        }
+    };
 }
 
 extern "C" {
@@ -398,13 +506,13 @@ extern "C" {
 
     EMSCRIPTEN_KEEPALIVE
     void webportal_ad_started_callback(int type) {
-        pauseByPortal();
+        setPaused(pausedForAd, true);
         WebPortal::systemAdStarted(static_cast<WebPortalAdType>(type));
     }
 
     EMSCRIPTEN_KEEPALIVE
     void webportal_ad_finished_callback(int type) {
-        resumeByPortal();
+        setPaused(pausedForAd, false);
         WebPortal::systemAdFinished(static_cast<WebPortalAdType>(type));
     }
 
@@ -412,19 +520,37 @@ extern "C" {
     EMSCRIPTEN_KEEPALIVE
     void webportal_ad_error_callback(int type, const char* code, const char* message, int started) {
         if (started){
-            resumeByPortal();
+            setPaused(pausedForAd, false);
         }
         WebPortal::systemAdError(static_cast<WebPortalAdType>(type), code, message);
     }
 
-    // pauses outside ad requests, like portal startup ads and splash screens
+    // pauses the portal asks for itself, like its startup ad or splash screen
     EMSCRIPTEN_KEEPALIVE
     void webportal_pause_callback(int paused) {
-        if (paused){
-            pauseByPortal();
-        }else{
-            resumeByPortal();
-        }
+        setPaused(pausedByPortal, paused != 0);
+    }
+
+    EMSCRIPTEN_KEEPALIVE
+    void webportal_audio_callback(int enabled) {
+        AudioSystem::setMuted(!enabled);
+    }
+
+    // allocated by the caller, as a save may be too large for the stack
+    EMSCRIPTEN_KEEPALIVE
+    void webportal_data_loaded_callback(char* data) {
+        WebPortal::systemDataLoaded(data);
+        free(data);
+    }
+
+    EMSCRIPTEN_KEEPALIVE
+    void webportal_data_load_failed_callback(const char* message) {
+        WebPortal::systemDataLoadFailed(message);
+    }
+
+    EMSCRIPTEN_KEEPALIVE
+    void webportal_data_save_failed_callback(const char* message) {
+        WebPortal::systemDataSaveFailed(message);
     }
 }
 
@@ -440,6 +566,9 @@ WebPortalBackend* DoriaxWeb::getWebPortalBackend(){
     return &portal;
 #elif defined(DORIAX_WEB_PORTAL_YANDEX)
     static YandexPortal portal;
+    return &portal;
+#elif defined(DORIAX_WEB_PORTAL_YOUTUBE)
+    static YouTubePortal portal;
     return &portal;
 #else
     return nullptr;

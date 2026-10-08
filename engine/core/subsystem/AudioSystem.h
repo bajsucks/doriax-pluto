@@ -22,6 +22,7 @@ namespace doriax{
 		static void deInit();
 
 		static float globalVolume;
+		static bool muted;
 
 		Vector3 cameraLastPosition;
 		bool outputRequested = false;
@@ -42,6 +43,9 @@ namespace doriax{
 
 		static void setGlobalVolume(float volume);
 		static float getGlobalVolume();
+
+		// Platform mute, like YouTube's, that the global volume can't override
+		static void setMuted(bool muted);
 
         bool loadSound(SoundComponent& audio);
 		void destroySound(SoundComponent& audio);

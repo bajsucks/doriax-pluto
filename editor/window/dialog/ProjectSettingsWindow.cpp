@@ -27,8 +27,8 @@ static const char* windowModeNames[] = { "Windowed", "Maximized", "Fullscreen" }
 static const WindowMode windowModeValues[] = { WindowMode::WINDOWED, WindowMode::MAXIMIZED, WindowMode::FULLSCREEN };
 static const int windowModeCount = sizeof(windowModeValues) / sizeof(windowModeValues[0]);
 
-static const char* webPortalNames[] = { "None", "CrazyGames", "Poki", "GameDistribution", "Yandex Games" };
-static const WebPortalType webPortalValues[] = { WebPortalType::NONE, WebPortalType::CRAZYGAMES, WebPortalType::POKI, WebPortalType::GAMEDISTRIBUTION, WebPortalType::YANDEX };
+static const char* webPortalNames[] = { "None", "CrazyGames", "Poki", "GameDistribution", "Yandex Games", "YouTube Playables" };
+static const WebPortalType webPortalValues[] = { WebPortalType::NONE, WebPortalType::CRAZYGAMES, WebPortalType::POKI, WebPortalType::GAMEDISTRIBUTION, WebPortalType::YANDEX, WebPortalType::YOUTUBE };
 static const int webPortalCount = sizeof(webPortalValues) / sizeof(webPortalValues[0]);
 
 static const char* cxxStandardNames[] = { "C++17", "C++20", "C++23" };

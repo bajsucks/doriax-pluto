@@ -33,6 +33,9 @@ FunctionSubscribe<void(WebPortalEnvironment)> WebPortal::onInitialized;
 FunctionSubscribe<void(WebPortalAdType)> WebPortal::onAdStarted;
 FunctionSubscribe<void(WebPortalAdType)> WebPortal::onAdFinished;
 FunctionSubscribe<void(WebPortalAdType, std::string, std::string)> WebPortal::onAdError;
+FunctionSubscribe<void(std::string)> WebPortal::onDataLoaded;
+FunctionSubscribe<void(std::string)> WebPortal::onDataLoadFailed;
+FunctionSubscribe<void(std::string)> WebPortal::onDataSaveFailed;
 
 void WebPortal::postEvent(std::function<void()> event){
     std::lock_guard<std::mutex> lock(eventMutex);
@@ -56,6 +59,9 @@ void WebPortal::clearSubscriptions(){
     onAdStarted.clear();
     onAdFinished.clear();
     onAdError.clear();
+    onDataLoaded.clear();
+    onDataLoadFailed.clear();
+    onDataSaveFailed.clear();
 }
 
 void WebPortal::removeSubscriptionsByTag(const std::string& substring){
@@ -63,6 +69,9 @@ void WebPortal::removeSubscriptionsByTag(const std::string& substring){
     onAdStarted.removeByTagSubstring(substring);
     onAdFinished.removeByTagSubstring(substring);
     onAdError.removeByTagSubstring(substring);
+    onDataLoaded.removeByTagSubstring(substring);
+    onDataLoadFailed.removeByTagSubstring(substring);
+    onDataSaveFailed.removeByTagSubstring(substring);
 }
 
 void WebPortal::reset(){
@@ -138,6 +147,24 @@ void WebPortal::happytime(){
     }
 }
 
+void WebPortal::loadData(){
+    if (WebPortalBackend* backend = getBackend()){
+        backend->loadData();
+    }else{
+        warnNotAvailable();
+        postEvent([](){ onDataLoadFailed.call(notAvailableMessage); });
+    }
+}
+
+void WebPortal::saveData(const std::string& data){
+    if (WebPortalBackend* backend = getBackend()){
+        backend->saveData(data);
+    }else{
+        warnNotAvailable();
+        postEvent([](){ onDataSaveFailed.call(notAvailableMessage); });
+    }
+}
+
 void WebPortal::systemInitialized(WebPortalEnvironment environment, const std::string& error){
     if (!error.empty()){
         Log::warn("Game portal SDK: %s", error.c_str());
@@ -158,4 +185,16 @@ void WebPortal::systemAdFinished(WebPortalAdType type){
 
 void WebPortal::systemAdError(WebPortalAdType type, const std::string& code, const std::string& message){
     postEvent([type, code, message](){ onAdError.call(type, code, message); });
+}
+
+void WebPortal::systemDataLoaded(const std::string& data){
+    postEvent([data](){ onDataLoaded.call(data); });
+}
+
+void WebPortal::systemDataLoadFailed(const std::string& message){
+    postEvent([message](){ onDataLoadFailed.call(message); });
+}
+
+void WebPortal::systemDataSaveFailed(const std::string& message){
+    postEvent([message](){ onDataSaveFailed.call(message); });
 }

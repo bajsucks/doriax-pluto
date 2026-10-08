@@ -15,6 +15,7 @@ using namespace doriax;
 bool AudioSystem::inited = false;
 
 float AudioSystem::globalVolume = 1.0;
+bool AudioSystem::muted = false;
 
 AudioSystem::AudioSystem(Scene* scene): SubSystem(scene){
     signature.set(scene->getComponentId<SoundComponent>());
@@ -37,7 +38,7 @@ bool AudioSystem::init(){
             return false;
         }
 
-        getSoloud().setGlobalVolume(globalVolume);
+        getSoloud().setGlobalVolume(muted ? 0.0f : globalVolume);
 
         //Wait for mixing thread
         //SoLoud::Thread::sleep(10);
@@ -225,12 +226,17 @@ void AudioSystem::checkActive(){
 // using global volume in a static var to save because init/deinit reset volume value
 void AudioSystem::setGlobalVolume(float volume){
     globalVolume = volume;
-    getSoloud().setGlobalVolume(globalVolume);
+    getSoloud().setGlobalVolume(muted ? 0.0f : globalVolume);
 }
 
 float AudioSystem::getGlobalVolume(){
     //return getSoloud().getGlobalVolume();
     return globalVolume;
+}
+
+void AudioSystem::setMuted(bool muted){
+    AudioSystem::muted = muted;
+    getSoloud().setGlobalVolume(muted ? 0.0f : globalVolume);
 }
 
 void AudioSystem::load(){

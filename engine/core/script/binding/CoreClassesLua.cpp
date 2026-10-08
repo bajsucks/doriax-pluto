@@ -275,6 +275,7 @@ void LuaBinding::registerCoreClasses(lua_State *L){
         .addVariable("POKI", WebPortalType::POKI)
         .addVariable("GAMEDISTRIBUTION", WebPortalType::GAMEDISTRIBUTION)
         .addVariable("YANDEX", WebPortalType::YANDEX)
+        .addVariable("YOUTUBE", WebPortalType::YOUTUBE)
         .endNamespace();
 
     luabridge::getGlobalNamespace(L)
@@ -689,6 +690,13 @@ void LuaBinding::registerCoreClasses(lua_State *L){
         .addFunction("__call", &FunctionSubscribe<void(WebPortalAdType,std::string,std::string)>::call)
         .addFunction("call", &FunctionSubscribe<void(WebPortalAdType,std::string,std::string)>::call)
         .addFunction("add", (bool (FunctionSubscribe<void(WebPortalAdType,std::string,std::string)>::*)(const std::string&, lua_State*))&FunctionSubscribe<void(WebPortalAdType,std::string,std::string)>::add)
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
+        .beginClass<FunctionSubscribe<void(std::string)>>("FunctionSubscribe_V_S")
+        .addFunction("__call", &FunctionSubscribe<void(std::string)>::call)
+        .addFunction("call", &FunctionSubscribe<void(std::string)>::call)
+        .addFunction("add", (bool (FunctionSubscribe<void(std::string)>::*)(const std::string&, lua_State*))&FunctionSubscribe<void(std::string)>::add)
         .endClass();
 
 #ifdef DORIAX_PHYSICS_2D
@@ -1386,11 +1394,16 @@ void LuaBinding::registerCoreClasses(lua_State *L){
         .addStaticFunction("loadingStart", &WebPortal::loadingStart)
         .addStaticFunction("loadingStop", &WebPortal::loadingStop)
         .addStaticFunction("happytime", &WebPortal::happytime)
+        .addStaticFunction("loadData", &WebPortal::loadData)
+        .addStaticFunction("saveData", &WebPortal::saveData)
 
         .addStaticProperty("onInitialized", [] () { return &WebPortal::onInitialized; }, [] (lua_State* L) { WebPortal::onInitialized = L; })
         .addStaticProperty("onAdStarted", [] () { return &WebPortal::onAdStarted; }, [] (lua_State* L) { WebPortal::onAdStarted = L; })
         .addStaticProperty("onAdFinished", [] () { return &WebPortal::onAdFinished; }, [] (lua_State* L) { WebPortal::onAdFinished = L; })
         .addStaticProperty("onAdError", [] () { return &WebPortal::onAdError; }, [] (lua_State* L) { WebPortal::onAdError = L; })
+        .addStaticProperty("onDataLoaded", [] () { return &WebPortal::onDataLoaded; }, [] (lua_State* L) { WebPortal::onDataLoaded = L; })
+        .addStaticProperty("onDataLoadFailed", [] () { return &WebPortal::onDataLoadFailed; }, [] (lua_State* L) { WebPortal::onDataLoadFailed = L; })
+        .addStaticProperty("onDataSaveFailed", [] () { return &WebPortal::onDataSaveFailed; }, [] (lua_State* L) { WebPortal::onDataSaveFailed = L; })
         .endClass();
 
 #endif //DISABLE_LUA_BINDINGS

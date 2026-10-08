@@ -2233,7 +2233,12 @@ bool editor::Exporter::writeExportSettingsScript(std::string& cmakeContent) {
         script += "set(" + std::string(name) + " " + literal(text) + ")\n";
     };
     value("title", escapeXmlAttribute(project->getApplicationName(web.applicationName)));
-    value("head", web.headInclude);
+    // YouTube requires its SDK before any game code
+    std::string head = web.headInclude;
+    if (web.portal == WebPortalType::YOUTUBE) {
+        head = "<script src=\"https://www.youtube.com/game_api/v1\"></script>\n" + head;
+    }
+    value("head", head);
     value("resize", web.resizeCanvasToWindow ? "ON" : "OFF");
     value("hide_ui", web.hideEmscriptenUI ? "ON" : "OFF");
     value("name", stripDesktopEntryControlChars(project->getApplicationName(linuxSettings.applicationName)));
