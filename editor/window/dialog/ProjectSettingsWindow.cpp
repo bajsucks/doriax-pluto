@@ -27,8 +27,8 @@ static const char* windowModeNames[] = { "Windowed", "Maximized", "Fullscreen" }
 static const WindowMode windowModeValues[] = { WindowMode::WINDOWED, WindowMode::MAXIMIZED, WindowMode::FULLSCREEN };
 static const int windowModeCount = sizeof(windowModeValues) / sizeof(windowModeValues[0]);
 
-static const char* webPortalNames[] = { "None", "CrazyGames", "Poki" };
-static const WebPortalType webPortalValues[] = { WebPortalType::NONE, WebPortalType::CRAZYGAMES, WebPortalType::POKI };
+static const char* webPortalNames[] = { "None", "CrazyGames", "Poki", "GameDistribution", "Yandex Games" };
+static const WebPortalType webPortalValues[] = { WebPortalType::NONE, WebPortalType::CRAZYGAMES, WebPortalType::POKI, WebPortalType::GAMEDISTRIBUTION, WebPortalType::YANDEX };
 static const int webPortalCount = sizeof(webPortalValues) / sizeof(webPortalValues[0]);
 
 static const char* cxxStandardNames[] = { "C++17", "C++20", "C++23" };
@@ -859,6 +859,7 @@ void ProjectSettingsWindow::open(Project* project) {
     m_webResizeCanvasToWindow = web.resizeCanvasToWindow;
     m_webHideEmscriptenUI = web.hideEmscriptenUI;
     m_webPortalIndex = findWebPortalIndex(web.portal);
+    snprintf(m_webPortalGameIdBuffer, sizeof(m_webPortalGameIdBuffer), "%s", web.portalGameId.c_str());
 
     const LinuxProjectSettings& linuxSettings = project->getLinuxProjectSettings();
     snprintf(m_linuxApplicationNameBuffer, sizeof(m_linuxApplicationNameBuffer), "%s", linuxSettings.applicationName.c_str());
@@ -1410,6 +1411,13 @@ void ProjectSettingsWindow::drawWebSettings() {
 
     drawComboSetting("Game Portal", "##WebPortal", webPortalNames, webPortalCount, m_webPortalIndex, findWebPortalIndex(WebPortalType::NONE),
         "Loads this portal's SDK for the WebPortal class: ads and gameplay events. Each portal needs its own export.");
+
+    ImGui::BeginDisabled(webPortalValues[m_webPortalIndex] != WebPortalType::GAMEDISTRIBUTION);
+    beginSettingsRow("Portal Game ID");
+    ImGui::SetNextItemWidth(-helpMarkerWidth());
+    ImGui::InputText("##WebPortalGameId", m_webPortalGameIdBuffer, sizeof(m_webPortalGameIdBuffer));
+    endSettingsRow("Game ID from the GameDistribution developer dashboard. Without it, the portal SDK is not loaded.");
+    ImGui::EndDisabled();
 }
 
 void ProjectSettingsWindow::drawLinuxSettings() {
@@ -1730,6 +1738,7 @@ bool ProjectSettingsWindow::applySettings() {
     web.resizeCanvasToWindow = m_webResizeCanvasToWindow;
     web.hideEmscriptenUI = m_webHideEmscriptenUI;
     web.portal = webPortalValues[std::clamp(m_webPortalIndex, 0, webPortalCount - 1)];
+    applyTextBuffer(web.portalGameId, m_webPortalGameIdBuffer);
 
     LinuxProjectSettings& linuxSettings = m_project->getLinuxProjectSettings();
     applyOverride(linuxSettings.applicationName, m_linuxApplicationNameBuffer, inheritedName);

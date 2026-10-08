@@ -184,6 +184,22 @@ namespace {
         return out;
     }
 
+    // A value that becomes a C string literal through add_definitions crosses two quoting
+    // layers: escape for C first, then for the CMake string ($ stops variable expansion).
+    std::string escapeCMakeCString(const std::string& value) {
+        std::string cValue;
+        for (char c : value) {
+            if (c == '\\' || c == '"') cValue += '\\';
+            cValue += c;
+        }
+        std::string out;
+        for (char c : cValue) {
+            if (c == '\\' || c == '"' || c == '$') out += '\\';
+            out += c;
+        }
+        return out;
+    }
+
     std::string escapeXmlAttribute(const std::string& value) {
         std::string out;
         out.reserve(value.size());
@@ -2137,20 +2153,8 @@ bool editor::Exporter::copyEngine() {
     if (projectSettingsPos != std::string::npos) {
         const WindowSettings window = project->getWindowSettings();
 
-        // The title crosses two quoting layers: the CMake string literal here and
-        // the C string literal it becomes through add_definitions. Escape for the
-        // C level first, then for the CMake level ($ stops variable expansion).
-        // Control characters are sanitized upstream in Project::getWindowSettings().
-        std::string title;
-        for (char c : window.title) {
-            if (c == '\\' || c == '"') title += '\\';
-            title += c;
-        }
-        std::string cmakeTitle;
-        for (char c : title) {
-            if (c == '\\' || c == '"' || c == '$') cmakeTitle += '\\';
-            cmakeTitle += c;
-        }
+        // Control characters are sanitized upstream in Project::getWindowSettings()
+        const std::string cmakeTitle = escapeCMakeCString(window.title);
 
         // First line reuses the marker's existing indentation; subsequent lines
         // match the surrounding standalone setup block (4 spaces).
@@ -2170,6 +2174,7 @@ bool editor::Exporter::copyEngine() {
         projectSettings += indent + std::string("set(DORIAX_PHYSICS_3D ") + (project->isPhysics3DEnabled() ? "ON" : "OFF") + ")";
         projectSettings += indent + std::string("set(DORIAX_ADMOB ") + (project->getIOSProjectSettings().admobEnabled ? "ON" : "OFF") + ")";
         projectSettings += indent + "set(DORIAX_WEB_PORTAL " + Stream::webPortalTypeToString(project->getWebProjectSettings().portal) + ")";
+        projectSettings += indent + "set(DORIAX_WEB_PORTAL_GAME_ID \"" + escapeCMakeCString(project->getWebProjectSettings().portalGameId) + "\")";
         cmakeContent.replace(projectSettingsPos, projectSettingsMarker.size(), projectSettings);
     } else {
         Out::warning("Exported CMakeLists.txt is missing the project settings marker; using platform defaults");

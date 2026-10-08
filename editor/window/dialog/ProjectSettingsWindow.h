@@ -60,6 +60,7 @@ namespace doriax::editor {
         bool m_webResizeCanvasToWindow = true;
         bool m_webHideEmscriptenUI = false;
         int m_webPortalIndex = 0;
+        char m_webPortalGameIdBuffer[128] = {0};
         char m_linuxApplicationNameBuffer[256] = {0};
         char m_linuxCommentBuffer[512] = {0};
         char m_linuxCategoriesBuffer[256] = {0};

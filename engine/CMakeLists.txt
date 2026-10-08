@@ -9,9 +9,10 @@ endif()
 option(DORIAX_PHYSICS_2D "Enable Box2D-based 2D physics" ON)
 option(DORIAX_PHYSICS_3D "Enable Jolt-based 3D physics" ON)
 option(DORIAX_ADMOB "Link Google Mobile Ads into iOS builds" ON)
-set(DORIAX_WEB_PORTALS none crazygames poki)
+set(DORIAX_WEB_PORTALS none crazygames poki gamedistribution yandex)
 set(DORIAX_WEB_PORTAL none CACHE STRING "Game portal SDK of web builds")
 set_property(CACHE DORIAX_WEB_PORTAL PROPERTY STRINGS ${DORIAX_WEB_PORTALS})
+set(DORIAX_WEB_PORTAL_GAME_ID "" CACHE STRING "Game ID for web portals that need one, like GameDistribution")
 
 # =============================================================
 # STANDALONE PROJECT SETUP
@@ -204,6 +205,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
         if(NOT DORIAX_WEB_PORTAL STREQUAL "none")
             string(TOUPPER "${DORIAX_WEB_PORTAL}" WEB_PORTAL_NAME)
             add_definitions("-DDORIAX_WEB_PORTAL_${WEB_PORTAL_NAME}")
+            add_definitions("-DDORIAX_WEB_PORTAL_GAME_ID=\"${DORIAX_WEB_PORTAL_GAME_ID}\"")
         endif()
 
         set(CMAKE_EXECUTABLE_SUFFIX ".html")

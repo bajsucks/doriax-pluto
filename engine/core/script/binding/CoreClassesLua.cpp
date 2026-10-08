@@ -273,6 +273,8 @@ void LuaBinding::registerCoreClasses(lua_State *L){
         .addVariable("NONE", WebPortalType::NONE)
         .addVariable("CRAZYGAMES", WebPortalType::CRAZYGAMES)
         .addVariable("POKI", WebPortalType::POKI)
+        .addVariable("GAMEDISTRIBUTION", WebPortalType::GAMEDISTRIBUTION)
+        .addVariable("YANDEX", WebPortalType::YANDEX)
         .endNamespace();
 
     luabridge::getGlobalNamespace(L)

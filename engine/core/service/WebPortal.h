@@ -17,7 +17,9 @@ namespace doriax {
     enum class WebPortalType{
         NONE,
         CRAZYGAMES,
-        POKI
+        POKI,
+        GAMEDISTRIBUTION,
+        YANDEX
     };
 
     // Sent to the platform as integers, so keep the order
@@ -29,7 +31,7 @@ namespace doriax {
     enum class WebPortalEnvironment{
         UNINITIALIZED,
         DISABLED, // no portal SDK, it failed to load, or the portal refuses this domain
-        LOCAL, // localhost, where the portal shows test ads
+        LOCAL, // localhost, where most portals show test ads
         PORTAL
     };
 
@@ -51,7 +53,7 @@ namespace doriax {
     };
 
     // Game portal SDKs of web exports, like CrazyGames and Poki. Results arrive as events
-    // at the start of a frame, and the engine pauses while an ad plays.
+    // at the start of a frame, and the engine pauses while an ad or a portal screen shows.
     class DORIAX_API WebPortal {
 
         friend class Engine;
@@ -86,6 +88,7 @@ namespace doriax {
         // Gameplay starts at play and resume, and stops at every break: menus, pauses, level ends
         static void gameplayStart();
         static void gameplayStop();
+        // Around loading screens. Yandex Games requires loadingStop once the game is playable.
         static void loadingStart();
         static void loadingStop();
         // A happy moment, like a level completed
@@ -94,7 +97,8 @@ namespace doriax {
         static FunctionSubscribe<void(WebPortalEnvironment)> onInitialized;
         static FunctionSubscribe<void(WebPortalAdType)> onAdStarted;
         static FunctionSubscribe<void(WebPortalAdType)> onAdFinished;
-        // code: unfilled when no ad played, unavailable without a portal, or the portal's own
+        // code: unfilled when no ad played, unavailable without a portal, other for other failures
+        // (like a rewarded ad closed early), or a CrazyGames code like adCooldown
         static FunctionSubscribe<void(WebPortalAdType, std::string, std::string)> onAdError;
 
         // Platform callbacks, safe from any thread

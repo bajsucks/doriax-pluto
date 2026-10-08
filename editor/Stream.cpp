@@ -896,6 +896,8 @@ std::string editor::Stream::webPortalTypeToString(WebPortalType type) {
     switch (type) {
         case WebPortalType::CRAZYGAMES: return "crazygames";
         case WebPortalType::POKI: return "poki";
+        case WebPortalType::GAMEDISTRIBUTION: return "gamedistribution";
+        case WebPortalType::YANDEX: return "yandex";
         case WebPortalType::NONE:
         default: return "none";
     }
@@ -904,6 +906,8 @@ std::string editor::Stream::webPortalTypeToString(WebPortalType type) {
 WebPortalType editor::Stream::stringToWebPortalType(const std::string& str) {
     if (str == "crazygames") return WebPortalType::CRAZYGAMES;
     if (str == "poki") return WebPortalType::POKI;
+    if (str == "gamedistribution") return WebPortalType::GAMEDISTRIBUTION;
+    if (str == "yandex") return WebPortalType::YANDEX;
     return WebPortalType::NONE;
 }
 
@@ -1979,6 +1983,7 @@ YAML::Node editor::Stream::encodeProject(Project* project) {
         if (web.resizeCanvasToWindow != defaultWeb.resizeCanvasToWindow) webNode["resizeCanvasToWindow"] = web.resizeCanvasToWindow;
         if (web.hideEmscriptenUI != defaultWeb.hideEmscriptenUI) webNode["hideEmscriptenUI"] = web.hideEmscriptenUI;
         if (web.portal != defaultWeb.portal) webNode["portal"] = webPortalTypeToString(web.portal);
+        if (!web.portalGameId.empty()) webNode["portalGameId"] = web.portalGameId;
         if (webNode.size() != 0) root["web"] = webNode;
     }
 
@@ -2314,6 +2319,7 @@ void editor::Stream::decodeProject(Project* project, const YAML::Node& node, con
         if (webNode["resizeCanvasToWindow"].IsDefined()) web.resizeCanvasToWindow = webNode["resizeCanvasToWindow"].as<bool>();
         if (webNode["hideEmscriptenUI"].IsDefined()) web.hideEmscriptenUI = webNode["hideEmscriptenUI"].as<bool>();
         if (webNode["portal"]) web.portal = stringToWebPortalType(webNode["portal"].as<std::string>());
+        if (webNode["portalGameId"]) web.portalGameId = webNode["portalGameId"].as<std::string>();
     }
 
     if (node["linux"] && node["linux"].IsMap()) {

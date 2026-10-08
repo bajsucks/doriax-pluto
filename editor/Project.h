@@ -211,6 +211,8 @@ namespace doriax::editor{
         bool hideEmscriptenUI = false;
         // Its SDK is loaded for the WebPortal class
         WebPortalType portal = WebPortalType::NONE;
+        // For portals that identify the game, like GameDistribution
+        std::string portalGameId;
     };
 
     struct LinuxProjectSettings {
