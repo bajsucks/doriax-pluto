@@ -36,6 +36,7 @@ const std::vector<ScriptEventSourceInfo>& sourceList() {
         {S::Physics3D, "Physics 3D", ICON_FA_CUBE, "PhysicsSystem.h", "", "REGISTER_EVENT", ""},
         {S::AdMob, "AdMob", ICON_FA_RECTANGLE_AD, "AdMob.h", "", "REGISTER_EVENT", "", "AdMob"},
         {S::InAppPurchase, "In-App Purchase", ICON_FA_CART_SHOPPING, "InAppPurchase.h", "", "REGISTER_EVENT", "", "InAppPurchase"},
+        {S::CrazyGames, "CrazyGames", ICON_FA_GLOBE, "CrazyGames.h", "", "REGISTER_EVENT", "", "CrazyGames"},
     };
     return sources;
 }
@@ -167,6 +168,12 @@ const std::vector<ScriptEvent>& eventList() {
          {{"ProductType", "productType"}, {"BillingResponse", "response"}, {"std::string", "message"}}},
         {S::InAppPurchase, "onPurchaseAcknowledged", "Purchases", "A purchase was acknowledged", tokenResult},
         {S::InAppPurchase, "onPurchaseConsumed", "Purchases", "A purchase was consumed and can be bought again", tokenResult},
+
+        {S::CrazyGames, "onInitialized", "Setup", "The SDK initialized, in the given environment", {{"CrazyGamesEnvironment", "environment"}}},
+        {S::CrazyGames, "onAdStarted", "Ads", "An ad started; the engine pauses until it ends", {{"CrazyGamesAdType", "type"}}},
+        {S::CrazyGames, "onAdFinished", "Ads", "An ad finished: grant the reward of a rewarded ad", {{"CrazyGamesAdType", "type"}}},
+        {S::CrazyGames, "onAdError", "Ads", "An ad failed or was not available",
+         {{"CrazyGamesAdType", "type"}, {"std::string", "code"}, {"std::string", "message"}}},
     };
     return events;
 }

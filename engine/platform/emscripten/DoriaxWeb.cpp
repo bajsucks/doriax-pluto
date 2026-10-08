@@ -15,6 +15,7 @@
 #include "System.h"
 #include "Log.h"
 #include "AudioSystem.h"
+#include "service/CrazyGames.h"
 
 #ifdef __clang__
 #pragma clang diagnostic push
@@ -70,24 +71,6 @@ extern "C" {
 	    if (!err || err[0]) {
 		    doriax::Log::error("Failed to save in iDB file system: %s", err);
 	    }
-    }
-
-    EMSCRIPTEN_KEEPALIVE 
-    void crazygamesad_started_callback() {
-        doriax::Engine::systemPause();
-    }
-
-    EMSCRIPTEN_KEEPALIVE 
-    void crazygamesad_finished_callback() {
-        doriax::Engine::systemResume();
-    }
-
-    EMSCRIPTEN_KEEPALIVE 
-    void crazygamesad_error_callback(const char* err) {
-	    if (!err || err[0]) {
-		    doriax::Log::error("Failed to load CrazyGames ad: %s", err);
-	    }
-        doriax::Engine::systemResume();
     }
 }
 
@@ -962,69 +945,152 @@ void DoriaxWeb::removeKey(const char *key){
     }, key);
 }
 
-void DoriaxWeb::initializeCrazyGamesSDK(){
-    EM_ASM(
-        function loadJS(FILE_URL, async = true) {
-            let scriptEle = document.createElement("script");
+namespace {
+    // CrazyGames asks to pause and mute the game while an ad plays
+    bool pausedForAd = false;
 
-            scriptEle.setAttribute("src", FILE_URL);
-            scriptEle.setAttribute("type", "text/javascript");
-            scriptEle.setAttribute("async", async);
+    void resumeAfterAd(){
+        if (pausedForAd){
+            pausedForAd = false;
+            doriax::Engine::systemResume();
+        }
+    }
 
-            document.body.appendChild(scriptEle);
+    // Waits for the SDK, and does nothing where it is disabled
+    void callGameModule(const char* method){
+        EM_ASM({
+            var name = UTF8ToString($0);
+            if (Module.crazyGames) {
+                Module.crazyGames.then(function(state) {
+                    if (state.sdk) state.sdk.game[name]();
+                });
+            }
+        }, method);
+    }
 
-            // success event
-            scriptEle.addEventListener("load", () => {
-                //console.log("File loaded");
-            });
-            // error event
-            scriptEle.addEventListener("error", (ev) => {
-                console.log("Error on loading file", ev);
+    // CrazyGames HTML5 SDK v3; Module.crazyGames resolves once it initializes
+    class WebCrazyGames: public doriax::CrazyGamesBackend{
+    public:
+        virtual void initialize() override{
+            EM_ASM({
+                if (!Module.crazyGames) {
+                    Module.crazyGames = new Promise(function(resolve) {
+                        var script = document.createElement("script");
+                        script.src = "https://sdk.crazygames.com/crazygames-sdk-v3.js";
+                        script.onload = function() {
+                            window.CrazyGames.SDK.init().then(function() {
+                                var environment = window.CrazyGames.SDK.environment;
+                                var available = (environment === "local" || environment === "crazygames");
+                                resolve({environment: environment, error: "", sdk: available ? window.CrazyGames.SDK : null});
+                            }).catch(function(error) {
+                                resolve({environment: "disabled", error: String((error && error.message) ? error.message : error), sdk: null});
+                            });
+                        };
+                        script.onerror = function() {
+                            resolve({environment: "disabled", error: "Could not load " + script.src, sdk: null});
+                        };
+                        document.head.appendChild(script);
+                    });
+                }
+                Module.crazyGames.then(function(state) {
+                    ccall("crazygames_initialized_callback", null, ["string", "string"], [state.environment, state.error]);
+                });
             });
         }
 
-        loadJS("https://sdk.crazygames.com/crazygames-sdk-v2.js", false);
-    );
+        virtual void requestAd(doriax::CrazyGamesAdType type) override{
+            EM_ASM({
+                var type = $0;
+                var started = false;
+                var fail = function(code, message) {
+                    ccall("crazygames_ad_error_callback", null, ["number", "string", "string", "number"], [type, code, message, started ? 1 : 0]);
+                };
+                if (!Module.crazyGames) {
+                    fail("unavailable", "Call CrazyGames.initialize first");
+                    return;
+                }
+                Module.crazyGames.then(function(state) {
+                    if (!state.sdk) {
+                        fail("unavailable", "The CrazyGames SDK is disabled here");
+                        return;
+                    }
+                    state.sdk.ad.requestAd((type === 1) ? "rewarded" : "midgame", {
+                        adStarted: function() {
+                            started = true;
+                            ccall("crazygames_ad_started_callback", null, ["number"], [type]);
+                        },
+                        adFinished: function() {
+                            ccall("crazygames_ad_finished_callback", null, ["number"], [type]);
+                        },
+                        adError: function(error) {
+                            fail((error && error.code) ? error.code : "other", (error && error.message) ? error.message : "");
+                        }
+                    });
+                });
+            }, static_cast<int>(type));
+        }
+
+        virtual void gameplayStart() override{
+            callGameModule("gameplayStart");
+        }
+
+        virtual void gameplayStop() override{
+            callGameModule("gameplayStop");
+        }
+
+        virtual void loadingStart() override{
+            callGameModule("loadingStart");
+        }
+
+        virtual void loadingStop() override{
+            callGameModule("loadingStop");
+        }
+
+        virtual void happytime() override{
+            callGameModule("happytime");
+        }
+    };
+
+    WebCrazyGames crazyGames;
 }
 
-void DoriaxWeb::showCrazyGamesAd(const std::string& type){
-    EM_ASM({
-        var adtype = UTF8ToString($0);
-        const callbacks = ({
-            adFinished: () => ccall('crazygamesad_finished_callback', null),
-            adError: (error) => ccall('crazygamesad_error_callback', null, ['string'], [error ? error.message : ""]),
-            adStarted: () => ccall('crazygamesad_started_callback', null)
-        });
-        window.CrazyGames.SDK.ad.requestAd(adtype, callbacks);
-    }, type.c_str());
+extern "C" {
+    EMSCRIPTEN_KEEPALIVE
+    void crazygames_initialized_callback(const char* environment, const char* error) {
+        doriax::CrazyGamesEnvironment value = doriax::CrazyGamesEnvironment::DISABLED;
+        if (strcmp(environment, "local") == 0){
+            value = doriax::CrazyGamesEnvironment::LOCAL;
+        }else if (strcmp(environment, "crazygames") == 0){
+            value = doriax::CrazyGamesEnvironment::CRAZYGAMES;
+        }
+        doriax::CrazyGames::systemInitialized(value, error);
+    }
+
+    EMSCRIPTEN_KEEPALIVE
+    void crazygames_ad_started_callback(int type) {
+        if (!pausedForAd){
+            pausedForAd = true;
+            doriax::Engine::systemPause();
+        }
+        doriax::CrazyGames::systemAdStarted(static_cast<doriax::CrazyGamesAdType>(type));
+    }
+
+    EMSCRIPTEN_KEEPALIVE
+    void crazygames_ad_finished_callback(int type) {
+        resumeAfterAd();
+        doriax::CrazyGames::systemAdFinished(static_cast<doriax::CrazyGamesAdType>(type));
+    }
+
+    // a request refused while another ad plays must not resume the game
+    EMSCRIPTEN_KEEPALIVE
+    void crazygames_ad_error_callback(int type, const char* code, const char* message, int started) {
+        if (started){
+            resumeAfterAd();
+        }
+        doriax::CrazyGames::systemAdError(static_cast<doriax::CrazyGamesAdType>(type), code, message);
+    }
 }
 
-void DoriaxWeb::happytimeCrazyGames(){
-    EM_ASM(
-        window.CrazyGames.SDK.game.happytime();
-    );
-}
-
-void DoriaxWeb::gameplayStartCrazyGames(){
-    EM_ASM(
-        window.CrazyGames.SDK.game.gameplayStart();
-    );
-}
-
-void DoriaxWeb::gameplayStopCrazyGames(){
-    EM_ASM(
-        window.CrazyGames.SDK.game.gameplayStop();
-    );
-}
-
-void DoriaxWeb::loadingStartCrazyGames(){
-    EM_ASM(
-        window.CrazyGames.SDK.game.sdkGameLoadingStart();
-    );
-}
-
-void DoriaxWeb::loadingStopCrazyGames(){
-    EM_ASM(
-        window.CrazyGames.SDK.game.sdkGameLoadingStop();
-    );
+doriax::CrazyGamesBackend* DoriaxWeb::getCrazyGamesBackend(){
+    return &crazyGames;
 }

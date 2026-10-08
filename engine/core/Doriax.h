@@ -188,6 +188,7 @@
 #include "script/ScriptProperty.h"
 
 #include "service/AdMob.h"
+#include "service/CrazyGames.h"
 #include "service/InAppPurchase.h"
 
 #include "shader/ShaderData.h"

@@ -265,25 +265,6 @@ InAppPurchaseBackend* System::getInAppPurchaseBackend(){
     return nullptr;
 }
 
-void System::initializeCrazyGamesSDK(){
-    Log::error("Cannot initialize CrazyGames SDK in this system");
-}
-
-void System::showCrazyGamesAd(const std::string& type){
-    Log::error("Cannot show CrazyGames ad in this system");
-}
-
-void System::happytimeCrazyGames(){
-}
-
-void System::gameplayStartCrazyGames(){
-}
-
-void System::gameplayStopCrazyGames(){
-}
-
-void System::loadingStartCrazyGames(){
-}
-
-void System::loadingStopCrazyGames(){
+CrazyGamesBackend* System::getCrazyGamesBackend(){
+    return nullptr;
 }

@@ -21,7 +21,8 @@ namespace doriax::editor {
         Physics2D,
         Physics3D,
         AdMob,
-        InAppPurchase
+        InAppPurchase,
+        CrazyGames
     };
 
     struct ScriptEventParam {

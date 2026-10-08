@@ -7,6 +7,7 @@
 #include "Scene.h"
 #include "Input.h"
 #include "service/AdMob.h"
+#include "service/CrazyGames.h"
 #include "service/InAppPurchase.h"
 #include "FileData.h"
 #include "thread/ResourceProgress.h"
@@ -82,6 +83,8 @@ namespace luabridge
     template<> struct Stack<AdMobDebugGeography> : EnumWrapper<AdMobDebugGeography>{};
     template<> struct Stack<AdMobPrecision> : EnumWrapper<AdMobPrecision>{};
     template<> struct Stack<ProductType> : EnumWrapper<ProductType>{};
+    template<> struct Stack<CrazyGamesAdType> : EnumWrapper<CrazyGamesAdType>{};
+    template<> struct Stack<CrazyGamesEnvironment> : EnumWrapper<CrazyGamesEnvironment>{};
     template<> struct Stack<PurchaseState> : EnumWrapper<PurchaseState>{};
     template<> struct Stack<BillingResponse> : SignedEnumWrapper<BillingResponse>{};
     template<> struct Stack<RecurrenceMode> : EnumWrapper<RecurrenceMode>{};

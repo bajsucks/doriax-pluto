@@ -16,6 +16,7 @@
 #include "Input.h"
 #include "System.h"
 #include "AdMob.h"
+#include "CrazyGames.h"
 #include "InAppPurchase.h"
 #ifdef DORIAX_PHYSICS_2D
 #include "Body2D.h"
@@ -265,6 +266,20 @@ void LuaBinding::registerCoreClasses(lua_State *L){
         .addVariable("CHARGE_FULL_PRICE", SubscriptionReplacementMode::CHARGE_FULL_PRICE)
         .addVariable("DEFERRED", SubscriptionReplacementMode::DEFERRED)
         .addVariable("KEEP_EXISTING", SubscriptionReplacementMode::KEEP_EXISTING)
+        .endNamespace();
+
+    luabridge::getGlobalNamespace(L)
+        .beginNamespace("CrazyGamesAdType")
+        .addVariable("MIDGAME", CrazyGamesAdType::MIDGAME)
+        .addVariable("REWARDED", CrazyGamesAdType::REWARDED)
+        .endNamespace();
+
+    luabridge::getGlobalNamespace(L)
+        .beginNamespace("CrazyGamesEnvironment")
+        .addVariable("UNINITIALIZED", CrazyGamesEnvironment::UNINITIALIZED)
+        .addVariable("DISABLED", CrazyGamesEnvironment::DISABLED)
+        .addVariable("LOCAL", CrazyGamesEnvironment::LOCAL)
+        .addVariable("CRAZYGAMES", CrazyGamesEnvironment::CRAZYGAMES)
         .endNamespace();
 
     luabridge::getGlobalNamespace(L)
@@ -644,6 +659,27 @@ void LuaBinding::registerCoreClasses(lua_State *L){
         .addFunction("__call", &FunctionSubscribe<void(ProductType,BillingResponse,std::string)>::call)
         .addFunction("call", &FunctionSubscribe<void(ProductType,BillingResponse,std::string)>::call)
         .addFunction("add", (bool (FunctionSubscribe<void(ProductType,BillingResponse,std::string)>::*)(const std::string&, lua_State*))&FunctionSubscribe<void(ProductType,BillingResponse,std::string)>::add)
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
+        .beginClass<FunctionSubscribe<void(CrazyGamesEnvironment)>>("FunctionSubscribe_V_CGE")
+        .addFunction("__call", &FunctionSubscribe<void(CrazyGamesEnvironment)>::call)
+        .addFunction("call", &FunctionSubscribe<void(CrazyGamesEnvironment)>::call)
+        .addFunction("add", (bool (FunctionSubscribe<void(CrazyGamesEnvironment)>::*)(const std::string&, lua_State*))&FunctionSubscribe<void(CrazyGamesEnvironment)>::add)
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
+        .beginClass<FunctionSubscribe<void(CrazyGamesAdType)>>("FunctionSubscribe_V_CGAT")
+        .addFunction("__call", &FunctionSubscribe<void(CrazyGamesAdType)>::call)
+        .addFunction("call", &FunctionSubscribe<void(CrazyGamesAdType)>::call)
+        .addFunction("add", (bool (FunctionSubscribe<void(CrazyGamesAdType)>::*)(const std::string&, lua_State*))&FunctionSubscribe<void(CrazyGamesAdType)>::add)
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
+        .beginClass<FunctionSubscribe<void(CrazyGamesAdType,std::string,std::string)>>("FunctionSubscribe_V_CGATSS")
+        .addFunction("__call", &FunctionSubscribe<void(CrazyGamesAdType,std::string,std::string)>::call)
+        .addFunction("call", &FunctionSubscribe<void(CrazyGamesAdType,std::string,std::string)>::call)
+        .addFunction("add", (bool (FunctionSubscribe<void(CrazyGamesAdType,std::string,std::string)>::*)(const std::string&, lua_State*))&FunctionSubscribe<void(CrazyGamesAdType,std::string,std::string)>::add)
         .endClass();
 
 #ifdef DORIAX_PHYSICS_2D
@@ -1170,14 +1206,6 @@ void LuaBinding::registerCoreClasses(lua_State *L){
         .addStaticFunction("getShaderPath", [] () { return System::instance().getShaderPath(); })
 
         //UserSettings not need here
-
-        .addStaticFunction("initializeCrazyGamesSDK", [] () { return System::instance().initializeCrazyGamesSDK(); })
-        .addStaticFunction("showCrazyGamesAd", [] (std::string type) { return System::instance().showCrazyGamesAd(type); })
-        .addStaticFunction("happytimeCrazyGames", [] () { return System::instance().happytimeCrazyGames(); })
-        .addStaticFunction("gameplayStartCrazyGames", [] () { return System::instance().gameplayStartCrazyGames(); })
-        .addStaticFunction("gameplayStopCrazyGames", [] () { return System::instance().gameplayStopCrazyGames(); })
-        .addStaticFunction("loadingStartCrazyGames", [] () { return System::instance().loadingStartCrazyGames(); })
-        .addStaticFunction("loadingStopCrazyGames", [] () { return System::instance().loadingStopCrazyGames(); })
         .endClass();
 
     luabridge::getGlobalNamespace(L)
@@ -1335,6 +1363,24 @@ void LuaBinding::registerCoreClasses(lua_State *L){
         .addStaticProperty("onPurchasesQueried", [] () { return &InAppPurchase::onPurchasesQueried; }, [] (lua_State* L) { InAppPurchase::onPurchasesQueried = L; })
         .addStaticProperty("onPurchaseAcknowledged", [] () { return &InAppPurchase::onPurchaseAcknowledged; }, [] (lua_State* L) { InAppPurchase::onPurchaseAcknowledged = L; })
         .addStaticProperty("onPurchaseConsumed", [] () { return &InAppPurchase::onPurchaseConsumed; }, [] (lua_State* L) { InAppPurchase::onPurchaseConsumed = L; })
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
+        .beginClass<CrazyGames>("CrazyGames")
+        .addStaticFunction("initialize", &CrazyGames::initialize)
+        .addStaticFunction("getEnvironment", &CrazyGames::getEnvironment)
+        .addStaticFunction("isAvailable", &CrazyGames::isAvailable)
+        .addStaticFunction("requestAd", &CrazyGames::requestAd)
+        .addStaticFunction("gameplayStart", &CrazyGames::gameplayStart)
+        .addStaticFunction("gameplayStop", &CrazyGames::gameplayStop)
+        .addStaticFunction("loadingStart", &CrazyGames::loadingStart)
+        .addStaticFunction("loadingStop", &CrazyGames::loadingStop)
+        .addStaticFunction("happytime", &CrazyGames::happytime)
+
+        .addStaticProperty("onInitialized", [] () { return &CrazyGames::onInitialized; }, [] (lua_State* L) { CrazyGames::onInitialized = L; })
+        .addStaticProperty("onAdStarted", [] () { return &CrazyGames::onAdStarted; }, [] (lua_State* L) { CrazyGames::onAdStarted = L; })
+        .addStaticProperty("onAdFinished", [] () { return &CrazyGames::onAdFinished; }, [] (lua_State* L) { CrazyGames::onAdFinished = L; })
+        .addStaticProperty("onAdError", [] () { return &CrazyGames::onAdError; }, [] (lua_State* L) { CrazyGames::onAdError = L; })
         .endClass();
 
 #endif //DISABLE_LUA_BINDINGS

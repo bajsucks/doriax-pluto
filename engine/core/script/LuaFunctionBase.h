@@ -21,6 +21,8 @@ namespace doriax{
     enum class AdMobPrecision;
     enum class BillingResponse;
     enum class ProductType;
+    enum class CrazyGamesAdType;
+    enum class CrazyGamesEnvironment;
     struct PurchaseDetails;
 
     // the base function wrapper class
@@ -66,6 +68,8 @@ namespace doriax{
         void push_value(lua_State *vm, AdMobPrecision o);
         void push_value(lua_State *vm, BillingResponse o);
         void push_value(lua_State *vm, ProductType o);
+        void push_value(lua_State *vm, CrazyGamesAdType o);
+        void push_value(lua_State *vm, CrazyGamesEnvironment o);
         void push_value(lua_State *vm, const PurchaseDetails& o);
 
         // other overloads, for stuff like userdata or C functions

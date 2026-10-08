@@ -879,6 +879,7 @@ set(DORIAX_SRCS
     core/script/binding/ThreadClassesLua.cpp
     core/script/binding/UtilClassesLua.cpp
     core/service/AdMob.cpp
+    core/service/CrazyGames.cpp
     core/service/InAppPurchase.cpp
     core/shader/ShaderData.cpp
     core/shader/ShaderDataSerializer.cpp

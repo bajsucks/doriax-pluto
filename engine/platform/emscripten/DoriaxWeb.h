@@ -97,13 +97,7 @@ public:
     virtual void setStringForKey(const char* key, const std::string& value) override;
     virtual void removeKey(const char *key) override;
 
-    virtual void initializeCrazyGamesSDK() override;
-    virtual void showCrazyGamesAd(const std::string& type) override;
-    virtual void happytimeCrazyGames() override;
-    virtual void gameplayStartCrazyGames() override;
-    virtual void gameplayStopCrazyGames() override;
-    virtual void loadingStartCrazyGames() override;
-    virtual void loadingStopCrazyGames() override;
+    virtual doriax::CrazyGamesBackend* getCrazyGamesBackend() override;
 
 };
 

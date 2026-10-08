@@ -17,6 +17,7 @@
 #include "object/physics/CollideShapeResult3D.h"
 #endif
 #include "service/AdMob.h"
+#include "service/CrazyGames.h"
 #include "service/InAppPurchase.h"
 #include "LuaBinding.h"
 #include "Log.h"
@@ -139,6 +140,14 @@ void LuaFunctionBase::push_value(lua_State *vm, BillingResponse o){
 }
 
 void LuaFunctionBase::push_value(lua_State *vm, ProductType o){
+    lua_pushinteger(vm, static_cast<lua_Integer>(o));
+}
+
+void LuaFunctionBase::push_value(lua_State *vm, CrazyGamesAdType o){
+    lua_pushinteger(vm, static_cast<lua_Integer>(o));
+}
+
+void LuaFunctionBase::push_value(lua_State *vm, CrazyGamesEnvironment o){
     lua_pushinteger(vm, static_cast<lua_Integer>(o));
 }
 

@@ -21,6 +21,7 @@ namespace doriax {
 
     class AdMobBackend;
     class InAppPurchaseBackend;
+    class CrazyGamesBackend;
 
     enum class CursorType{
         ARROW, // default
@@ -143,15 +144,7 @@ namespace doriax {
         // Services in core/service, null where the platform or the build has none
         virtual AdMobBackend* getAdMobBackend();
         virtual InAppPurchaseBackend* getInAppPurchaseBackend();
-
-        // CrazyGames SDK
-        virtual void initializeCrazyGamesSDK();
-        virtual void showCrazyGamesAd(const std::string& type);
-        virtual void happytimeCrazyGames();
-        virtual void gameplayStartCrazyGames();
-        virtual void gameplayStopCrazyGames();
-        virtual void loadingStartCrazyGames();
-        virtual void loadingStopCrazyGames();
+        virtual CrazyGamesBackend* getCrazyGamesBackend();
     };
 
 }
