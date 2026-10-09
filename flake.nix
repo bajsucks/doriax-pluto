@@ -20,7 +20,11 @@
         system:
         let
           pkgs = (import nixpkgs { inherit system; });
-          doriax = pkgs.callPackage misc/nix/package.nix { };
+          doriax = pkgs.callPackage misc/nix/package.nix {
+            # Nix copies the source without .git, so git describe cannot run in the build
+            rev = self.shortRev or self.dirtyShortRev or null;
+            date = self.lastModifiedDate or null;
+          };
         in
         {
           inherit doriax;
