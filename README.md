@@ -239,6 +239,7 @@ These small projects demonstrate real Doriax builds running on the web. Play the
 - **Character Control** — [Play](https://doriaxengine.github.io/charactercontrol/) · [Source](https://github.com/doriaxengine/charactercontrol)
 - **Tappy Plane** — [Play](https://doriaxengine.github.io/tappyplane/) · [Source](https://github.com/doriaxengine/tappyplane)
 - **Lost Slime** — [Play](https://doriaxengine.github.io/lostslime/) · [Source](https://github.com/doriaxengine/lostslime)
+- **Lost Slime 3D** — [Play](https://doriaxengine.github.io/lostslime3d/) · [Source](https://github.com/doriaxengine/lostslime3d)
 
 ## Repository layout
 
