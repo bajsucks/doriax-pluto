@@ -306,6 +306,18 @@ float Vector4::dotProduct(const Vector4& vec) const{
     return x * vec.x + y * vec.y + z * vec.z + w * vec.w;
 }
 
+Vector4 Vector4::moveTowards(const Vector4& target, float maxDistanceDelta) const{
+    Vector4 delta = target - *this;
+    float dist = sqrt(delta.dotProduct(delta));
+    if (dist <= maxDistanceDelta || dist < 1e-6f)
+        return target;
+    return *this + delta * (maxDistanceDelta / dist);
+}
+
+Vector4 Vector4::lerp(const Vector4& target, float t) const{
+    return *this + (target - *this) * t;
+}
+
 bool Vector4::isNaN() const{
     return isnan(x) || isnan(y) || isnan(z) || isnan(w);
 }

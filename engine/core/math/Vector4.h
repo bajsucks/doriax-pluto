@@ -93,6 +93,9 @@ namespace doriax {
 
         float dotProduct(const Vector4& vec) const;
 
+        Vector4 moveTowards(const Vector4& target, float maxDistanceDelta) const;
+        Vector4 lerp(const Vector4& target, float t) const;
+
         bool isNaN() const;
 
     };

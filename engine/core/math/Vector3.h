@@ -51,6 +51,7 @@ namespace doriax {
         Vector3 operator * ( float f ) const;
         Vector3 operator * ( const Vector3& v) const;
         Vector3 operator / ( float f ) const;
+        Vector3 operator / ( const Vector3& v ) const;
         Vector3 operator - () const;
         friend Vector3 (::operator *) ( float f, const Vector3& v );
 

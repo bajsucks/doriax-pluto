@@ -40,6 +40,27 @@ static T constantCopy(){
     return Value;
 }
 
+// for 2 * v Lua passes the number first, which member overloads can't take
+template <class T>
+static int vectorMul(lua_State* L){
+    int vecArg = luabridge::isInstance<T>(L, 1) ? 1 : 2;
+    int otherArg = 3 - vecArg;
+    if (!luabridge::isInstance<T>(L, vecArg))
+        return luaL_typeerror(L, vecArg, "vector");
+
+    T result = *luabridge::get<T>(L, vecArg);
+    if (lua_isnumber(L, otherArg))
+        result = result * (float)lua_tonumber(L, otherArg);
+    else if (luabridge::isInstance<T>(L, otherArg))
+        result = result * *luabridge::get<T>(L, otherArg);
+    else
+        return luaL_typeerror(L, otherArg, "number or vector");
+
+    if (!luabridge::push(L, result))
+        return luaL_error(L, "Failed to push vector");
+    return 1;
+}
+
 void LuaBinding::registerMathClasses(lua_State *L){
 #ifndef DISABLE_LUA_BINDINGS
 
@@ -77,9 +98,7 @@ void LuaBinding::registerMathClasses(lua_State *L){
         .addFunction("__div", 
             luabridge::overload<float>(&Vector2::operator/),
             luabridge::overload<const Vector2&>(&Vector2::operator/))
-        .addFunction("__mul", 
-            luabridge::overload<float>(&Vector2::operator*),
-            luabridge::overload<const Vector2&>(&Vector2::operator*))
+        .addFunction("__mul", &vectorMul<Vector2>)
         .addFunction("__unm", (Vector2 (Vector2::*)() const)&Vector2::operator-)
         .addFunction("isValid", &Vector2::isValid)
         .addFunction("swap", &Vector2::swap)
@@ -92,6 +111,8 @@ void LuaBinding::registerMathClasses(lua_State *L){
         .addFunction("normalized", &Vector2::normalized)
         .addFunction("normalizeL", &Vector2::normalizeL)
         .addFunction("midPoint", &Vector2::midPoint)
+        .addFunction("moveTowards", &Vector2::moveTowards)
+        .addFunction("lerp", &Vector2::lerp)
         .addFunction("makeFloor", &Vector2::makeFloor)
         .addFunction("makeCeil", &Vector2::makeCeil)
         .addFunction("perpendicular", &Vector2::perpendicular)
@@ -121,10 +142,10 @@ void LuaBinding::registerMathClasses(lua_State *L){
         .addFunction("__lt", &Vector3::operator<)
         .addFunction("__sub", (Vector3 (Vector3::*)(const Vector3&) const)&Vector3::operator-)
         .addFunction("__add", (Vector3 (Vector3::*)(const Vector3&) const)&Vector3::operator+)
-        .addFunction("__div", (Vector3 (Vector3::*)(const Vector3&) const)&Vector3::operator/)
-        .addFunction("__mul", 
-            luabridge::overload<float>(&Vector3::operator*), // need float operator first to fix estrange error in Emscripten
-            luabridge::overload<const Vector3&>(&Vector3::operator*))
+        .addFunction("__div", 
+            luabridge::overload<float>(&Vector3::operator/),
+            luabridge::overload<const Vector3&>(&Vector3::operator/))
+        .addFunction("__mul", &vectorMul<Vector3>)
         .addFunction("__unm", (Vector3 (Vector3::*)() const)&Vector3::operator-)
         .addFunction("isValid", &Vector3::isValid)
         .addFunction("length", &Vector3::length)
@@ -172,14 +193,14 @@ void LuaBinding::registerMathClasses(lua_State *L){
         .addFunction("__div", 
             luabridge::overload<float>(&Vector4::operator/),
             luabridge::overload<const Vector4&>(&Vector4::operator/))
-        .addFunction("__mul", 
-            luabridge::overload<float>(&Vector4::operator*),
-            luabridge::overload<const Vector4&>(&Vector4::operator*))
+        .addFunction("__mul", &vectorMul<Vector4>)
         .addFunction("__unm", (Vector4 (Vector4::*)() const)&Vector4::operator-)
         .addFunction("isValid", &Vector4::isValid)
         .addFunction("swap", &Vector4::swap)
         .addFunction("divideByW", &Vector4::divideByW)
         .addFunction("dotProduct", &Vector4::dotProduct)
+        .addFunction("moveTowards", &Vector4::moveTowards)
+        .addFunction("lerp", &Vector4::lerp)
         .addFunction("isNaN", &Vector4::isNaN)
         .endClass();
 
@@ -425,7 +446,13 @@ void LuaBinding::registerMathClasses(lua_State *L){
             luabridge::overload<const Vector3&, const Vector3&>(&AABB::setExtents),
             luabridge::overload<float, float, float, float, float, float>(&AABB::setExtents))
         .addFunction("getCorner", &AABB::getCorner)
-        .addFunction("getCorners", &AABB::getCorners)
+        // Copies: the pointer would give Lua only the first corner. Null and infinite boxes have none
+        .addFunction("getCorners", [] (const AABB& self) -> std::vector<Vector3> {
+            if (!self.isFinite())
+                return {};
+            const Vector3* corners = self.getCorners();
+            return std::vector<Vector3>(corners, corners + 8);
+        })
         .addFunction("merge", 
             luabridge::overload<const AABB&>(&AABB::merge),
             luabridge::overload<const Vector3&>(&AABB::merge))
@@ -509,7 +536,10 @@ void LuaBinding::registerMathClasses(lua_State *L){
         .addFunction("toAABB", &OBB::toAABB)
         .addFunction("toMatrix", &OBB::toMatrix)
         .addFunction("getCorner", &OBB::getCorner)
-        .addFunction("getCorners", &OBB::getCorners)
+        .addFunction("getCorners", [] (const OBB& self) -> std::vector<Vector3> {
+            const Vector3* corners = self.getCorners();
+            return std::vector<Vector3>(corners, corners + 8);
+        })
         .addFunction("enclose", 
             luabridge::overload<const Vector3&>(&OBB::enclose),
             luabridge::overload<const OBB&>(&OBB::enclose))
