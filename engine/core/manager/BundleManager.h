@@ -55,12 +55,12 @@ namespace doriax {
         };
 
         static std::vector<BundleEntry> entries;
-        static std::vector<BundleInstance> instances;
 
         static std::function<void(Scene*)> scriptStarter;
         static std::function<void(Scene*, Entity)> scriptStopper;
         static std::vector<std::pair<Scene*, Entity>> stoppingEntities;
 
+        static std::vector<BundleInstance>& getInstances();
         static BundleEntry* findEntry(uint32_t id);
         static BundleEntry* findEntry(const std::string& name);
         static std::vector<BundleInstance>::iterator findInstance(Scene* scene, Entity rootEntity);
@@ -113,6 +113,8 @@ namespace doriax {
         static int getBundleCount();
 
         static void destroyAllInstances(Scene* scene);
+        // of a deleted scene, nothing is destroyed
+        static void forgetInstances(Scene* scene);
         static void clearAll();
 
         // start runs the scene's scripts not started yet, stop one entity's. Lua by default

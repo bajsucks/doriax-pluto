@@ -21,6 +21,40 @@
 
 using namespace doriax;
 
+namespace {
+
+// false when the library does not export it
+template<typename... Args>
+bool callLibraryFunction(void* libHandle, const char* name, Args... args) {
+    using LibraryFunc = void (*)(Args...);
+    #ifdef _WIN32
+        LibraryFunc fn = reinterpret_cast<LibraryFunc>(GetProcAddress(static_cast<HMODULE>(libHandle), name));
+        if (!fn) {
+            editor::Out::error("Failed to find function '%s' in the library (Error code: %lu)", name, GetLastError());
+            return false;
+        }
+    #else
+        dlerror(); // clear any existing error
+        LibraryFunc fn = reinterpret_cast<LibraryFunc>(dlsym(libHandle, name));
+        const char* err = dlerror();
+        if (err) {
+            editor::Out::error("Failed to find function '%s' in the library (Error: %s)", name, err);
+            return false;
+        }
+    #endif
+
+    try {
+        fn(args...);
+    } catch (const std::exception& e) {
+        editor::Out::error("Exception in %s(): %s", name, e.what());
+    } catch (...) {
+        editor::Out::error("Unknown exception in %s()", name);
+    }
+    return true;
+}
+
+}
+
 editor::Conector::Conector(){
     libHandle = nullptr;
 }
@@ -178,31 +212,7 @@ void editor::Conector::init(Scene* scene){
         return;
     }
 
-    using InitScriptsFunc = void (*)(Scene*);
-    #ifdef _WIN32
-        InitScriptsFunc initScriptsFn = reinterpret_cast<InitScriptsFunc>(GetProcAddress(static_cast<HMODULE>(libHandle), "initScripts"));
-        if (!initScriptsFn) {
-            Out::error("Failed to find function 'initScripts' in the library (Error code: %lu)", GetLastError());
-        }
-    #else
-        dlerror(); // clear any existing error
-        InitScriptsFunc initScriptsFn = reinterpret_cast<InitScriptsFunc>(dlsym(libHandle, "initScripts"));
-        const char* err = dlerror();
-        if (err) {
-            Out::error("Failed to find function 'initScripts' in the library (Error: %s)", err);
-            initScriptsFn = nullptr;
-        }
-    #endif
-
-    if (initScriptsFn) {
-        try {
-            initScriptsFn(scene);
-        } catch (const std::exception& e) {
-            Out::error("Exception in initScripts(): %s", e.what());
-        } catch (...) {
-            Out::error("Unknown exception in initScripts()");
-        }
-    }
+    callLibraryFunction(libHandle, "initScripts", scene);
 }
 
 void editor::Conector::cleanup(Scene* scene){
@@ -211,64 +221,14 @@ void editor::Conector::cleanup(Scene* scene){
         return;
     }
 
-    using CleanupScriptsFunc = void (*)(Scene*);
-    #ifdef _WIN32
-        CleanupScriptsFunc cleanupScriptsFn = reinterpret_cast<CleanupScriptsFunc>(GetProcAddress(static_cast<HMODULE>(libHandle), "cleanupScripts"));
-        if (!cleanupScriptsFn) {
-            Out::error("Failed to find function 'cleanupScripts' in the library (Error code: %lu)", GetLastError());
-        }
-    #else
-        dlerror(); // clear any existing error
-        CleanupScriptsFunc cleanupScriptsFn = reinterpret_cast<CleanupScriptsFunc>(dlsym(libHandle, "cleanupScripts"));
-        const char* err = dlerror();
-        if (err) {
-            Out::error("Failed to find function 'cleanupScripts' in the library (Error: %s)", err);
-            cleanupScriptsFn = nullptr;
-        }
-    #endif
-
-    if (cleanupScriptsFn) {
-        try {
-            cleanupScriptsFn(scene);
-        } catch (const std::exception& e) {
-            Out::error("Exception in cleanupScripts(): %s", e.what());
-        } catch (...) {
-            Out::error("Unknown exception in cleanupScripts()");
-        }
-    } else {
+    if (!callLibraryFunction(libHandle, "cleanupScripts", scene)) {
         Out::warning("Cleanup function not found in library");
     }
 }
 
 void editor::Conector::cleanupEntity(Scene* scene, Entity entity){
-    if (!libHandle) {
-        return;
-    }
-
-    using CleanupEntityScriptsFunc = void (*)(Scene*, Entity);
-    #ifdef _WIN32
-        CleanupEntityScriptsFunc cleanupFn = reinterpret_cast<CleanupEntityScriptsFunc>(GetProcAddress(static_cast<HMODULE>(libHandle), "cleanupEntityScripts"));
-        if (!cleanupFn) {
-            Out::error("Failed to find function 'cleanupEntityScripts' in the library (Error code: %lu)", GetLastError());
-        }
-    #else
-        dlerror(); // clear any existing error
-        CleanupEntityScriptsFunc cleanupFn = reinterpret_cast<CleanupEntityScriptsFunc>(dlsym(libHandle, "cleanupEntityScripts"));
-        const char* err = dlerror();
-        if (err) {
-            Out::error("Failed to find function 'cleanupEntityScripts' in the library (Error: %s)", err);
-            cleanupFn = nullptr;
-        }
-    #endif
-
-    if (cleanupFn) {
-        try {
-            cleanupFn(scene, entity);
-        } catch (const std::exception& e) {
-            Out::error("Exception in cleanupEntityScripts(): %s", e.what());
-        } catch (...) {
-            Out::error("Unknown exception in cleanupEntityScripts()");
-        }
+    if (libHandle) {
+        callLibraryFunction(libHandle, "cleanupEntityScripts", scene, entity);
     }
 }
 

@@ -4737,9 +4737,6 @@ void editor::Project::finalizeStop(SceneProject* mainSceneProject, std::vector<P
         pauseEngineScene(sceneProject->scene, true);
         sceneProject->scene->getSystem<UISystem>()->setAnchorReferenceSize(canvasWidth, canvasHeight);
 
-        // Destroy all bundle instances created during play before restoring snapshot
-        BundleManager::destroyAllInstances(sceneProject->scene);
-
         // Stop scene audio before restoring snapshot to prevent stale SoLoud handles on the next play
         sceneProject->scene->getSystem<AudioSystem>()->stopSceneSounds();
 
@@ -4771,6 +4768,9 @@ void editor::Project::finalizeStop(SceneProject* mainSceneProject, std::vector<P
                 }
             }
         }
+
+        // Destroy all bundle instances created during play, after collecting their shader keys
+        BundleManager::destroyAllInstances(sceneProject->scene);
 
         // Restore snapshot if present
         if (sceneProject->playStateSnapshot && !sceneProject->playStateSnapshot.IsNull()) {
@@ -9299,10 +9299,15 @@ void editor::Project::retireRuntimeStack(uint32_t sceneId) {
             }
         }
 
+        // Spawned bundles go too, as on Stop, or their tracking clashes with the next copy's ids
+        std::set<ShaderKey> shaderKeys;
+        collectSceneShaderKeys(session->runtimeScenes[entryIndex].runtime, shaderKeys);
+        BundleManager::destroyAllInstances(scene);
+
         // Read again, the destructors may have added entries and moved the vector
         std::scoped_lock lock(playSessionMutex);
         PlayRuntimeScene& retired = session->runtimeScenes[entryIndex];
-        collectSceneShaderKeys(retired.runtime, session->retiredShaderKeys[invSceneId]);
+        session->retiredShaderKeys[invSceneId].insert(shaderKeys.begin(), shaderKeys.end());
         if (retired.ownedRuntime) {
             SceneProject* runtime = retired.runtime;
             session->runtimeScenes.erase(session->runtimeScenes.begin() + entryIndex);

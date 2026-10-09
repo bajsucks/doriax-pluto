@@ -14,7 +14,6 @@
 using namespace doriax;
 
 std::vector<BundleManager::BundleEntry> BundleManager::entries;
-std::vector<BundleManager::BundleInstance> BundleManager::instances;
 std::function<void(Scene*)> BundleManager::scriptStarter = LuaBinding::initializeLuaScripts;
 std::function<void(Scene*, Entity)> BundleManager::scriptStopper = [](Scene* scene, Entity entity) {
     LuaBinding::cleanupLuaScripts(scene, entity);
@@ -64,6 +63,12 @@ std::vector<Entity> withDescendants(Scene* scene, const std::vector<Entity>& ent
 
 }
 
+std::vector<BundleManager::BundleInstance>& BundleManager::getInstances() {
+    // never freed, a static Scene can be destroyed after it
+    static std::vector<BundleInstance>* instances = new std::vector<BundleInstance>();
+    return *instances;
+}
+
 BundleManager::BundleEntry* BundleManager::findEntry(uint32_t id) {
     for (auto& entry : entries) {
         if (entry.id == id)
@@ -81,6 +86,7 @@ BundleManager::BundleEntry* BundleManager::findEntry(const std::string& name) {
 }
 
 std::vector<BundleManager::BundleInstance>::iterator BundleManager::findInstance(Scene* scene, Entity rootEntity) {
+    auto& instances = getInstances();
     return std::find_if(instances.begin(), instances.end(), [&](const BundleInstance& instance) {
         return instance.scene == scene && instance.rootEntity == rootEntity;
     });
@@ -197,7 +203,7 @@ Entity BundleManager::instantiate(uint32_t id, Scene* scene, Entity parent) {
             instance.entities.push_back(e);
     }
 
-    instances.push_back(std::move(instance));
+    getInstances().push_back(std::move(instance));
 
     // tracked first, init() can destroy it
     scriptStarter(scene);
@@ -208,6 +214,7 @@ Entity BundleManager::instantiate(uint32_t id, Scene* scene, Entity parent) {
 }
 
 bool BundleManager::destroyBundle(Scene* scene, Entity rootEntity) {
+    auto& instances = getInstances();
     auto it = findInstance(scene, rootEntity);
     if (it == instances.end()) {
         Log::error("BundleManager: bundle instance with root %u not found in scene", rootEntity);
@@ -285,6 +292,7 @@ int BundleManager::getBundleCount() {
 }
 
 void BundleManager::destroyAllInstances(Scene* scene) {
+    auto& instances = getInstances();
     std::vector<Entity> roots;
     for (const auto& inst : instances) {
         if (inst.scene == scene)
@@ -297,8 +305,15 @@ void BundleManager::destroyAllInstances(Scene* scene) {
     }
 }
 
+void BundleManager::forgetInstances(Scene* scene) {
+    auto& instances = getInstances();
+    instances.erase(std::remove_if(instances.begin(), instances.end(), [scene](const BundleInstance& instance) {
+        return instance.scene == scene;
+    }), instances.end());
+}
+
 void BundleManager::clearAll() {
     entries.clear();
-    instances.clear();
+    getInstances().clear();
     stoppingEntities.clear();
 }
