@@ -60,9 +60,9 @@ Click a screenshot to play the game in your browser. Each one is a regular Doria
       Endless flyer · <a href="https://doriaxengine.github.io/tappyplane/">Play</a> · <a href="https://github.com/doriaxengine/tappyplane">Source</a>
     </td>
     <td width="50%" align="center">
-      <a href="https://doriaxengine.github.io/charactercontrol/"><img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-bones.png" alt="Animated character with its bones shown in the Doriax editor"></a>
-      <br><strong>Character Control</strong><br>
-      3D movement and animation · <a href="https://doriaxengine.github.io/charactercontrol/">Play</a> · <a href="https://github.com/doriaxengine/charactercontrol">Source</a>
+      <a href="https://doriaxengine.github.io/bastionvale/"><img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-bastion-vale.png" alt="Bastion Vale tower defence map open in the Doriax editor"></a>
+      <br><strong>Bastion Vale</strong><br>
+      3D tower defence · <a href="https://doriaxengine.github.io/bastionvale/">Play</a> · <a href="https://github.com/doriaxengine/bastionvale">Source</a>
     </td>
   </tr>
 </table>
@@ -71,7 +71,7 @@ Click a screenshot to play the game in your browser. Each one is a regular Doria
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-rainforest.png" alt="Rainforest scene in the Doriax editor" width="48%">
-  <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-bastion-vale.png" alt="Tower defence map with terrain in the Doriax editor" width="48%">
+  <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-bones.png" alt="Animated character with its bones shown in the Doriax editor" width="48%">
 </p>
 <p align="center">
   <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-code.png" alt="Code editor with Lua API completion in Doriax" width="48%">
