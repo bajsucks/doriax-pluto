@@ -682,13 +682,14 @@ void LuaBinding::initializeLuaScripts(Scene* scene) {
     auto scriptsArray = scene->getComponentArray<ScriptComponent>();
     for (size_t i = 0; i < scriptsArray->size(); i++) {
         const ScriptComponent& scriptComp = scriptsArray->getComponentFromIndex(i);
-        Entity entity = scriptsArray->getEntity(i);
-        if (BundleManager::isStopping(scene, entity)) continue;
 
         for (size_t s = 0; s < scriptComp.scripts.size(); s++) {
             const ScriptEntry& scriptEntry = scriptComp.scripts[s];
-            if (scriptEntry.enabled && scriptEntry.type == ScriptType::LUA && !scriptEntry.instance &&
-                !loadingLuaScripts.count({scene, entity, s})) {
+            if (!scriptEntry.enabled || scriptEntry.type != ScriptType::LUA || scriptEntry.instance) continue;
+
+            // looked up only for scripts not started, as every spawn runs this scan
+            Entity entity = scriptsArray->getEntity(i);
+            if (!BundleManager::isStopping(scene, entity) && !loadingLuaScripts.count({scene, entity, s})) {
                 pending.push_back({entity, s});
             }
         }

@@ -149,8 +149,10 @@ namespace doriax {
             int owners = 0;
             bool removed = false;
         };
+        using SubscriberList = std::vector<std::shared_ptr<Subscriber>>;
 
-        std::vector<std::shared_ptr<Subscriber>> subscribers;
+        // Also held by copies and running calls, so a shared list is copied before a change
+        std::shared_ptr<SubscriberList> subscribers;
         bool enabled = true;
 
         // Once no list holds it, a call still running skips it
@@ -160,36 +162,40 @@ namespace doriax {
             }
         }
 
+        SubscriberList& editableSubscribers() {
+            if (!subscribers) {
+                subscribers = std::make_shared<SubscriberList>();
+            } else if (subscribers.use_count() > 1) {
+                subscribers = std::make_shared<SubscriberList>(*subscribers);
+            }
+            return *subscribers;
+        }
+
         // Helper to remove subscriber by index
         void removeAt(size_t index) {
-            release(subscribers[index]);
-            subscribers.erase(subscribers.begin() + index);
+            SubscriberList& list = editableSubscribers();
+            release(list[index]);
+            list.erase(list.begin() + index);
         }
 
         bool addImpl(const std::string& tag, std::function<Ret(Args...)> function){
             remove(tag);
 
-            subscribers.push_back(std::make_shared<Subscriber>(Subscriber{tag, std::move(function), 1}));
+            editableSubscribers().push_back(std::make_shared<Subscriber>(Subscriber{tag, std::move(function), 1}));
 
             return true;
         }
 
         void copyFrom(const FunctionSubscribe& t){
-            std::vector<std::shared_ptr<Subscriber>> copied = t.subscribers;
-            for (const auto& subscriber : copied) {
-                subscriber->owners++;
+            std::shared_ptr<SubscriberList> copied = t.subscribers;
+            if (copied) {
+                for (const auto& subscriber : *copied) {
+                    subscriber->owners++;
+                }
             }
             clear();
             subscribers = std::move(copied);
             enabled = t.enabled;
-        }
-
-        // A callback can add or remove subscribers, or move or destroy this object
-        std::vector<std::shared_ptr<Subscriber>> snapshot(){
-            // drops the ones the crash guard disabled
-            subscribers.erase(std::remove_if(subscribers.begin(), subscribers.end(),
-                [](const std::shared_ptr<Subscriber>& subscriber) { return subscriber->removed; }), subscribers.end());
-            return subscribers;
         }
 
         template<typename T, size_t... Idx>
@@ -287,8 +293,8 @@ namespace doriax {
         }
 
         bool remove(const std::string& tag){
-            for (size_t i = 0; i < subscribers.size(); i++) {
-                if (subscribers[i]->tag == tag) {
+            for (size_t i = 0; subscribers && i < subscribers->size(); i++) {
+                if ((*subscribers)[i]->tag == tag) {
                     removeAt(i);
                     return true;
                 }
@@ -299,8 +305,8 @@ namespace doriax {
 
         size_t removeByTagSubstring(const std::string& substring){
             size_t removed = 0;
-            for (size_t i = 0; i < subscribers.size(); ) {
-                if (subscribers[i]->tag.find(substring) != std::string::npos) {
+            for (size_t i = 0; subscribers && i < subscribers->size(); ) {
+                if ((*subscribers)[i]->tag.find(substring) != std::string::npos) {
                     removeAt(i);
                     ++removed;
                 } else {
@@ -317,7 +323,10 @@ namespace doriax {
                 }
             }else{
                 if constexpr (std::is_void<Ret>::value) {
-                    for (const auto& subscriber : snapshot()) {
+                    // held, as a callback can add or remove subscribers, or move or destroy this object
+                    const std::shared_ptr<const SubscriberList> running = subscribers;
+                    if (!running) return;
+                    for (const auto& subscriber : *running) {
                         if (subscriber->removed) continue;
                         auto& function = subscriber->function;
                         #ifdef DORIAX_CRASH_GUARD
@@ -353,7 +362,12 @@ namespace doriax {
             if (!enabled){
                 return def;
             }
-            for (const auto& subscriber : snapshot()) {
+            // held, as a callback can add or remove subscribers, or move or destroy this object
+            const std::shared_ptr<const SubscriberList> running = subscribers;
+            if (!running){
+                return def;
+            }
+            for (const auto& subscriber : *running) {
                 if (subscriber->removed) continue;
                 auto& function = subscriber->function;
                 #ifdef DORIAX_CRASH_GUARD
@@ -389,10 +403,12 @@ namespace doriax {
         }
 
         void clear(){
-            for (const auto& subscriber : subscribers) {
-                release(subscriber);
+            if (subscribers) {
+                for (const auto& subscriber : *subscribers) {
+                    release(subscriber);
+                }
+                subscribers.reset();
             }
-            subscribers.clear();
         }
     };
 }
