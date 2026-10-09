@@ -5627,10 +5627,12 @@ bool RenderSystem::loadPoints(Entity entity, PointsComponent& points, uint16_t p
 
     points.needUpdateTexture = false;
 
-    if (!render.endLoad(pipelines, false, true, CullingMode::BACK, WindingOrder::CCW)){
+    // no depth write: transparent quads would hide the points drawn after them
+    if (!render.endLoad(pipelines, false, !points.transparent, CullingMode::BACK, WindingOrder::CCW)){
         return false;
     }
 
+    points.pipelineTransparent = points.transparent;
     points.needReload = false;
     points.loadCalled = true;
     SystemRender::addQueueCommand(&changeLoaded, new check_load_t{scene, entity});
@@ -8973,6 +8975,10 @@ void RenderSystem::update(double dt){
                         points.needReload = true;
                     }
                 }
+            }
+
+            if (points.transparent != points.pipelineTransparent){
+                points.needReload = true;
             }
 
             if (points.loaded && points.needReload){
