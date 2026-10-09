@@ -2752,31 +2752,6 @@ namespace {
 
 // Only the keys that hold entity nodes: a component carries entity ids of its own, a model's
 // bones for one, and those are not ids this scene hands out.
-Entity lastSerializedEntity(const YAML::Node& entityNode) {
-    if (!entityNode || !entityNode.IsMap())
-        return NULL_ENTITY;
-
-    Entity last = NULL_ENTITY;
-    if (entityNode["entity"]) {
-        last = entityNode["entity"].as<Entity>();
-    }
-
-    if (entityNode["children"] && entityNode["children"].IsSequence()) {
-        for (const auto& child : entityNode["children"]) {
-            last = std::max(last, lastSerializedEntity(child));
-        }
-    }
-
-    // the scene entities an instance keeps under its bundle root, stored nowhere else
-    if (entityNode["bundleLocalEntities"] && entityNode["bundleLocalEntities"].IsSequence()) {
-        for (const auto& local : entityNode["bundleLocalEntities"]) {
-            last = std::max(last, lastSerializedEntity(local));
-        }
-    }
-
-    return last;
-}
-
 void collectSerializedEntities(const YAML::Node& entityNode, std::unordered_set<Entity>& ids) {
     if (!entityNode || !entityNode.IsMap())
         return;
@@ -2784,16 +2759,22 @@ void collectSerializedEntities(const YAML::Node& entityNode, std::unordered_set<
     if (entityNode["entity"]) {
         ids.insert(entityNode["entity"].as<Entity>());
     }
-    for (const char* key : {"children", "bundleLocalEntities"}) {
-        if (entityNode[key] && entityNode[key].IsSequence()) {
-            for (const auto& child : entityNode[key]) {
-                collectSerializedEntities(child, ids);
-            }
+
+    if (entityNode["children"] && entityNode["children"].IsSequence()) {
+        for (const auto& child : entityNode["children"]) {
+            collectSerializedEntities(child, ids);
+        }
+    }
+
+    // the scene entities an instance keeps under its bundle root, stored nowhere else
+    if (entityNode["bundleLocalEntities"] && entityNode["bundleLocalEntities"].IsSequence()) {
+        for (const auto& local : entityNode["bundleLocalEntities"]) {
+            collectSerializedEntities(local, ids);
         }
     }
 }
 
-// Ids a loading scene file has yet to recreate, kept from bundle members decoded before them
+// scene ids not decoded yet, which bundle members decoded first leave free
 thread_local const EntityRegistry* pendingSceneRegistry = nullptr;
 thread_local std::unordered_set<Entity>* pendingSceneEntities = nullptr;
 
@@ -2807,11 +2788,13 @@ void editor::Stream::decodeSceneProjectEntities(Project* project, SceneProject* 
 
     // a bundle instance is rebuilt as the root holding it is decoded, so its members draw from
     // the allocator while entities further down the file are still waiting to be recreated
-    Entity lastEntity = NULL_ENTITY;
     std::unordered_set<Entity> sceneIds;
     for (const auto& entityNode : entitiesNode){
-        lastEntity = std::max(lastEntity, lastSerializedEntity(entityNode));
         collectSerializedEntities(entityNode, sceneIds);
+    }
+    Entity lastEntity = NULL_ENTITY;
+    for (Entity id : sceneIds){
+        lastEntity = std::max(lastEntity, id);
     }
     sceneProject->scene->setLastEntity(lastEntity);
 

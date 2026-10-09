@@ -35,8 +35,8 @@ namespace doriax {
     //   local root = BundleManager.createBundle("enemies/EnemyShip", scene)
     //   BundleManager.destroyBundle(scene, root)
     //
-    // An instance's scripts start before createBundle returns and stop before destroyBundle
-    // removes its entities.
+    // An instance's scripts start in createBundle and stop in destroyBundle, which also removes
+    // what was parented under the instance.
 
     class DORIAX_API BundleManager {
     private:
@@ -61,11 +61,9 @@ namespace doriax {
         static std::function<void(Scene*, Entity)> scriptStopper;
         static std::vector<std::pair<Scene*, Entity>> stoppingEntities;
 
-        static void startScripts(Scene* scene);
-        static void stopScripts(Scene* scene, Entity entity);
-
         static BundleEntry* findEntry(uint32_t id);
         static BundleEntry* findEntry(const std::string& name);
+        static std::vector<BundleInstance>::iterator findInstance(Scene* scene, Entity rootEntity);
         static Entity instantiate(uint32_t id, Scene* scene, Entity parent);
 
     public:
@@ -117,10 +115,10 @@ namespace doriax {
         static void destroyAllInstances(Scene* scene);
         static void clearAll();
 
-        // start: the scene's scripts not started yet, stop: one entity's scripts (Lua only if unset)
+        // start runs the scene's scripts not started yet, stop one entity's. Lua by default
         static void setScriptCallbacks(std::function<void(Scene*)> start, std::function<void(Scene*, Entity)> stop);
 
-        // True while destroyBundle tears the entity down, so script start skips it
+        // while destroyBundle stops its scripts
         static bool isStopping(Scene* scene, Entity entity);
     };
 

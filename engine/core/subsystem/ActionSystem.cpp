@@ -414,7 +414,6 @@ void ActionSystem::actionComponentStop(ActionComponent& action){
     action.stopTrigger = false;
     action.timecount = 0;
 
-    // not a copy, which would still call scripts unsubscribed meanwhile
     action.onStop.call();
 }
 

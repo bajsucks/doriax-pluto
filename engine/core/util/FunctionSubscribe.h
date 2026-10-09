@@ -142,7 +142,7 @@ namespace doriax {
     class FunctionSubscribe<Ret(Args...)> {
 
     private:
-        // Shared by copies, as a component array relocates its elements by copying them
+        // shared by copies, components are relocated by copying
         struct Subscriber {
             std::string tag;
             std::function<Ret(Args...)> function;
@@ -151,11 +151,11 @@ namespace doriax {
         };
         using SubscriberList = std::vector<std::shared_ptr<Subscriber>>;
 
-        // Also held by copies and running calls, so a shared list is copied before a change
+        // copied on write, so a running call keeps its own
         std::shared_ptr<SubscriberList> subscribers;
         bool enabled = true;
 
-        // Once no list holds it, a call still running skips it
+        // a running call skips it once no list has it
         void release(const std::shared_ptr<Subscriber>& subscriber) {
             if (--subscriber->owners == 0) {
                 subscriber->removed = true;
@@ -187,14 +187,13 @@ namespace doriax {
         }
 
         void copyFrom(const FunctionSubscribe& t){
-            std::shared_ptr<SubscriberList> copied = t.subscribers;
-            if (copied) {
-                for (const auto& subscriber : *copied) {
+            if (t.subscribers) {
+                for (const auto& subscriber : *t.subscribers) {
                     subscriber->owners++;
                 }
             }
             clear();
-            subscribers = std::move(copied);
+            subscribers = t.subscribers;
             enabled = t.enabled;
         }
 
@@ -323,10 +322,10 @@ namespace doriax {
                 }
             }else{
                 if constexpr (std::is_void<Ret>::value) {
-                    // held, as a callback can add or remove subscribers, or move or destroy this object
-                    const std::shared_ptr<const SubscriberList> running = subscribers;
-                    if (!running) return;
-                    for (const auto& subscriber : *running) {
+                    // a callback can change or destroy this object
+                    auto list = subscribers;
+                    if (!list) return;
+                    for (const auto& subscriber : *list) {
                         if (subscriber->removed) continue;
                         auto& function = subscriber->function;
                         #ifdef DORIAX_CRASH_GUARD
@@ -362,12 +361,12 @@ namespace doriax {
             if (!enabled){
                 return def;
             }
-            // held, as a callback can add or remove subscribers, or move or destroy this object
-            const std::shared_ptr<const SubscriberList> running = subscribers;
-            if (!running){
+            // a callback can change or destroy this object
+            auto list = subscribers;
+            if (!list){
                 return def;
             }
-            for (const auto& subscriber : *running) {
+            for (const auto& subscriber : *list) {
                 if (subscriber->removed) continue;
                 auto& function = subscriber->function;
                 #ifdef DORIAX_CRASH_GUARD

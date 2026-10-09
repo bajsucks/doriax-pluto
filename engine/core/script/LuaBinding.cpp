@@ -646,9 +646,6 @@ void LuaBinding::clearLoadedProjectModules() {
     lua_pop(L, 1);
 }
 
-// Entries whose module is running, so a nested init does not load them again
-static std::set<std::tuple<Scene*, Entity, size_t>> loadingLuaScripts;
-
 struct StartedLuaScript {
     Scene* scene;
     Entity entity;
@@ -656,16 +653,25 @@ struct StartedLuaScript {
     int ref;
 };
 
-// Started while a module was loading: their references and init() wait for the outer init
+// entries whose module is running, a nested start must not load them again
+static std::set<std::tuple<Scene*, Entity, size_t>> loadingLuaScripts;
+// started while a module was running, the outer start finishes them
 static std::vector<StartedLuaScript> deferredLuaScripts;
 
-// Looked up again after Lua calls, which can move components
+// found again after any Lua call, which can move components
 static ScriptEntry* findLuaScriptEntry(Scene* scene, Entity entity, size_t index) {
     if (!scene->isEntityCreated(entity)) return nullptr;
     ScriptComponent* scriptComp = scene->findComponent<ScriptComponent>(entity);
     if (!scriptComp || index >= scriptComp->scripts.size()) return nullptr;
     ScriptEntry* scriptEntry = &scriptComp->scripts[index];
     return (scriptEntry->type == ScriptType::LUA && scriptEntry->enabled) ? scriptEntry : nullptr;
+}
+
+// null when stopped meanwhile
+static ScriptEntry* findLuaScriptEntry(const StartedLuaScript& started) {
+    ScriptEntry* scriptEntry = findLuaScriptEntry(started.scene, started.entity, started.index);
+    if (!scriptEntry || scriptEntry->instance != reinterpret_cast<void*>(static_cast<intptr_t>(started.ref))) return nullptr;
+    return scriptEntry;
 }
 
 void LuaBinding::initializeLuaScripts(Scene* scene) {
@@ -677,7 +683,6 @@ void LuaBinding::initializeLuaScripts(Scene* scene) {
         return;
     }
 
-    // Running scripts are left alone, so a spawned bundle starts only its own
     std::vector<std::pair<Entity, size_t>> pending;
     auto scriptsArray = scene->getComponentArray<ScriptComponent>();
     for (size_t i = 0; i < scriptsArray->size(); i++) {
@@ -687,11 +692,9 @@ void LuaBinding::initializeLuaScripts(Scene* scene) {
             const ScriptEntry& scriptEntry = scriptComp.scripts[s];
             if (!scriptEntry.enabled || scriptEntry.type != ScriptType::LUA || scriptEntry.instance) continue;
 
-            // looked up only for scripts not started, as every spawn runs this scan
             Entity entity = scriptsArray->getEntity(i);
-            if (!BundleManager::isStopping(scene, entity) && !loadingLuaScripts.count({scene, entity, s})) {
-                pending.push_back({entity, s});
-            }
+            if (BundleManager::isStopping(scene, entity) || loadingLuaScripts.count({scene, entity, s})) continue;
+            pending.push_back({entity, s});
         }
     }
 
@@ -699,11 +702,11 @@ void LuaBinding::initializeLuaScripts(Scene* scene) {
 
     // PASS 1: Create the Lua script instances (without resolving EntityRef properties)
     for (const auto& [entity, index] : pending) {
-        ScriptEntry* candidate = findLuaScriptEntry(scene, entity, index);
-        if (!candidate || candidate->instance) continue;
+        ScriptEntry* entry = findLuaScriptEntry(scene, entity, index);
+        if (!entry || entry->instance) continue;
 
-        const std::string path = candidate->path;
-        const std::string className = candidate->className;
+        const std::string path = entry->path;
+        const std::string className = entry->className;
 
         std::string luaFile = std::string("lua://") + path;
         Data filedata;
@@ -734,12 +737,12 @@ void LuaBinding::initializeLuaScripts(Scene* scene) {
             continue;
         }
 
-        ScriptEntry* entryPtr = findLuaScriptEntry(scene, entity, index);
-        if (!entryPtr || entryPtr->instance) {
+        entry = findLuaScriptEntry(scene, entity, index);
+        if (!entry || entry->instance) {
             lua_pop(L, 1);
             continue;
         }
-        ScriptEntry& scriptEntry = *entryPtr;
+        ScriptEntry& scriptEntry = *entry;
 
         // Create instance table with module as prototype
         lua_newtable(L);
@@ -807,9 +810,9 @@ void LuaBinding::initializeLuaScripts(Scene* scene) {
 
     // PASS 2: Resolve Entity pointer properties
     for (const StartedLuaScript& startedScript : started) {
-        ScriptEntry* entryPtr = findLuaScriptEntry(startedScript.scene, startedScript.entity, startedScript.index);
-        if (!entryPtr || entryPtr->instance != reinterpret_cast<void*>(static_cast<intptr_t>(startedScript.ref))) continue;
-        ScriptEntry& scriptEntry = *entryPtr;
+        ScriptEntry* entry = findLuaScriptEntry(startedScript);
+        if (!entry) continue;
+        ScriptEntry& scriptEntry = *entry;
 
         lua_rawgeti(L, LUA_REGISTRYINDEX, startedScript.ref);
 
@@ -875,9 +878,9 @@ void LuaBinding::initializeLuaScripts(Scene* scene) {
 
     // PASS 3: Call init() methods
     for (const StartedLuaScript& startedScript : started) {
-        ScriptEntry* entryPtr = findLuaScriptEntry(startedScript.scene, startedScript.entity, startedScript.index);
-        if (!entryPtr || entryPtr->instance != reinterpret_cast<void*>(static_cast<intptr_t>(startedScript.ref))) continue;
-        const std::string className = entryPtr->className;
+        ScriptEntry* entry = findLuaScriptEntry(startedScript);
+        if (!entry) continue;
+        const std::string className = entry->className;
 
         lua_rawgeti(L, LUA_REGISTRYINDEX, startedScript.ref);
         lua_getfield(L, -1, "init");
@@ -916,6 +919,7 @@ void LuaBinding::cleanupLuaScripts(Scene* scene, Entity entity) {
 void LuaBinding::cleanupLuaScripts(Scene* scene) {
     if (!scene) return;
 
+    // a module still running can have the scene deleted
     deferredLuaScripts.erase(std::remove_if(deferredLuaScripts.begin(), deferredLuaScripts.end(),
         [scene](const StartedLuaScript& started) { return started.scene == scene; }), deferredLuaScripts.end());
 

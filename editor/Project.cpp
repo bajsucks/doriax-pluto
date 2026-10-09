@@ -4516,12 +4516,7 @@ std::vector<editor::SceneScriptSource> editor::Project::collectAllSceneCppScript
                 if (!scriptEntry.enabled || scriptEntry.type == ScriptType::LUA || scriptEntry.path.empty()) {
                     continue;
                 }
-                SceneScriptSource script;
-                script.path = scriptEntry.path;
-                script.headerPath = scriptEntry.headerPath;
-                script.className = scriptEntry.className;
-                script.properties = toScriptPropertyInfos(scriptEntry.properties);
-                merge(script);
+                merge({scriptEntry.path, scriptEntry.headerPath, scriptEntry.className, toScriptPropertyInfos(scriptEntry.properties)});
             }
         }
     }
@@ -7540,7 +7535,7 @@ void editor::Project::removeBundleInstanceTracking(uint32_t sceneId, Entity root
     removeBundleInstanceTracking(getScene(sceneId), rootEntity);
 }
 
-// Takes the scene itself: a Play copy has the id of the edited scene
+// a Play copy has the id of the scene it copies
 void editor::Project::removeBundleInstanceTracking(SceneProject* sceneProject, Entity rootEntity) {
     if (!sceneProject || !sceneProject->scene) {
         return;
@@ -7602,7 +7597,7 @@ bool editor::Project::unimportEntityBundle(uint32_t sceneId, const std::filesyst
     return unimportEntityBundle(getScene(sceneId), filepath, rootEntity, memberEntities);
 }
 
-// Takes the scene itself: a Play copy has the id of the edited scene
+// a Play copy has the id of the scene it copies
 bool editor::Project::unimportEntityBundle(SceneProject* sceneProject, const std::filesystem::path& filepath, Entity rootEntity, const std::vector<Entity>& memberEntities) {
     if (!sceneProject || !sceneProject->scene) {
         return false;
@@ -9481,7 +9476,7 @@ editor::SceneProject* editor::Project::findSceneProjectByScene(Scene* scene) {
 void editor::Project::registerBundleManager() {
     BundleManager::clearAll();
 
-    // spawned instances start and stop their scripts like the scene they join
+    // spawned instances run their scripts like the scene does
     BundleManager::setScriptCallbacks(
         [this](Scene* scene) {
             if (conector.isLibraryConnected()) {

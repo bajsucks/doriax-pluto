@@ -677,7 +677,7 @@ void UISystem::updateButton(Entity entity, ButtonComponent& button, ImageCompone
         button.texturePressed.setAlphaBorderAuto(true);
         button.textureDisabled.setAlphaBorderAuto(true);
 
-        // not load(), which is false while the texture loads asynchronously
+        // load() is false while it loads asynchronously
         if (button.textureNormal.empty()){
             button.textureNormal = ui.texture;
         }

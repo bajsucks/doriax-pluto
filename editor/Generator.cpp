@@ -609,14 +609,12 @@ std::string editor::Generator::buildInitSceneScriptsSource(const std::vector<Sce
     const bool anyProperties = hasScriptProperties(scriptFiles);
 
     if (!scriptFiles.empty()) {
-        // Entries whose constructor is running, skipped by a nested initScripts
+        // a constructor can spawn a bundle, starting a nested initScripts
         sourceContent += "static std::set<std::tuple<doriax::Scene*, doriax::Entity, size_t>> constructingScripts;\n";
-        // Scenes in cleanupScripts, where a destructor can still spawn a bundle
+        // and a destructor too, while cleanupScripts runs
         sourceContent += "static std::set<doriax::Scene*> stoppingScenes;\n";
         if (anyProperties) {
-            // Properties are set by the outermost initScripts, when no constructor is running
             sourceContent += "static std::deque<std::tuple<doriax::Scene*, doriax::Entity, size_t>> unsyncedScripts;\n";
-            sourceContent += "static int initDepth = 0;\n";
         }
         sourceContent += "\n";
 
@@ -715,7 +713,7 @@ std::string editor::Generator::buildInitSceneScriptsSource(const std::vector<Sce
         sourceContent += "}\n\n";
     }
 
-    // Starts only the scripts not started yet, so it also serves spawned bundles
+    // starts only the scripts not started yet, so spawned bundles use it too
     sourceContent += "extern \"C\" void PROJECT_API initScripts(doriax::Scene* scene) {\n";
     if (!scriptFiles.empty()) {
         sourceContent += "    if (stoppingScenes.count(scene)) return;\n";
@@ -726,46 +724,39 @@ std::string editor::Generator::buildInitSceneScriptsSource(const std::vector<Sce
 
         sourceContent += "\n";
 
-        if (anyProperties) {
-            sourceContent += "    struct DepthScope {\n";
-            sourceContent += "        DepthScope() { initDepth++; }\n";
-            sourceContent += "        ~DepthScope() { initDepth--; }\n";
-            sourceContent += "    } depthScope;\n";
-            sourceContent += "\n";
-        }
-
         sourceContent += "    std::vector<std::pair<doriax::Entity, size_t>> pending;\n";
         sourceContent += "    const auto& scriptsArray = scene->getComponentArray<ScriptComponent>();\n";
         sourceContent += "    for (size_t i = 0; i < scriptsArray->size(); i++) {\n";
         sourceContent += "        const doriax::ScriptComponent& scriptComp = scriptsArray->getComponentFromIndex(i);\n";
         sourceContent += "        for (size_t s = 0; s < scriptComp.scripts.size(); s++) {\n";
         sourceContent += "            if (scriptComp.scripts[s].type == ScriptType::LUA || scriptComp.scripts[s].instance) continue;\n";
-        // looked up only for scripts not started, as every spawn runs this scan
         sourceContent += "            doriax::Entity entity = scriptsArray->getEntity(i);\n";
-        sourceContent += "            if (!BundleManager::isStopping(scene, entity) && !constructingScripts.count({scene, entity, s})) pending.push_back({entity, s});\n";
+        sourceContent += "            if (BundleManager::isStopping(scene, entity) || constructingScripts.count({scene, entity, s})) continue;\n";
+        sourceContent += "            pending.push_back({entity, s});\n";
         sourceContent += "        }\n";
         sourceContent += "    }\n";
         sourceContent += "\n";
 
-        // a constructor that spawns a bundle starts it through a nested initScripts
+        sourceContent += "    struct ConstructingGuard {\n";
+        sourceContent += "        std::tuple<doriax::Scene*, doriax::Entity, size_t> key;\n";
+        sourceContent += "        ConstructingGuard(doriax::Scene* s, doriax::Entity e, size_t i): key(s, e, i) { constructingScripts.insert(key); }\n";
+        sourceContent += "        ~ConstructingGuard() { constructingScripts.erase(key); }\n";
+        sourceContent += "    };\n";
+        sourceContent += "\n";
+
         sourceContent += "    for (const auto& [entity, index] : pending) {\n";
         sourceContent += "        doriax::ScriptComponent* scriptComp = scene->findComponent<doriax::ScriptComponent>(entity);\n";
         sourceContent += "        if (!scriptComp || index >= scriptComp->scripts.size() || scriptComp->scripts[index].instance) continue;\n";
         sourceContent += "        const std::string className = scriptComp->scripts[index].className;\n";
+        sourceContent += "        ConstructingGuard guard(scene, entity, index);\n";
+        sourceContent += "\n";
         sourceContent += "        void* instance = nullptr;\n";
-        sourceContent += "        {\n";
-        // erased even if the constructor throws, so a later call retries it
-        sourceContent += "            struct ConstructingScope {\n";
-        sourceContent += "                std::tuple<doriax::Scene*, doriax::Entity, size_t> key;\n";
-        sourceContent += "                ~ConstructingScope() { constructingScripts.erase(key); }\n";
-        sourceContent += "            } constructing{{scene, entity, index}};\n";
-        sourceContent += "            constructingScripts.insert(constructing.key);\n";
         for (const auto& s : scriptFiles) {
-            sourceContent += "            if (className == \"" + s.className + "\") instance = static_cast<void*>(new " + s.className + "(scene, entity));\n";
+            sourceContent += "        if (className == \"" + s.className + "\") instance = static_cast<void*>(new " + s.className + "(scene, entity));\n";
         }
-        sourceContent += "        }\n";
         sourceContent += "        if (!instance) continue;\n";
-        // a constructor can add components, which moves them, or destroy its own bundle
+        sourceContent += "\n";
+        // the constructor can move components or destroy its own bundle
         sourceContent += "        scriptComp = scene->findComponent<doriax::ScriptComponent>(entity);\n";
         sourceContent += "        if (scriptComp && index < scriptComp->scripts.size() && !scriptComp->scripts[index].instance) {\n";
         sourceContent += "            scriptComp->scripts[index].instance = instance;\n";
@@ -779,8 +770,8 @@ std::string editor::Generator::buildInitSceneScriptsSource(const std::vector<Sce
 
         if (anyProperties) {
             sourceContent += "\n";
-            sourceContent += "    if (initDepth > 1) return;\n";
-            // wrapper constructors can spawn and add more
+            // only once no constructor runs, so references find every script
+            sourceContent += "    if (!constructingScripts.empty()) return;\n";
             sourceContent += "    while (!unsyncedScripts.empty()) {\n";
             sourceContent += "        auto [syncScene, entity, index] = unsyncedScripts.front();\n";
             sourceContent += "        unsyncedScripts.pop_front();\n";
@@ -802,13 +793,13 @@ std::string editor::Generator::buildCleanupSceneScriptsSource(const std::vector<
 
     const bool anyProperties = hasScriptProperties(scriptFiles);
 
-    // One entity's scripts, released before BundleManager destroys a spawned instance
+    // for BundleManager to stop a spawned instance
     sourceContent += "extern \"C\" void PROJECT_API cleanupEntityScripts(doriax::Scene* scene, doriax::Entity entity) {\n";
     sourceContent += "    LuaBinding::cleanupLuaScripts(scene, entity);\n";
 
     if (!scriptFiles.empty()) {
         sourceContent += "\n";
-        // cleared before the destructor runs, which can move components
+        // found again each time, a destructor can move components
         sourceContent += "    for (size_t index = 0; ; index++) {\n";
         sourceContent += "        doriax::ScriptComponent* scriptComp = scene->findComponent<doriax::ScriptComponent>(entity);\n";
         sourceContent += "        if (!scriptComp || index >= scriptComp->scripts.size()) break;\n";
@@ -840,8 +831,6 @@ std::string editor::Generator::buildCleanupSceneScriptsSource(const std::vector<
         }
         sourceContent += "        }\n";
         sourceContent += "    }\n";
-    } else {
-        sourceContent += "    (void)entity;\n";
     }
 
     sourceContent += "}\n\n";
@@ -851,13 +840,13 @@ std::string editor::Generator::buildCleanupSceneScriptsSource(const std::vector<
 
     if (!scriptFiles.empty()) {
         sourceContent += "\n";
-        sourceContent += "    stoppingScenes.insert(scene);\n";
-        sourceContent += "    struct StoppingScope {\n";
+        sourceContent += "    struct StoppingGuard {\n";
         sourceContent += "        doriax::Scene* scene;\n";
-        sourceContent += "        ~StoppingScope() { stoppingScenes.erase(scene); }\n";
-        sourceContent += "    } stoppingScope{scene};\n";
+        sourceContent += "        explicit StoppingGuard(doriax::Scene* s): scene(s) { stoppingScenes.insert(s); }\n";
+        sourceContent += "        ~StoppingGuard() { stoppingScenes.erase(scene); }\n";
+        sourceContent += "    } guard(scene);\n";
         sourceContent += "\n";
-        // collected first, as a destructor can add or remove components
+        // taken first, a destructor can add or remove components
         sourceContent += "    std::vector<doriax::Entity> entities;\n";
         sourceContent += "    const auto& scriptsArray = scene->getComponentArray<ScriptComponent>();\n";
         sourceContent += "    for (size_t i = 0; i < scriptsArray->size(); i++) {\n";
@@ -866,7 +855,7 @@ std::string editor::Generator::buildCleanupSceneScriptsSource(const std::vector<
         sourceContent += "    for (doriax::Entity entity : entities) {\n";
         sourceContent += "        if (scene->isEntityCreated(entity)) cleanupEntityScripts(scene, entity);\n";
         sourceContent += "    }\n";
-        // left behind by a constructor that threw, and the scene may be deleted next
+        // left by a constructor that threw, the scene can be deleted next
         if (anyProperties) {
             sourceContent += "\n";
             sourceContent += "    unsyncedScripts.erase(std::remove_if(unsyncedScripts.begin(), unsyncedScripts.end(),\n";
