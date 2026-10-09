@@ -125,14 +125,19 @@ void LuaBinding::registerECSClasses(lua_State *L){
         .endNamespace();
 
     luabridge::getGlobalNamespace(L)
-        .beginClass<ActionSystem>("ActionSystem")
+        .beginClass<SubSystem>("SubSystem")
+        .addProperty("paused", &SubSystem::isPaused, &SubSystem::setPaused)
+        .endClass();
+
+    luabridge::getGlobalNamespace(L)
+        .deriveClass<ActionSystem, SubSystem>("ActionSystem")
         .addFunction("actionStart", &ActionSystem::actionStart)
         .addFunction("actionStop", &ActionSystem::actionStop)
         .addFunction("actionPause", &ActionSystem::actionPause)
         .endClass();
 
     luabridge::getGlobalNamespace(L)
-        .beginClass<AudioSystem>("AudioSystem")
+        .deriveClass<AudioSystem, SubSystem>("AudioSystem")
         .addStaticFunction("stopAll", &AudioSystem::stopAll)
         .addStaticFunction("pauseAll", &AudioSystem::pauseAll)
         .addStaticFunction("resumeAll", &AudioSystem::resumeAll)
@@ -141,7 +146,7 @@ void LuaBinding::registerECSClasses(lua_State *L){
         .endClass();
 
     luabridge::getGlobalNamespace(L)
-        .beginClass<MeshSystem>("MeshSystem")
+        .deriveClass<MeshSystem, SubSystem>("MeshSystem")
         .addFunction("createPlane", &MeshSystem::createPlane)
         .addFunction("createBox", &MeshSystem::createBox)
         .addFunction("createSphere", &MeshSystem::createSphere)
@@ -155,7 +160,7 @@ void LuaBinding::registerECSClasses(lua_State *L){
         .endClass();
 
     luabridge::getGlobalNamespace(L)
-        .beginClass<PhysicsSystem>("PhysicsSystem")
+        .deriveClass<PhysicsSystem, SubSystem>("PhysicsSystem")
         .addProperty("gravity", (Vector3(PhysicsSystem::*)() const)&PhysicsSystem::getGravity, (void(PhysicsSystem::*)(Vector3))&PhysicsSystem::setGravity)
         .addFunction("setGravity",
             luabridge::overload<Vector3>(&PhysicsSystem::setGravity),
@@ -236,12 +241,12 @@ void LuaBinding::registerECSClasses(lua_State *L){
         .endClass();
 
     luabridge::getGlobalNamespace(L)
-        .beginClass<RenderSystem>("RenderSystem")
+        .deriveClass<RenderSystem, SubSystem>("RenderSystem")
         .addFunction("updateCameraSize", &RenderSystem::updateCameraSize)
         .endClass();
 
     luabridge::getGlobalNamespace(L)
-        .beginClass<UISystem>("UISystem")
+        .deriveClass<UISystem, SubSystem>("UISystem")
         .addFunction("getAnchorReferenceRect", &UISystem::getAnchorReferenceRect)
         .addFunction("setAnchorReferenceSize", &UISystem::setAnchorReferenceSize)
         .addFunction("clearAnchorReferenceSize", &UISystem::clearAnchorReferenceSize)

@@ -142,26 +142,54 @@ namespace doriax {
     class FunctionSubscribe<Ret(Args...)> {
 
     private:
-        std::vector<std::function<Ret(Args...)>> functions;
-        std::vector<std::string> tags;
+        // Shared by copies, as a component array relocates its elements by copying them
+        struct Subscriber {
+            std::string tag;
+            std::function<Ret(Args...)> function;
+            int owners = 0;
+            bool removed = false;
+        };
+
+        std::vector<std::shared_ptr<Subscriber>> subscribers;
         bool enabled = true;
+
+        // Once no list holds it, a call still running skips it
+        void release(const std::shared_ptr<Subscriber>& subscriber) {
+            if (--subscriber->owners == 0) {
+                subscriber->removed = true;
+            }
+        }
 
         // Helper to remove subscriber by index
         void removeAt(size_t index) {
-            functions.erase(functions.begin() + index);
-            tags.erase(tags.begin() + index);
+            release(subscribers[index]);
+            subscribers.erase(subscribers.begin() + index);
         }
 
         bool addImpl(const std::string& tag, std::function<Ret(Args...)> function){
-            if (find(tags.begin(), tags.end(), tag) != tags.end())
-            {
-                remove(tag);
-            }
+            remove(tag);
 
-            functions.push_back(function);
-            tags.push_back(tag);
+            subscribers.push_back(std::make_shared<Subscriber>(Subscriber{tag, std::move(function), 1}));
 
             return true;
+        }
+
+        void copyFrom(const FunctionSubscribe& t){
+            std::vector<std::shared_ptr<Subscriber>> copied = t.subscribers;
+            for (const auto& subscriber : copied) {
+                subscriber->owners++;
+            }
+            clear();
+            subscribers = std::move(copied);
+            enabled = t.enabled;
+        }
+
+        // A callback can add or remove subscribers, or move or destroy this object
+        std::vector<std::shared_ptr<Subscriber>> snapshot(){
+            // drops the ones the crash guard disabled
+            subscribers.erase(std::remove_if(subscribers.begin(), subscribers.end(),
+                [](const std::shared_ptr<Subscriber>& subscriber) { return subscriber->removed; }), subscribers.end());
+            return subscribers;
         }
 
         template<typename T, size_t... Idx>
@@ -180,15 +208,17 @@ namespace doriax {
         }
 
         FunctionSubscribe(const FunctionSubscribe& t){
-            this->functions = t.functions;
-            this->tags = t.tags;
-            this->enabled = t.enabled;
+            copyFrom(t);
+        }
+
+        ~FunctionSubscribe() {
+            clear();
         }
 
         FunctionSubscribe& operator = (const FunctionSubscribe& t){
-            this->functions = t.functions;
-            this->tags = t.tags;
-            this->enabled = t.enabled;
+            if (this != &t) {
+                copyFrom(t);
+            }
 
             return *this;
         }
@@ -257,25 +287,21 @@ namespace doriax {
         }
 
         bool remove(const std::string& tag){
-            auto it = find(tags.begin(), tags.end(), tag);
-            if (it == tags.end()){
-                return false;
+            for (size_t i = 0; i < subscribers.size(); i++) {
+                if (subscribers[i]->tag == tag) {
+                    removeAt(i);
+                    return true;
+                }
             }
 
-            auto index{ std::distance(tags.begin(), it) };
-            tags.erase(it);
-
-            functions.erase(functions.begin() + index);
-
-            return true;
+            return false;
         }
 
         size_t removeByTagSubstring(const std::string& substring){
             size_t removed = 0;
-            for (size_t i = 0; i < tags.size(); ) {
-                if (tags[i].find(substring) != std::string::npos) {
-                    tags.erase(tags.begin() + i);
-                    functions.erase(functions.begin() + i);
+            for (size_t i = 0; i < subscribers.size(); ) {
+                if (subscribers[i]->tag.find(substring) != std::string::npos) {
+                    removeAt(i);
                     ++removed;
                 } else {
                     ++i;
@@ -291,11 +317,11 @@ namespace doriax {
                 }
             }else{
                 if constexpr (std::is_void<Ret>::value) {
-                    for (size_t i = 0; i < functions.size(); ) {
-                        auto& function = functions[i];
+                    for (const auto& subscriber : snapshot()) {
+                        if (subscriber->removed) continue;
+                        auto& function = subscriber->function;
                         #ifdef DORIAX_CRASH_GUARD
                         // Use crash protection if handler is registered
-                        auto& tag = tags[i];
                         auto& crashHandler = FunctionSubscribeGlobal::getCrashHandler();
                         if (crashHandler) {
                             CrashInfo ci{};
@@ -305,10 +331,9 @@ namespace doriax {
                             }, &ci);
 
                             if (!ok || !exception.empty()) {
-                                crashHandler(tag, ok ? exception : crashDescription(ci));
+                                crashHandler(subscriber->tag, ok ? exception : crashDescription(ci));
 
-                                removeAt(i);
-                                continue;
+                                subscriber->removed = true;
                             }
                         } else {
                             function(args...);
@@ -316,8 +341,6 @@ namespace doriax {
                         #else
                         function(args...);
                         #endif
-
-                        ++i;
                     }
                 } else {
                     return callRet(args..., Ret());
@@ -330,11 +353,11 @@ namespace doriax {
             if (!enabled){
                 return def;
             }
-            for (size_t i = 0; i < functions.size(); ) {
-                auto& function = functions[i];
+            for (const auto& subscriber : snapshot()) {
+                if (subscriber->removed) continue;
+                auto& function = subscriber->function;
                 #ifdef DORIAX_CRASH_GUARD
                 // Use crash protection if handler is registered
-                auto& tag = tags[i];
                 auto& crashHandler = FunctionSubscribeGlobal::getCrashHandler();
                 if (crashHandler) {
                     Ret result{};
@@ -347,10 +370,9 @@ namespace doriax {
                     if (ok && exception.empty()) {
                         return result;
                     } else {
-                        crashHandler(tag, ok ? exception : crashDescription(ci));
+                        crashHandler(subscriber->tag, ok ? exception : crashDescription(ci));
 
-                        removeAt(i);
-                        continue;
+                        subscriber->removed = true;
                     }
                 } else {
                     return function(args...);
@@ -367,8 +389,10 @@ namespace doriax {
         }
 
         void clear(){
-            functions.clear();
-            tags.clear();
+            for (const auto& subscriber : subscribers) {
+                release(subscriber);
+            }
+            subscribers.clear();
         }
     };
 }

@@ -240,6 +240,38 @@ void editor::Conector::cleanup(Scene* scene){
     }
 }
 
+void editor::Conector::cleanupEntity(Scene* scene, Entity entity){
+    if (!libHandle) {
+        return;
+    }
+
+    using CleanupEntityScriptsFunc = void (*)(Scene*, Entity);
+    #ifdef _WIN32
+        CleanupEntityScriptsFunc cleanupFn = reinterpret_cast<CleanupEntityScriptsFunc>(GetProcAddress(static_cast<HMODULE>(libHandle), "cleanupEntityScripts"));
+        if (!cleanupFn) {
+            Out::error("Failed to find function 'cleanupEntityScripts' in the library (Error code: %lu)", GetLastError());
+        }
+    #else
+        dlerror(); // clear any existing error
+        CleanupEntityScriptsFunc cleanupFn = reinterpret_cast<CleanupEntityScriptsFunc>(dlsym(libHandle, "cleanupEntityScripts"));
+        const char* err = dlerror();
+        if (err) {
+            Out::error("Failed to find function 'cleanupEntityScripts' in the library (Error: %s)", err);
+            cleanupFn = nullptr;
+        }
+    #endif
+
+    if (cleanupFn) {
+        try {
+            cleanupFn(scene, entity);
+        } catch (const std::exception& e) {
+            Out::error("Exception in cleanupEntityScripts(): %s", e.what());
+        } catch (...) {
+            Out::error("Unknown exception in cleanupEntityScripts()");
+        }
+    }
+}
+
 bool editor::Conector::isLibraryConnected() const {
     return libHandle != nullptr;
 }

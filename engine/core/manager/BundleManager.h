@@ -34,6 +34,9 @@ namespace doriax {
     // Usage from Lua:
     //   local root = BundleManager.createBundle("enemies/EnemyShip", scene)
     //   BundleManager.destroyBundle(scene, root)
+    //
+    // An instance's scripts start before createBundle returns and stop before destroyBundle
+    // removes its entities.
 
     class DORIAX_API BundleManager {
     private:
@@ -53,6 +56,13 @@ namespace doriax {
 
         static std::vector<BundleEntry> entries;
         static std::vector<BundleInstance> instances;
+
+        static std::function<void(Scene*)> scriptStarter;
+        static std::function<void(Scene*, Entity)> scriptStopper;
+        static std::vector<std::pair<Scene*, Entity>> stoppingEntities;
+
+        static void startScripts(Scene* scene);
+        static void stopScripts(Scene* scene, Entity entity);
 
         static BundleEntry* findEntry(uint32_t id);
         static BundleEntry* findEntry(const std::string& name);
@@ -106,6 +116,12 @@ namespace doriax {
 
         static void destroyAllInstances(Scene* scene);
         static void clearAll();
+
+        // start: the scene's scripts not started yet, stop: one entity's scripts (Lua only if unset)
+        static void setScriptCallbacks(std::function<void(Scene*)> start, std::function<void(Scene*, Entity)> stop);
+
+        // True while destroyBundle tears the entity down, so script start skips it
+        static bool isStopping(Scene* scene, Entity entity);
     };
 
 } // namespace doriax

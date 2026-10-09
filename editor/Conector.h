@@ -29,6 +29,7 @@ namespace doriax::editor{
 
         void init(Scene* sceneProject);
         void cleanup(Scene* sceneProject);
+        void cleanupEntity(Scene* scene, Entity entity);
 
         bool isLibraryConnected() const;
     };

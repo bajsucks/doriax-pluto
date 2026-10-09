@@ -677,7 +677,8 @@ void UISystem::updateButton(Entity entity, ButtonComponent& button, ImageCompone
         button.texturePressed.setAlphaBorderAuto(true);
         button.textureDisabled.setAlphaBorderAuto(true);
 
-        if (!button.textureNormal.load()){
+        // not load(), which is false while the texture loads asynchronously
+        if (button.textureNormal.empty()){
             button.textureNormal = ui.texture;
         }
         Vector4 oldColorNormal = button.colorNormal;

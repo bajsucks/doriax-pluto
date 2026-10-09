@@ -1110,7 +1110,7 @@ std::vector<char> editor::Structure::buildEntityPayload(const TreeNode& node) {
     } else {
         // Embed the full export data (including virtual action children) in the entity payload.
         // Structure uses the EntityPayload header for reparenting; Resources uses the YAML tail.
-        entityData = Stream::encodeEntitySelection(exportEntities, sceneProject->scene);
+        entityData = Stream::encodeEntitySelection(exportEntities, sceneProject->scene, project, sceneProject);
     }
 
     std::string yamlString = YAML::Dump(entityData);

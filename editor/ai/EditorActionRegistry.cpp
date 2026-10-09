@@ -133,7 +133,31 @@ Json propertyValueFields(std::initializer_list<std::pair<const char*, Json>> ext
         {"quat_value", quaternionSchema("Quaternion property value")},
         {"texture_path", stringSchema("Project-relative texture/resource path for Texture properties, inside the assets directory reported by get_project_summary as assets_dir. For .svg sources an optional '?svgScale=N' suffix sets the rasterization scale (e.g. 'ui/icon.svg?svgScale=2'). A cubemap (Sky or ReflectionProbe texture) takes one cross-layout image or six faces joined by '|', ordered +X|-X|+Y|-Y|+Z|-Z")},
         {"entity_value", integerSchema("Entity id for Entity or EntityReference properties")},
-        {"entity_scene_id", integerSchema("Scene id for EntityReference properties, only for an entity in another scene. Omit for the same scene")}
+        {"entity_scene_id", integerSchema("Scene id for EntityReference properties, only for an entity in another scene. Omit for the same scene")},
+        {"bursts_value", {
+            {"type", "array"},
+            {"description", "Particles bursts: the whole list, one entry per burst"},
+            {"items", objectSchema({
+                {"time", numberSchema("Seconds after the emitter starts")},
+                {"min_count", integerSchema("Fewest particles the burst emits")},
+                {"max_count", integerSchema("Most particles the burst emits")}
+            })}
+        }},
+        {"gradient_value", {
+            {"type", "object"},
+            {"description", "Particles colorGradient: color stops over the particle life"},
+            {"additionalProperties", false},
+            {"properties", {
+                {"use_srgb", boolSchema("Colors are sRGB")},
+                {"stops", {
+                    {"type", "array"},
+                    {"items", objectSchema({
+                        {"time", numberSchema("Particle life from 0 to 1")},
+                        {"color", vector3Schema("Stop color")}
+                    })}
+                }}
+            }}
+        }}
     });
     for (const auto& item : extra) {
         fields[item.first] = item.second;
@@ -1046,6 +1070,7 @@ const std::vector<ToolDefinition>& cachedTools() {
                 {"canvas_width", integerSchema("Canvas width in points")},
                 {"canvas_height", integerSchema("Canvas height in points")},
                 {"scaling_mode", stringSchema("fitwidth, fitheight, letterbox, crop, stretch, or native")},
+                {"texture_strategy", stringSchema("none, fit, or resize. fit pads and resize scales non-power-of-two textures to a power of two. The editor applies it when the project is reopened")},
                 {"window_width", integerSchema("Desktop window width in pixels")},
                 {"window_height", integerSchema("Desktop window height in pixels")},
                 {"vsync", boolSchema("Synchronize Play mode and supported desktop builds to the display refresh rate")},
@@ -1328,7 +1353,7 @@ bool hasAnyValueField(const Json& args) {
     static const char* keys[] = {
         "bool_value", "int_value", "number_value", "string_value",
         "vector2_value", "vector3_value", "vector4_value", "quat_value",
-        "texture_path", "font_paths", "entity_value"
+        "texture_path", "font_paths", "entity_value", "bursts_value", "gradient_value"
     };
     for (const char* key : keys) {
         if (args.contains(key)) return true;
@@ -1800,7 +1825,12 @@ ValidationResult EditorActionRegistry::validate(const std::string& name, const J
                 return fail(std::string("set_project_settings ") + key + " must be a boolean.");
             }
         }
-        return isWrongTypedString(arguments, "scaling_mode") ? fail("set_project_settings scaling_mode must be a string.") : ok();
+        for (const char* key : {"scaling_mode", "texture_strategy"}) {
+            if (isWrongTypedString(arguments, key)) {
+                return fail(std::string("set_project_settings ") + key + " must be a string.");
+            }
+        }
+        return ok();
     }
     if (name == "create_project" || name == "open_project") {
         return hasString(arguments, "path") ? ok() : fail(name + " requires path.");

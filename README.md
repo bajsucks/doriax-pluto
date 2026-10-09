@@ -31,7 +31,7 @@
     <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-pirate-adventure.png" alt="The Doriax editor with a 3D adventure scene, linking to the introduction video">
   </a>
   <br>
-  <a href="https://www.youtube.com/watch?v=3eqhaAZBNss">▶ Watch the introduction video</a>
+  <a href="https://www.youtube.com/watch?v=3eqhaAZBNss">Watch the introduction video</a>
 </p>
 
 Doriax is a free, open-source game engine with a small, data-oriented C++ runtime and a desktop editor for building 2D, 3D, and UI scenes. You can script in Lua, in C++, or mix the two. Your game can be exported as a standalone CMake project that includes the engine source, so you can build it yourself for Windows, Linux, macOS, Android, iOS, or the web, and change anything you like.

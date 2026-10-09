@@ -2777,6 +2777,26 @@ Entity lastSerializedEntity(const YAML::Node& entityNode) {
     return last;
 }
 
+void collectSerializedEntities(const YAML::Node& entityNode, std::unordered_set<Entity>& ids) {
+    if (!entityNode || !entityNode.IsMap())
+        return;
+
+    if (entityNode["entity"]) {
+        ids.insert(entityNode["entity"].as<Entity>());
+    }
+    for (const char* key : {"children", "bundleLocalEntities"}) {
+        if (entityNode[key] && entityNode[key].IsSequence()) {
+            for (const auto& child : entityNode[key]) {
+                collectSerializedEntities(child, ids);
+            }
+        }
+    }
+}
+
+// Ids a loading scene file has yet to recreate, kept from bundle members decoded before them
+thread_local const EntityRegistry* pendingSceneRegistry = nullptr;
+thread_local std::unordered_set<Entity>* pendingSceneEntities = nullptr;
+
 }
 
 void editor::Stream::decodeSceneProjectEntities(Project* project, SceneProject* sceneProject, const YAML::Node& node){
@@ -2788,10 +2808,23 @@ void editor::Stream::decodeSceneProjectEntities(Project* project, SceneProject* 
     // a bundle instance is rebuilt as the root holding it is decoded, so its members draw from
     // the allocator while entities further down the file are still waiting to be recreated
     Entity lastEntity = NULL_ENTITY;
+    std::unordered_set<Entity> sceneIds;
     for (const auto& entityNode : entitiesNode){
         lastEntity = std::max(lastEntity, lastSerializedEntity(entityNode));
+        collectSerializedEntities(entityNode, sceneIds);
     }
     sceneProject->scene->setLastEntity(lastEntity);
+
+    struct PendingScope {
+        PendingScope(const EntityRegistry* registry, std::unordered_set<Entity>* ids) {
+            pendingSceneRegistry = registry;
+            pendingSceneEntities = ids;
+        }
+        ~PendingScope() {
+            pendingSceneRegistry = nullptr;
+            pendingSceneEntities = nullptr;
+        }
+    } pendingScope(sceneProject->scene, &sceneIds);
 
     for (const auto& entityNode : entitiesNode){
         decodeEntity(entityNode, sceneProject->scene, &sceneProject->entities, project, sceneProject);
@@ -3533,10 +3566,18 @@ std::vector<Entity> editor::Stream::decodeEntity(const YAML::Node& entityNode, E
         if (entityNode["entity"]){
             Entity serializedEntity = entityNode["entity"].as<Entity>();
             entity = serializedEntity;
-            if (!registry->recreateEntity(entity)){
+
+            // bundle members are decoded without a scene project, scene entities with one
+            const bool loadingScene = pendingSceneEntities && registry == pendingSceneRegistry;
+            if (loadingScene && !sceneProject && pendingSceneEntities->count(serializedEntity)){
+                entity = registry->createUserEntity();
+            }else if (!registry->recreateEntity(entity)){
                 if (createNewIfExists){
                     entity = registry->createUserEntity();
                 }
+            }
+            if (loadingScene && sceneProject){
+                pendingSceneEntities->erase(serializedEntity);
             }
             if (entityRemap && entity != serializedEntity) {
                 (*entityRemap)[serializedEntity] = entity;

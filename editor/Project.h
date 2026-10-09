@@ -468,6 +468,7 @@ namespace doriax::editor{
         void updateSceneCppScripts(SceneProject* sceneProject);
         void updateSceneBundles(SceneProject* sceneProject);
         void removeBundleInstanceTracking(uint32_t sceneId, Entity rootEntity);
+        void removeBundleInstanceTracking(SceneProject* sceneProject, Entity rootEntity);
 
         std::vector<SceneScriptSource> collectAllSceneCppScripts() const;
         std::vector<BundleSceneInfo> collectAllBundles() const;
@@ -930,6 +931,7 @@ namespace doriax::editor{
 
         std::vector<Entity> importEntityBundle(SceneProject* sceneProject, std::vector<Entity>* entities, const std::filesystem::path& filepath, Entity rootEntity, bool needSaveScene = true, const YAML::Node& bundleOverrides = YAML::Node(), const YAML::Node& bundleLocalEntities = YAML::Node(), std::unordered_map<Entity, Entity>* entityRemap = nullptr);
         bool unimportEntityBundle(uint32_t sceneId, const std::filesystem::path& filepath, Entity rootEntity, const std::vector<Entity>& memberEntities);
+        bool unimportEntityBundle(SceneProject* sceneProject, const std::filesystem::path& filepath, Entity rootEntity, const std::vector<Entity>& memberEntities);
 
         bool addEntityToBundle(uint32_t sceneId, Entity entity, Entity parent, bool createItself = true);
         bool addEntityToBundle(uint32_t sceneId, const NodeRecovery& recoveryData, Entity parent,

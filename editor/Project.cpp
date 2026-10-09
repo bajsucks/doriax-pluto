@@ -4467,36 +4467,62 @@ std::vector<editor::SceneScriptSource> editor::Project::collectAllSceneCppScript
     std::unordered_set<std::string> uniquePaths;
     std::vector<SceneScriptSource> mergedScripts;
 
+    auto merge = [&](const SceneScriptSource& script) {
+        std::string pathKey = script.path.lexically_normal().generic_string();
+        if (!uniquePaths.insert(pathKey).second) {
+            return;
+        }
+
+        fs::path sourcePath = script.path;
+        if (sourcePath.is_relative()) {
+            sourcePath = getProjectPath() / sourcePath;
+        }
+        if (sourcePath.empty() || !fs::exists(sourcePath)) {
+            return;
+        }
+
+        SceneScriptSource merged = script;
+
+        // scene data can predate the last header edit, and only one scene contributes each script
+        fs::path headerPath = merged.headerPath;
+        if (headerPath.is_relative()) {
+            headerPath = getProjectPath() / headerPath;
+        }
+        if (!merged.headerPath.empty()) {
+            if (!fs::exists(headerPath)) {
+                return;
+            }
+            merged.properties = toScriptPropertyInfos(ScriptParser::parseScriptProperties(headerPath));
+        }
+
+        mergedScripts.push_back(std::move(merged));
+    };
+
     for (const auto& sceneProject : scenes) {
         for (const auto& script : sceneProject.cppScripts) {
-            std::string pathKey = script.path.lexically_normal().generic_string();
-            if (!uniquePaths.insert(pathKey).second) {
-                continue;
-            }
+            merge(script);
+        }
+    }
 
-            fs::path sourcePath = script.path;
-            if (sourcePath.is_relative()) {
-                sourcePath = getProjectPath() / sourcePath;
-            }
-            if (sourcePath.empty() || !fs::exists(sourcePath)) {
-                continue;
-            }
-
-            SceneScriptSource merged = script;
-
-            // scene data can predate the last header edit, and only one scene contributes each script
-            fs::path headerPath = merged.headerPath;
-            if (headerPath.is_relative()) {
-                headerPath = getProjectPath() / headerPath;
-            }
-            if (!merged.headerPath.empty()) {
-                if (!fs::exists(headerPath)) {
+    // scripts of standalone bundles, which no scene holds
+    for (const fs::path& bundlePath : standaloneBundles) {
+        const EntityBundle* bundle = getEntityBundle(bundlePath);
+        if (!bundle || !bundle->registry) {
+            continue;
+        }
+        auto scriptsArray = bundle->registry->getComponentArray<ScriptComponent>();
+        for (size_t i = 0; i < scriptsArray->size(); i++) {
+            for (const auto& scriptEntry : scriptsArray->getComponentFromIndex(i).scripts) {
+                if (!scriptEntry.enabled || scriptEntry.type == ScriptType::LUA || scriptEntry.path.empty()) {
                     continue;
                 }
-                merged.properties = toScriptPropertyInfos(ScriptParser::parseScriptProperties(headerPath));
+                SceneScriptSource script;
+                script.path = scriptEntry.path;
+                script.headerPath = scriptEntry.headerPath;
+                script.className = scriptEntry.className;
+                script.properties = toScriptPropertyInfos(scriptEntry.properties);
+                merge(script);
             }
-
-            mergedScripts.push_back(std::move(merged));
         }
     }
 
@@ -7511,11 +7537,16 @@ std::vector<Entity> editor::Project::importEntityBundle(SceneProject* sceneProje
 }
 
 void editor::Project::removeBundleInstanceTracking(uint32_t sceneId, Entity rootEntity) {
-    SceneProject* sceneProject = getScene(sceneId);
+    removeBundleInstanceTracking(getScene(sceneId), rootEntity);
+}
+
+// Takes the scene itself: a Play copy has the id of the edited scene
+void editor::Project::removeBundleInstanceTracking(SceneProject* sceneProject, Entity rootEntity) {
     if (!sceneProject || !sceneProject->scene) {
         return;
     }
 
+    const uint32_t sceneId = sceneProject->id;
     Scene* scene = sceneProject->scene;
     std::unordered_set<Entity> visitedEntities;
     auto removeBundleInstance = [&](auto&& self, Entity entity) -> void {
@@ -7568,11 +7599,16 @@ void editor::Project::removeBundleInstanceTracking(uint32_t sceneId, Entity root
 }
 
 bool editor::Project::unimportEntityBundle(uint32_t sceneId, const std::filesystem::path& filepath, Entity rootEntity, const std::vector<Entity>& memberEntities) {
-    SceneProject* sceneProject = getScene(sceneId);
-    if (!sceneProject) {
+    return unimportEntityBundle(getScene(sceneId), filepath, rootEntity, memberEntities);
+}
+
+// Takes the scene itself: a Play copy has the id of the edited scene
+bool editor::Project::unimportEntityBundle(SceneProject* sceneProject, const std::filesystem::path& filepath, Entity rootEntity, const std::vector<Entity>& memberEntities) {
+    if (!sceneProject || !sceneProject->scene) {
         return false;
     }
 
+    const uint32_t sceneId = sceneProject->id;
     Scene* scene = sceneProject->scene;
 
     // Collect all entities to destroy (members + local entities that are children of root/members)
@@ -7601,7 +7637,7 @@ bool editor::Project::unimportEntityBundle(uint32_t sceneId, const std::filesyst
     // Drop bundle metadata recursively before any corresponding scene entity disappears.
     // The additional flat pass covers nested bundle roots stored as scene-local children
     // rather than members of their containing bundle.
-    removeBundleInstanceTracking(sceneId, rootEntity);
+    removeBundleInstanceTracking(sceneProject, rootEntity);
     if (EntityBundle* rootBundle = getEntityBundle(filepath)) {
         auto sceneIt = rootBundle->instances.find(sceneId);
         if (sceneIt != rootBundle->instances.end()) {
@@ -7616,10 +7652,10 @@ bool editor::Project::unimportEntityBundle(uint32_t sceneId, const std::filesyst
         }
     }
     for (Entity entity : memberEntities) {
-        removeBundleInstanceTracking(sceneId, entity);
+        removeBundleInstanceTracking(sceneProject, entity);
     }
     for (Entity entity : allEntitiesToDestroy) {
-        removeBundleInstanceTracking(sceneId, entity);
+        removeBundleInstanceTracking(sceneProject, entity);
     }
 
     // Destroy local entities first (they may reference members as parents)
@@ -9444,6 +9480,24 @@ editor::SceneProject* editor::Project::findSceneProjectByScene(Scene* scene) {
 
 void editor::Project::registerBundleManager() {
     BundleManager::clearAll();
+
+    // spawned instances start and stop their scripts like the scene they join
+    BundleManager::setScriptCallbacks(
+        [this](Scene* scene) {
+            if (conector.isLibraryConnected()) {
+                conector.init(scene);
+            } else {
+                LuaBinding::initializeLuaScripts(scene);
+            }
+        },
+        [this](Scene* scene, Entity entity) {
+            if (conector.isLibraryConnected()) {
+                conector.cleanupEntity(scene, entity);
+            } else {
+                LuaBinding::cleanupLuaScripts(scene, entity);
+            }
+        });
+
     uint32_t bundleId = 0;
     for (const auto& [bundlePath, bundle] : entityBundles) {
         // Same set the standalone build compiles, see collectAllBundles
@@ -9493,7 +9547,7 @@ void editor::Project::registerBundleManager() {
                 // BundleManager destroys the entities created by the import, this only has to
                 // undo what the factory itself changed on the root plus the instance metadata
                 auto restoreRoot = [&]() {
-                    removeBundleInstanceTracking(sceneProject->id, root);
+                    removeBundleInstanceTracking(sceneProject, root);
                     if (scene->isEntityCreated(root)) {
                         scene->setEntityName(root, oldName);
                         if (addedBundle)
@@ -9563,7 +9617,7 @@ void editor::Project::registerBundleManager() {
                 for (const auto& m : instance->members)
                     members.push_back(m.localEntity);
                 bool wasModified = sceneProject->isModified;
-                bool result = unimportEntityBundle(sceneProject->id, capturableBundlePath, root, members);
+                bool result = unimportEntityBundle(sceneProject, capturableBundlePath, root, members);
                 sceneProject->isModified = wasModified;
                 return result;
             }

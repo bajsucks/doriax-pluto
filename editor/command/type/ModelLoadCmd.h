@@ -120,6 +120,8 @@ namespace doriax::editor{
         void undo() override;
 
         bool mergeWith(Command* otherCommand) override;
+
+        Entity getEntity() const { return entity; }
     };
 
 }

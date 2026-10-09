@@ -5,7 +5,9 @@
 #include "Scene.h"
 #include "EntityHandle.h"
 #include "Log.h"
+#include "LuaBinding.h"
 
+#include <algorithm>
 #include <exception>
 #include <unordered_set>
 
@@ -13,6 +15,9 @@ using namespace doriax;
 
 std::vector<BundleManager::BundleEntry> BundleManager::entries;
 std::vector<BundleManager::BundleInstance> BundleManager::instances;
+std::function<void(Scene*)> BundleManager::scriptStarter;
+std::function<void(Scene*, Entity)> BundleManager::scriptStopper;
+std::vector<std::pair<Scene*, Entity>> BundleManager::stoppingEntities;
 
 namespace {
 
@@ -161,32 +166,75 @@ Entity BundleManager::instantiate(uint32_t id, Scene* scene, Entity parent) {
     }
 
     instances.push_back(std::move(instance));
+
+    // after tracking, so a script can destroy its own instance from init()
+    startScripts(scene);
+
+    if (!scene->isEntityCreated(root))
+        return NULL_ENTITY;
     return root;
 }
 
 bool BundleManager::destroyBundle(Scene* scene, Entity rootEntity) {
-    for (auto it = instances.begin(); it != instances.end(); ++it) {
-        if (it->scene == scene && it->rootEntity == rootEntity) {
-            uint32_t bundleId = it->bundleId;
+    auto it = std::find_if(instances.begin(), instances.end(), [&](const BundleInstance& instance) {
+        return instance.scene == scene && instance.rootEntity == rootEntity;
+    });
+    if (it == instances.end()) {
+        Log::error("BundleManager: bundle instance with root %u not found in scene", rootEntity);
+        return false;
+    }
 
-            for (auto& entry : entries) {
-                if (entry.id == bundleId && entry.destroyer) {
-                    bool result = entry.destroyer(scene, rootEntity);
-                    instances.erase(it);
-                    return result;
-                }
-            }
+    // removed before any script code runs, as it can spawn or destroy too
+    BundleInstance instance = std::move(*it);
+    instances.erase(it);
 
-            for (auto eit = it->entities.rbegin(); eit != it->entities.rend(); ++eit) {
-                if (scene->isEntityCreated(*eit))
-                    scene->destroyEntity(*eit);
-            }
-            instances.erase(it);
-            return true;
+    const size_t stoppingCount = stoppingEntities.size();
+    for (Entity entity : instance.entities) {
+        stoppingEntities.push_back({scene, entity});
+        stopScripts(scene, entity);
+    }
+
+    bool result = true;
+    BundleEntry* entry = findEntry(instance.bundleId);
+    if (entry && entry->destroyer) {
+        result = entry->destroyer(scene, rootEntity);
+    } else {
+        for (auto eit = instance.entities.rbegin(); eit != instance.entities.rend(); ++eit) {
+            if (scene->isEntityCreated(*eit))
+                scene->destroyEntity(*eit);
         }
     }
-    Log::error("BundleManager: bundle instance with root %u not found in scene", rootEntity);
-    return false;
+
+    // nested destroys have already removed theirs
+    stoppingEntities.resize(std::min(stoppingEntities.size(), stoppingCount));
+    return result;
+}
+
+bool BundleManager::isStopping(Scene* scene, Entity entity) {
+    return std::find(stoppingEntities.begin(), stoppingEntities.end(), std::make_pair(scene, entity)) != stoppingEntities.end();
+}
+
+void BundleManager::startScripts(Scene* scene) {
+    if (scriptStarter) {
+        scriptStarter(scene);
+    } else {
+        LuaBinding::initializeLuaScripts(scene);
+    }
+}
+
+void BundleManager::stopScripts(Scene* scene, Entity entity) {
+    if (!scene->isEntityCreated(entity))
+        return;
+    if (scriptStopper) {
+        scriptStopper(scene, entity);
+    } else {
+        LuaBinding::cleanupLuaScripts(scene, entity);
+    }
+}
+
+void BundleManager::setScriptCallbacks(std::function<void(Scene*)> start, std::function<void(Scene*, Entity)> stop) {
+    scriptStarter = std::move(start);
+    scriptStopper = std::move(stop);
 }
 
 uint32_t BundleManager::getBundleId(const std::string& name) {
@@ -224,4 +272,5 @@ void BundleManager::destroyAllInstances(Scene* scene) {
 void BundleManager::clearAll() {
     entries.clear();
     instances.clear();
+    stoppingEntities.clear();
 }

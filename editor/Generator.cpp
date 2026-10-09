@@ -588,6 +588,11 @@ std::string editor::Generator::getPlatformCMakeConfig(bool vsyncEnabled, const W
     return content;
 }
 
+static bool hasScriptProperties(const std::vector<editor::SceneScriptSource>& scriptFiles) {
+    return std::any_of(scriptFiles.begin(), scriptFiles.end(),
+        [](const editor::SceneScriptSource& s) { return !s.properties.empty(); });
+}
+
 std::string editor::Generator::buildInitSceneScriptsSource(const std::vector<SceneScriptSource>& scriptFiles) {
     std::string sourceContent;
 
@@ -601,118 +606,187 @@ std::string editor::Generator::buildInitSceneScriptsSource(const std::vector<Sce
     sourceContent += "    #define PROJECT_API\n";
     sourceContent += "#endif\n\n";
 
-    sourceContent += "extern \"C\" void PROJECT_API initScripts(doriax::Scene* scene) {\n";
-    sourceContent += "    LuaBinding::initializeLuaScripts(scene);\n";
+    const bool anyProperties = hasScriptProperties(scriptFiles);
 
     if (!scriptFiles.empty()) {
-
-        sourceContent += "\n";
-
-        sourceContent += "    const auto& scriptsArray = scene->getComponentArray<ScriptComponent>();\n";
-        sourceContent += "\n";
-
-        sourceContent += "    for (size_t i = 0; i < scriptsArray->size(); i++) {\n";
-        sourceContent += "        doriax::ScriptComponent& scriptComp = scriptsArray->getComponentFromIndex(i);\n";
-        sourceContent += "        doriax::Entity entity = scriptsArray->getEntity(i);\n";
-        sourceContent += "        for (auto& scriptEntry : scriptComp.scripts) {\n";
-        sourceContent += "            if (scriptEntry.type == ScriptType::LUA) \n";
-        sourceContent += "                continue; \n";
-        sourceContent += "\n";
-
-        for (const auto& s : scriptFiles) {
-            sourceContent += "            if (scriptEntry.className == \"" + s.className + "\") {\n";
-            sourceContent += "                " + s.className + "* script = new " + s.className + "(scene, entity);\n";
-            sourceContent += "                scriptEntry.instance = static_cast<void*>(script);\n";
-            sourceContent += "            }\n";
+        // Entries whose constructor is running, skipped by a nested initScripts
+        sourceContent += "static std::set<std::tuple<doriax::Scene*, doriax::Entity, size_t>> constructingScripts;\n";
+        // Scenes in cleanupScripts, where a destructor can still spawn a bundle
+        sourceContent += "static std::set<doriax::Scene*> stoppingScenes;\n";
+        if (anyProperties) {
+            // Properties are set by the outermost initScripts, when no constructor is running
+            sourceContent += "static std::vector<std::tuple<doriax::Scene*, doriax::Entity, size_t>> unsyncedScripts;\n";
+            sourceContent += "static int initDepth = 0;\n";
         }
-        sourceContent += "        }\n";
-        sourceContent += "    }\n";
+        sourceContent += "\n";
 
-        sourceContent += "    for (size_t i = 0; i < scriptsArray->size(); i++) {\n";
-        sourceContent += "        doriax::ScriptComponent& scriptComp = scriptsArray->getComponentFromIndex(i);\n";
-        sourceContent += "        for (auto& scriptEntry : scriptComp.scripts) {\n";
-        sourceContent += "            if (scriptEntry.type == ScriptType::LUA) \n";
-        sourceContent += "                continue; \n";
+        sourceContent += "static void deleteScriptInstance(doriax::Scene* scene, const std::string& className, void* instance) {\n";
+        sourceContent += "    std::string addr = \"_\" + std::to_string(reinterpret_cast<std::uintptr_t>(instance)) + \"_\";\n";
+        sourceContent += "    Engine::removeSubscriptionsByTag(addr);\n";
+        sourceContent += "    scene->removeSubscriptionsByTag(addr);\n";
+        for (const auto& s : scriptFiles) {
+            sourceContent += "    if (className == \"" + s.className + "\") delete static_cast<" + s.className + "*>(instance);\n";
+        }
+        sourceContent += "}\n\n";
+    }
+
+    if (anyProperties) {
+        sourceContent += "static void syncScriptProperties(doriax::Scene* scene, doriax::Entity entity, size_t index) {\n";
+        sourceContent += "    doriax::ScriptComponent* scriptComp = scene->findComponent<doriax::ScriptComponent>(entity);\n";
+        sourceContent += "    if (!scriptComp || index >= scriptComp->scripts.size() || !scriptComp->scripts[index].instance) return;\n";
+        sourceContent += "    doriax::ScriptEntry& scriptEntry = scriptComp->scripts[index];\n";
         sourceContent += "\n";
 
         for (const auto& s : scriptFiles) {
             if (s.properties.empty()) {
                 continue;
             }
-            sourceContent += "            if (scriptEntry.className == \"" + s.className + "\") {\n";
+            sourceContent += "    if (scriptEntry.className == \"" + s.className + "\") {\n";
 
-            sourceContent += "                " + s.className + "* typedScript = static_cast<" + s.className + "*>(scriptEntry.instance);\n";
+            sourceContent += "        " + s.className + "* typedScript = static_cast<" + s.className + "*>(scriptEntry.instance);\n";
             sourceContent += "\n";
-            sourceContent += "                for (auto& prop : scriptEntry.properties) {\n";
+            sourceContent += "        for (auto& prop : scriptEntry.properties) {\n";
 
             for (const auto& prop : s.properties) {
                 sourceContent += "\n";
-                sourceContent += "                    if (prop.name == \"" + prop.name + "\") {\n";
+                sourceContent += "            if (prop.name == \"" + prop.name + "\") {\n";
 
                 if (prop.isPtr && !prop.ptrTypeName.empty()) {
-                    sourceContent += "                        doriax::EntityReference entRef;\n";
-                    sourceContent += "                        if (std::holds_alternative<doriax::EntityReference>(prop.value)) {\n";
-                    sourceContent += "                            entRef = std::get<doriax::EntityReference>(prop.value);\n";
-                    sourceContent += "                        }\n";
-                    sourceContent += "                        doriax::Entity targetEntity = entRef.entity;\n";
-                    sourceContent += "                        void* instancePtr = nullptr;\n";
+                    sourceContent += "                doriax::EntityReference entRef;\n";
+                    sourceContent += "                if (std::holds_alternative<doriax::EntityReference>(prop.value)) {\n";
+                    sourceContent += "                    entRef = std::get<doriax::EntityReference>(prop.value);\n";
+                    sourceContent += "                }\n";
+                    sourceContent += "                doriax::Entity targetEntity = entRef.entity;\n";
+                    sourceContent += "                void* instancePtr = nullptr;\n";
                     sourceContent += "\n";
-                    sourceContent += "                        if (targetEntity != NULL_ENTITY) {\n";
-                    sourceContent += "                            doriax::Scene* targetScene = scene;\n";
-                    sourceContent += "                            if (entRef.sceneId != 0) {\n";
-                    sourceContent += "                                targetScene = SceneManager::getScenePtr(entRef.sceneId);\n";
-                    sourceContent += "                            }\n";
-                    sourceContent += "                            if (!targetScene || !targetScene->isEntityCreated(targetEntity)) {\n";
-                    sourceContent += "                                Log::error(\"Script property " + s.className + "::" + prop.name + ": entity %u not found\", targetEntity);\n";
-                    sourceContent += "                            } else {\n";
-                    sourceContent += "                                doriax::ScriptComponent* targetScriptComp = targetScene->findComponent<doriax::ScriptComponent>(targetEntity);\n";
-                    sourceContent += "                                if (targetScriptComp) {\n";
-                    sourceContent += "                                    for (auto& targetScript : targetScriptComp->scripts) {\n";
-                    sourceContent += "                                        if (targetScript.type != ScriptType::LUA) {\n";
-                    sourceContent += "                                            if (targetScript.className == \"" + prop.ptrTypeName + "\" && targetScript.instance) {\n";
-                    sourceContent += "                                                instancePtr = targetScript.instance;\n";
-                    sourceContent += "                                                #ifdef DORIAX_EDITOR_PLUGIN\n";
-                    sourceContent += "                                                printf(\"[DEBUG]   Found matching C++ script instance: '%s'\\n\", targetScript.className.c_str());\n";
-                    sourceContent += "                                                #endif\n";
-                    sourceContent += "                                                break;\n";
-                    sourceContent += "                                            }\n";
-                    sourceContent += "                                        }\n";
+                    sourceContent += "                if (targetEntity != NULL_ENTITY) {\n";
+                    sourceContent += "                    doriax::Scene* targetScene = scene;\n";
+                    sourceContent += "                    if (entRef.sceneId != 0) {\n";
+                    sourceContent += "                        targetScene = SceneManager::getScenePtr(entRef.sceneId);\n";
+                    sourceContent += "                    }\n";
+                    sourceContent += "                    if (!targetScene || !targetScene->isEntityCreated(targetEntity)) {\n";
+                    sourceContent += "                        Log::error(\"Script property " + s.className + "::" + prop.name + ": entity %u not found\", targetEntity);\n";
+                    sourceContent += "                    } else {\n";
+                    sourceContent += "                        doriax::ScriptComponent* targetScriptComp = targetScene->findComponent<doriax::ScriptComponent>(targetEntity);\n";
+                    sourceContent += "                        if (targetScriptComp) {\n";
+                    sourceContent += "                            for (auto& targetScript : targetScriptComp->scripts) {\n";
+                    sourceContent += "                                if (targetScript.type != ScriptType::LUA) {\n";
+                    sourceContent += "                                    if (targetScript.className == \"" + prop.ptrTypeName + "\" && targetScript.instance) {\n";
+                    sourceContent += "                                        instancePtr = targetScript.instance;\n";
+                    sourceContent += "                                        #ifdef DORIAX_EDITOR_PLUGIN\n";
+                    sourceContent += "                                        printf(\"[DEBUG]   Found matching C++ script instance: '%s'\\n\", targetScript.className.c_str());\n";
+                    sourceContent += "                                        #endif\n";
+                    sourceContent += "                                        break;\n";
                     sourceContent += "                                    }\n";
                     sourceContent += "                                }\n";
-                    sourceContent += "\n";
-                    if (!prop.ptrTypeName.empty()) {
-                        sourceContent += "                                if (!instancePtr) {\n";
-                        sourceContent += "                                    #ifdef DORIAX_EDITOR_PLUGIN\n";
-                        sourceContent += "                                    printf(\"[DEBUG]   No C++ script instance found, creating '" + prop.ptrTypeName + "' type\\n\");\n";
-                        sourceContent += "                                    #endif\n";
-                        sourceContent += "                                    instancePtr = new " + prop.ptrTypeName + "(targetScene, targetEntity);\n";
-                        sourceContent += "                                    prop.ownedInstance = instancePtr;\n";
-                        sourceContent += "                                }\n";
-                    }
                     sourceContent += "                            }\n";
                     sourceContent += "                        }\n";
                     sourceContent += "\n";
-                    sourceContent += "                        typedScript->" + prop.name + " = nullptr;\n";
-                    sourceContent += "                        if (instancePtr) {\n";
-                    sourceContent += "                            typedScript->" + prop.name + " = static_cast<" + prop.ptrTypeName + "*>(instancePtr);\n";
-                    sourceContent += "                        }\n";
+                    if (!prop.ptrTypeName.empty()) {
+                        sourceContent += "                        if (!instancePtr) {\n";
+                        sourceContent += "                            #ifdef DORIAX_EDITOR_PLUGIN\n";
+                        sourceContent += "                            printf(\"[DEBUG]   No C++ script instance found, creating '" + prop.ptrTypeName + "' type\\n\");\n";
+                        sourceContent += "                            #endif\n";
+                        sourceContent += "                            instancePtr = new " + prop.ptrTypeName + "(targetScene, targetEntity);\n";
+                        sourceContent += "                            prop.ownedInstance = instancePtr;\n";
+                        sourceContent += "                        }\n";
+                    }
+                    sourceContent += "                    }\n";
+                    sourceContent += "                }\n";
+                    sourceContent += "\n";
+                    sourceContent += "                typedScript->" + prop.name + " = nullptr;\n";
+                    sourceContent += "                if (instancePtr) {\n";
+                    sourceContent += "                    typedScript->" + prop.name + " = static_cast<" + prop.ptrTypeName + "*>(instancePtr);\n";
+                    sourceContent += "                }\n";
                     sourceContent += "\n";
                 }
 
-                sourceContent += "                        prop.memberPtr = &typedScript->" + prop.name + ";\n";
-                sourceContent += "                    }\n";
+                sourceContent += "                prop.memberPtr = &typedScript->" + prop.name + ";\n";
+                sourceContent += "            }\n";
             }
 
             sourceContent += "\n";
-            sourceContent += "                    prop.syncToMember();\n";
-            sourceContent += "                }\n";
+            sourceContent += "            prop.syncToMember();\n";
+            sourceContent += "        }\n";
 
-            sourceContent += "            }\n";
+            sourceContent += "    }\n";
         }
 
+        sourceContent += "}\n\n";
+    }
+
+    // Starts only the scripts not started yet, so it also serves spawned bundles
+    sourceContent += "extern \"C\" void PROJECT_API initScripts(doriax::Scene* scene) {\n";
+    if (!scriptFiles.empty()) {
+        sourceContent += "    if (stoppingScenes.count(scene)) return;\n";
+    }
+    sourceContent += "    LuaBinding::initializeLuaScripts(scene);\n";
+
+    if (!scriptFiles.empty()) {
+
         sourceContent += "\n";
+
+        if (anyProperties) {
+            sourceContent += "    struct DepthScope {\n";
+            sourceContent += "        DepthScope() { initDepth++; }\n";
+            sourceContent += "        ~DepthScope() { initDepth--; }\n";
+            sourceContent += "    } depthScope;\n";
+            sourceContent += "\n";
+        }
+
+        sourceContent += "    std::vector<std::pair<doriax::Entity, size_t>> pending;\n";
+        sourceContent += "    const auto& scriptsArray = scene->getComponentArray<ScriptComponent>();\n";
+        sourceContent += "    for (size_t i = 0; i < scriptsArray->size(); i++) {\n";
+        sourceContent += "        const doriax::ScriptComponent& scriptComp = scriptsArray->getComponentFromIndex(i);\n";
+        sourceContent += "        doriax::Entity entity = scriptsArray->getEntity(i);\n";
+        sourceContent += "        if (BundleManager::isStopping(scene, entity)) continue;\n";
+        sourceContent += "        for (size_t s = 0; s < scriptComp.scripts.size(); s++) {\n";
+        sourceContent += "            if (scriptComp.scripts[s].type == ScriptType::LUA || scriptComp.scripts[s].instance) continue;\n";
+        sourceContent += "            if (!constructingScripts.count({scene, entity, s})) pending.push_back({entity, s});\n";
         sourceContent += "        }\n";
         sourceContent += "    }\n";
+        sourceContent += "\n";
+
+        // a constructor that spawns a bundle starts it through a nested initScripts
+        sourceContent += "    for (const auto& [entity, index] : pending) {\n";
+        sourceContent += "        doriax::ScriptComponent* scriptComp = scene->findComponent<doriax::ScriptComponent>(entity);\n";
+        sourceContent += "        if (!scriptComp || index >= scriptComp->scripts.size() || scriptComp->scripts[index].instance) continue;\n";
+        sourceContent += "        const std::string className = scriptComp->scripts[index].className;\n";
+        sourceContent += "        void* instance = nullptr;\n";
+        sourceContent += "        {\n";
+        // erased even if the constructor throws, so a later call retries it
+        sourceContent += "            struct ConstructingScope {\n";
+        sourceContent += "                std::tuple<doriax::Scene*, doriax::Entity, size_t> key;\n";
+        sourceContent += "                ~ConstructingScope() { constructingScripts.erase(key); }\n";
+        sourceContent += "            } constructing{{scene, entity, index}};\n";
+        sourceContent += "            constructingScripts.insert(constructing.key);\n";
+        for (const auto& s : scriptFiles) {
+            sourceContent += "            if (className == \"" + s.className + "\") instance = static_cast<void*>(new " + s.className + "(scene, entity));\n";
+        }
+        sourceContent += "        }\n";
+        sourceContent += "        if (!instance) continue;\n";
+        // a constructor can add components, which moves them, or destroy its own bundle
+        sourceContent += "        scriptComp = scene->findComponent<doriax::ScriptComponent>(entity);\n";
+        sourceContent += "        if (scriptComp && index < scriptComp->scripts.size() && !scriptComp->scripts[index].instance) {\n";
+        sourceContent += "            scriptComp->scripts[index].instance = instance;\n";
+        if (anyProperties) {
+            sourceContent += "            unsyncedScripts.push_back({scene, entity, index});\n";
+        }
+        sourceContent += "        } else {\n";
+        sourceContent += "            deleteScriptInstance(scene, className, instance);\n";
+        sourceContent += "        }\n";
+        sourceContent += "    }\n";
+
+        if (anyProperties) {
+            sourceContent += "\n";
+            sourceContent += "    if (initDepth > 1) return;\n";
+            // wrapper constructors can spawn and add more
+            sourceContent += "    while (!unsyncedScripts.empty()) {\n";
+            sourceContent += "        auto [syncScene, entity, index] = unsyncedScripts.front();\n";
+            sourceContent += "        unsyncedScripts.erase(unsyncedScripts.begin());\n";
+            sourceContent += "        syncScriptProperties(syncScene, entity, index);\n";
+            sourceContent += "    }\n";
+        }
 
     } else{
         sourceContent += "    (void)scene; // Suppress unused parameter warning\n";
@@ -726,61 +800,78 @@ std::string editor::Generator::buildInitSceneScriptsSource(const std::vector<Sce
 std::string editor::Generator::buildCleanupSceneScriptsSource(const std::vector<SceneScriptSource>& scriptFiles) {
     std::string sourceContent;
 
-    sourceContent += "extern \"C\" void PROJECT_API cleanupScripts(doriax::Scene* scene) {\n";
-    sourceContent += "    LuaBinding::cleanupLuaScripts(scene);\n";
+    const bool anyProperties = hasScriptProperties(scriptFiles);
+
+    // One entity's scripts, released before BundleManager destroys a spawned instance
+    sourceContent += "extern \"C\" void PROJECT_API cleanupEntityScripts(doriax::Scene* scene, doriax::Entity entity) {\n";
+    sourceContent += "    LuaBinding::cleanupLuaScripts(scene, entity);\n";
 
     if (!scriptFiles.empty()) {
-        sourceContent += "    const auto& scriptsArray = scene->getComponentArray<ScriptComponent>();\n";
-        sourceContent += "    for (size_t i = 0; i < scriptsArray->size(); i++) {\n";
-        sourceContent += "        doriax::ScriptComponent& scriptComp = scriptsArray->getComponentFromIndex(i);\n";
-        sourceContent += "        for (auto& scriptEntry : scriptComp.scripts) {\n";
-        sourceContent += "            if (scriptEntry.type == ScriptType::LUA) continue;\n";
         sourceContent += "\n";
-        sourceContent += "            if (scriptEntry.instance) {\n";
+        // cleared before the destructor runs, which can move components
+        sourceContent += "    for (size_t index = 0; ; index++) {\n";
+        sourceContent += "        doriax::ScriptComponent* scriptComp = scene->findComponent<doriax::ScriptComponent>(entity);\n";
+        sourceContent += "        if (!scriptComp || index >= scriptComp->scripts.size()) break;\n";
+        sourceContent += "        doriax::ScriptEntry& scriptEntry = scriptComp->scripts[index];\n";
+        sourceContent += "        if (scriptEntry.type == ScriptType::LUA) continue;\n";
+        sourceContent += "\n";
+        sourceContent += "        const std::string className = scriptEntry.className;\n";
+        sourceContent += "        void* instance = scriptEntry.instance;\n";
+        sourceContent += "        scriptEntry.instance = nullptr;\n";
+        sourceContent += "        std::vector<std::pair<std::string, void*>> owned;\n";
+        sourceContent += "        for (auto& prop : scriptEntry.properties) {\n";
+        sourceContent += "            if (prop.ownedInstance) owned.push_back({prop.name, prop.ownedInstance});\n";
+        sourceContent += "            prop.ownedInstance = nullptr;\n";
+        sourceContent += "        }\n";
+        sourceContent += "\n";
+        sourceContent += "        if (instance) deleteScriptInstance(scene, className, instance);\n";
+        sourceContent += "\n";
+        sourceContent += "        for (const auto& [propName, wrapper] : owned) {\n";
+        sourceContent += "            std::string addr = \"_\" + std::to_string(reinterpret_cast<std::uintptr_t>(wrapper)) + \"_\";\n";
+        sourceContent += "            Engine::removeSubscriptionsByTag(addr);\n";
+        sourceContent += "            scene->removeSubscriptionsByTag(addr);\n";
         for (const auto& s : scriptFiles) {
-            sourceContent += "                if (scriptEntry.className == \"" + s.className + "\") {\n";
-            sourceContent += "                    std::string addr = \"_\" + std::to_string(reinterpret_cast<std::uintptr_t>(scriptEntry.instance)) + \"_\";\n";
-            sourceContent += "                    Engine::removeSubscriptionsByTag(addr);\n";
-            sourceContent += "                    scene->removeSubscriptionsByTag(addr);\n";
-            sourceContent += "                    delete static_cast<" + s.className + "*>(scriptEntry.instance);\n";
-            sourceContent += "                }\n";
-        }
-        sourceContent += "                scriptEntry.instance = nullptr;\n";
-        sourceContent += "            }\n";
-
-        // delete the wrappers initScripts created for entity reference members
-        for (const auto& s : scriptFiles) {
-            std::string deleteContent;
             for (const auto& prop : s.properties) {
                 if (!prop.isPtr || prop.ptrTypeName.empty()) {
                     continue;
                 }
-                deleteContent += "                    if (prop.name == \"" + prop.name + "\") {\n";
-                deleteContent += "                        delete static_cast<" + prop.ptrTypeName + "*>(prop.ownedInstance);\n";
-                deleteContent += "                    }\n";
+                sourceContent += "            if (className == \"" + s.className + "\" && propName == \"" + prop.name + "\") delete static_cast<" + prop.ptrTypeName + "*>(wrapper);\n";
             }
-            if (deleteContent.empty()) {
-                continue;
-            }
-
-            sourceContent += "\n";
-            sourceContent += "            if (scriptEntry.className == \"" + s.className + "\") {\n";
-            sourceContent += "                for (auto& prop : scriptEntry.properties) {\n";
-            sourceContent += "                    if (!prop.ownedInstance) continue;\n";
-            sourceContent += "\n";
-            sourceContent += "                    std::string addr = \"_\" + std::to_string(reinterpret_cast<std::uintptr_t>(prop.ownedInstance)) + \"_\";\n";
-            sourceContent += "                    Engine::removeSubscriptionsByTag(addr);\n";
-            sourceContent += "                    scene->removeSubscriptionsByTag(addr);\n";
-            sourceContent += "\n";
-            sourceContent += deleteContent;
-            sourceContent += "\n";
-            sourceContent += "                    prop.ownedInstance = nullptr;\n";
-            sourceContent += "                }\n";
-            sourceContent += "            }\n";
         }
-
         sourceContent += "        }\n";
         sourceContent += "    }\n";
+    } else {
+        sourceContent += "    (void)entity;\n";
+    }
+
+    sourceContent += "}\n\n";
+
+    sourceContent += "extern \"C\" void PROJECT_API cleanupScripts(doriax::Scene* scene) {\n";
+    sourceContent += "    LuaBinding::cleanupLuaScripts(scene);\n";
+
+    if (!scriptFiles.empty()) {
+        sourceContent += "\n";
+        sourceContent += "    stoppingScenes.insert(scene);\n";
+        sourceContent += "    struct StoppingScope {\n";
+        sourceContent += "        doriax::Scene* scene;\n";
+        sourceContent += "        ~StoppingScope() { stoppingScenes.erase(scene); }\n";
+        sourceContent += "    } stoppingScope{scene};\n";
+        sourceContent += "\n";
+        // collected first, as a destructor can add or remove components
+        sourceContent += "    std::vector<doriax::Entity> entities;\n";
+        sourceContent += "    const auto& scriptsArray = scene->getComponentArray<ScriptComponent>();\n";
+        sourceContent += "    for (size_t i = 0; i < scriptsArray->size(); i++) {\n";
+        sourceContent += "        entities.push_back(scriptsArray->getEntity(i));\n";
+        sourceContent += "    }\n";
+        sourceContent += "    for (doriax::Entity entity : entities) {\n";
+        sourceContent += "        if (scene->isEntityCreated(entity)) cleanupEntityScripts(scene, entity);\n";
+        sourceContent += "    }\n";
+        // left behind by a constructor that threw, and the scene may be deleted next
+        if (anyProperties) {
+            sourceContent += "\n";
+            sourceContent += "    unsyncedScripts.erase(std::remove_if(unsyncedScripts.begin(), unsyncedScripts.end(),\n";
+            sourceContent += "        [scene](const auto& entry) { return std::get<0>(entry) == scene; }), unsyncedScripts.end());\n";
+        }
     }
 
     sourceContent += "}\n";
@@ -1132,6 +1223,9 @@ void editor::Generator::writeSourceFiles(const fs::path& projectPath, const fs::
     std::string sourceContent;
     sourceContent += "// This file is auto-generated by Doriax Editor. Do not edit manually.\n\n";
     sourceContent += "// This file binds scene script metadata to compiled C++ and Lua scripts for the current build configuration.\n\n";
+    sourceContent += "#include <algorithm>\n";
+    sourceContent += "#include <set>\n";
+    sourceContent += "#include <tuple>\n";
     sourceContent += "#include <vector>\n";
     sourceContent += "#include <string>\n";
     sourceContent += "#include <stdio.h>\n";
@@ -1440,6 +1534,7 @@ void editor::Generator::configure(const std::vector<editor::SceneBuildInfo>& sce
     }
     mainContent += "extern \"C\" void initScripts(doriax::Scene* scene);\n";
     mainContent += "extern \"C\" void cleanupScripts(doriax::Scene* scene);\n";
+    mainContent += "extern \"C\" void cleanupEntityScripts(doriax::Scene* scene, doriax::Entity entity);\n";
     mainContent += "\n";
 
     std::map<uint32_t, std::string> sceneIdToName;
@@ -1601,6 +1696,8 @@ void editor::Generator::configure(const std::vector<editor::SceneBuildInfo>& sce
         mainContent += "    BundleManager::registerBundle(" + std::to_string(i + 1) + ", \"" + bundleName + "\", " + bundles[i].functionName + ");\n";
     }
     if (!bundles.empty()) {
+        // so a spawned instance runs its scripts
+        mainContent += "    BundleManager::setScriptCallbacks(initScripts, cleanupEntityScripts);\n";
         mainContent += "\n";
     }
 
