@@ -48,6 +48,7 @@
 #include <iomanip>
 #include <cstdint>
 #include <cstring>
+#include <cstdio>
 
 #if defined(_WIN32)
   #include <windows.h>
@@ -74,18 +75,23 @@ int scaleSavedWindowSize(int saved, float uiScale) {
 
 // The dockspace lives on the main viewport, so that is the scale it has to match.
 float mainViewportScale() {
-    return sanitizeUiScale(ImGui::GetMainViewport()->DpiScale);
+    return sanitizeUiScale(ImGui::GetMainViewport()->DpiScale) * editor::Theme::uiScale();
 }
 
-// SizeRef against a central node is read as an absolute size, so it has to grow
-// with the text; siblings split by ratio stay proportional under the same factor.
-void scaleDockChildren(ImGuiDockNode* node, float ratio) {
-    for (ImGuiDockNode* child : node->ChildNodes) {
-        if (!child) continue;
-        child->Size = ImVec2(child->Size.x * ratio, child->Size.y * ratio);
-        child->SizeRef = ImVec2(child->SizeRef.x * ratio, child->SizeRef.y * ratio);
-        scaleDockChildren(child, ratio);
-    }
+// DPI times UI scale, so a wider range than sanitizeUiScale().
+float sanitizeLayoutScale(float scale) {
+    return (scale >= 0.25f && scale <= 24.0f) ? scale : 1.0f;
+}
+
+// Share of the window a panel beside the scene may take.
+constexpr float sidePanelMaxShare = 0.3f;
+constexpr float bottomPanelMaxShare = 0.4f;
+
+// HasCentralNodeChild is not set yet when a restored layout is rescaled.
+bool holdsCentralNode(const ImGuiDockNode* node) {
+    if (!node) return false;
+    if (node->LocalFlags & ImGuiDockNodeFlags_CentralNode) return true;
+    return holdsCentralNode(node->ChildNodes[0]) || holdsCentralNode(node->ChildNodes[1]);
 }
 
 }
@@ -1082,6 +1088,7 @@ void editor::App::buildDockspace(bool resetLayout){
         dock_id_middle_top = getCentralDockId();
     } else {
         buildDefaultLayout();
+        cappedDockSizes.clear();
         // Built from the current font size, so it needs no DPI correction.
         layoutUiScale = mainViewportScale();
         layoutScaleApplied = true;
@@ -1104,7 +1111,7 @@ void editor::App::rescaleRestoredLayout(){
     if (!root) return;
 
     const float currentScale = mainViewportScale();
-    const float savedScale = sanitizeUiScale(layoutUiScale);
+    const float savedScale = sanitizeLayoutScale(layoutUiScale);
     layoutUiScale = currentScale;
     layoutScaleApplied = true;
 
@@ -1113,6 +1120,89 @@ void editor::App::rescaleRestoredLayout(){
 
     // The root node is pinned to the viewport, so only its descendants move.
     scaleDockChildren(root, ratio);
+}
+
+// SizeRef against a central node is read as an absolute size, so it has to grow
+// with the text; siblings split by ratio stay proportional under the same factor.
+void editor::App::scaleDockChildren(ImGuiDockNode* node, float ratio){
+    const ImVec2 available = ImGui::GetMainViewport()->WorkSize;
+    for (int i = 0; i < 2; i++) {
+        ImGuiDockNode* child = node->ChildNodes[i];
+        if (!child) continue;
+        const ImVec2 sizeRef = child->SizeRef;
+        child->Size = ImVec2(child->Size.x * ratio, child->Size.y * ratio);
+        child->SizeRef = ImVec2(sizeRef.x * ratio, sizeRef.y * ratio);
+
+        // Panels beside the scene only grow up to the caps, or the scene gets
+        // squeezed out. One already past its cap keeps its size.
+        if (holdsCentralNode(node->ChildNodes[i ^ 1]) && !holdsCentralNode(child)) {
+            const int axis = node->SplitAxis;
+            const float cap = available[axis] * (axis == ImGuiAxis_X ? sidePanelMaxShare : bottomPanelMaxShare);
+            float uncapped = sizeRef[axis] * ratio;
+            // Resume from the uncapped size unless the panel was resized (the ini keeps whole pixels).
+            auto it = cappedDockSizes.find(child->ID);
+            if (it != cappedDockSizes.end() && std::fabs(it->second.capped - sizeRef[axis]) < 1.0f) {
+                uncapped = it->second.uncapped * ratio;
+            }
+            const float size = std::min(uncapped, std::max(sizeRef[axis], cap));
+            child->Size[axis] = size;
+            child->SizeRef[axis] = size;
+            if (size < uncapped) {
+                cappedDockSizes[child->ID] = { size, uncapped };
+            } else {
+                cappedDockSizes.erase(child->ID);
+            }
+        }
+        scaleDockChildren(child, ratio);
+    }
+}
+
+// The layout scale and the capped panel sizes are saved in the ini with the dock
+// sizes they describe. Inis from older versions fall back to settings.yaml.
+void editor::App::registerLayoutSettings(){
+    ImGuiSettingsHandler handler;
+    handler.TypeName = "DoriaxLayout";
+    handler.TypeHash = ImHashStr("DoriaxLayout");
+    handler.UserData = this;
+    handler.ReadOpenFn = [](ImGuiContext*, ImGuiSettingsHandler*, const char*) -> void* {
+        return reinterpret_cast<void*>(1);
+    };
+    handler.ReadLineFn = [](ImGuiContext*, ImGuiSettingsHandler* handler, void*, const char* line) {
+        App* app = static_cast<App*>(handler->UserData);
+        ImGuiID id;
+        float scale, capped, uncapped;
+        if (std::sscanf(line, "Scale=%f", &scale) == 1) {
+            app->layoutUiScale = scale;
+        } else if (std::sscanf(line, "Panel=0x%08X Capped=%f Uncapped=%f", &id, &capped, &uncapped) == 3) {
+            app->cappedDockSizes[id] = { capped, uncapped };
+        }
+    };
+    handler.WriteAllFn = [](ImGuiContext*, ImGuiSettingsHandler* handler, ImGuiTextBuffer* buf) {
+        const App* app = static_cast<const App*>(handler->UserData);
+        buf->appendf("[%s][Data]\n", handler->TypeName);
+        buf->appendf("Scale=%g\n", sanitizeLayoutScale(app->layoutUiScale));
+        for (const auto& [id, size] : app->cappedDockSizes) {
+            buf->appendf("Panel=0x%08X Capped=%.1f Uncapped=%.1f\n", id, size.capped, size.uncapped);
+        }
+        buf->append("\n");
+    };
+    ImGui::AddSettingsHandler(&handler);
+}
+
+// A new UI scale resizes the docked panels along with the text.
+void editor::App::applyUiScale(){
+    const float uiScale = AppSettings::getUiScale();
+    if (uiScale == Theme::uiScale()) return;
+
+    // Until the layout is restored, rescaleRestoredLayout() takes care of it.
+    if (layoutScaleApplied) {
+        const float ratio = uiScale / Theme::uiScale();
+        if (ImGuiDockNode* root = ImGui::DockBuilderGetNode(dockspace_id)) {
+            scaleDockChildren(root, ratio);
+        }
+        layoutUiScale *= ratio;
+    }
+    Theme::setUiScale(uiScale);
 }
 
 void editor::App::buildDefaultLayout(){
@@ -1134,7 +1224,7 @@ void editor::App::buildDefaultLayout(){
 
     // Structure on the left, Resources split off its bottom.
     ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Left, 0.0f, &dock_id_left, &dock_id_middle);
-    ImGui::DockBuilderSetNodeSize(dock_id_left, ImVec2(preferredSize(14, viewport.x, 0.3f), viewport.y));
+    ImGui::DockBuilderSetNodeSize(dock_id_left, ImVec2(preferredSize(14, viewport.x, sidePanelMaxShare), viewport.y));
     ImGui::DockBuilderDockWindow(Structure::WINDOW_NAME, dock_id_left);
 
     ImGui::DockBuilderSplitNode(dock_id_left, ImGuiDir_Down, 0.0f, &dock_id_left_bottom, &dock_id_left_top);
@@ -1143,7 +1233,7 @@ void editor::App::buildDefaultLayout(){
 
     // Properties on the right.
     ImGui::DockBuilderSplitNode(dock_id_middle, ImGuiDir_Right, 0.0f, &dock_id_right, &dock_id_middle);
-    ImGui::DockBuilderSetNodeSize(dock_id_right, ImVec2(preferredSize(19, viewport.x, 0.3f), viewport.y));
+    ImGui::DockBuilderSetNodeSize(dock_id_right, ImVec2(preferredSize(19, viewport.x, sidePanelMaxShare), viewport.y));
     ImGui::DockBuilderDockWindow(Properties::WINDOW_NAME, dock_id_right);
     ImGui::DockBuilderDockWindow(AiChatWindow::WINDOW_NAME, dock_id_right);
 
@@ -1161,7 +1251,7 @@ void editor::App::buildDefaultLayout(){
 
     // Output/Animation across the bottom; scenes fill the remaining centre.
     ImGui::DockBuilderSplitNode(dock_id_middle, ImGuiDir_Down, 0.0f, &dock_id_middle_bottom, &dock_id_middle_top);
-    ImGui::DockBuilderSetNodeSize(dock_id_middle_bottom, ImVec2(viewport.x, preferredSize(10, viewport.y, 0.4f)));
+    ImGui::DockBuilderSetNodeSize(dock_id_middle_bottom, ImVec2(viewport.x, preferredSize(10, viewport.y, bottomPanelMaxShare)));
     ImGui::DockBuilderDockWindow(OutputWindow::WINDOW_NAME, dock_id_middle_bottom);
     ImGui::DockBuilderDockWindow(AnimationWindow::WINDOW_NAME, dock_id_middle_bottom);
 
@@ -1420,6 +1510,7 @@ void editor::App::setup() {
     // build type. (initializeSettings() above has already set the config dir.)
     layoutIniPath = (AppSettings::getConfigDirectory() / "editor_layout.ini").string();
     io.IniFilename = layoutIniPath.c_str();
+    registerLayoutSettings();
 
     // Separate from the window scale: the layout keeps the scale it was built at,
     // while the window is measured on whichever monitor it closes on.
@@ -1498,6 +1589,7 @@ void editor::App::setup() {
     if (ImGui::GetPlatformIO().Monitors.Size > 0) {
         dpiScale = ImGui::GetPlatformIO().Monitors[0].DpiScale;
     }
+    Theme::setUiScale(AppSettings::getUiScale());
     Theme::applyDpiScale(dpiScale);
 
     mcpServer->applySettings(AppSettings::getMcpSettings());
@@ -1614,6 +1706,8 @@ void editor::App::duplicateSelection() {
 }
 
 void editor::App::show(){
+    applyUiScale();
+
     float dpiScale = 1.0f;
     if (const ImGuiViewport* mainViewport = ImGui::GetMainViewport()) {
         dpiScale = mainViewport->DpiScale;
@@ -3088,7 +3182,7 @@ void editor::App::saveWindowSettings(int width, int height, bool maximized, floa
     // The ini is written at the scale the layout has held all session, not the
     // monitor scale above, which is read fresh and may have changed since.
     if (layoutScaleApplied) {
-        AppSettings::setLayoutUiScale(sanitizeUiScale(layoutUiScale));
+        AppSettings::setLayoutUiScale(sanitizeLayoutScale(layoutUiScale));
     }
     AppSettings::saveSettings();
 }

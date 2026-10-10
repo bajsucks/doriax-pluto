@@ -15,6 +15,7 @@
 #include "window/Widgets.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <filesystem>
 #include <functional>
@@ -196,6 +197,7 @@ void EditorSettingsWindow::open(Project* project, std::optional<Tab> tab) {
     m_emsdkDetected = false;
     m_emsdkOverride = AppSettings::getEmsdkPath();
     m_editorVSyncEnabled = AppSettings::getEditorVSyncEnabled();
+    m_uiScalePercent = static_cast<int>(std::lround(AppSettings::getUiScale() * 100.0f));
     m_defaultExportDirectory = AppSettings::getDefaultExportDirectory();
 
     m_aiSettings = AppSettings::getAiSettings();
@@ -430,6 +432,14 @@ void EditorSettingsWindow::drawGeneralSettings() {
             m_editorVSyncEnabled = true;
         }
         ImGui::Checkbox("##EditorVSync", &m_editorVSyncEnabled);
+
+        if (beginSettingsRow("UI Scale",
+                             "Size of the editor text and panels, on top of the display scale the system reports.",
+                             m_uiScalePercent != 100)) {
+            m_uiScalePercent = 100;
+        }
+        ImGui::SetNextItemWidth(-1);
+        ImGui::DragInt("##EditorUiScale", &m_uiScalePercent, 1.0f, 50, 300, "%d%%", ImGuiSliderFlags_AlwaysClamp);
     });
 }
 
@@ -866,6 +876,7 @@ void EditorSettingsWindow::drawAdvancedSettings() {
 
 bool EditorSettingsWindow::applySettings() {
     AppSettings::setEditorVSyncEnabled(m_editorVSyncEnabled);
+    AppSettings::setUiScale(m_uiScalePercent / 100.0f);
     AppSettings::setDefaultExportDirectory(m_defaultExportDirectory);
     AppSettings::setCMakePath(m_cmakeOverride);
     // Unless the Desktop tab ran detection, the stored kit stays

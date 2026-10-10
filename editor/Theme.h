@@ -35,6 +35,9 @@ namespace doriax::editor {
 
         static void apply();
         static void applyDpiScale(float dpiScale);
+        // Editor scale on top of the monitor DPI
+        static void setUiScale(float uiScale);
+        static float uiScale();
 
         static float dpiScale();
         static float dpi(float value);

@@ -1363,7 +1363,9 @@ void AiChatWindow::drawPendingAttachments() {
     const float attachmentFontSize =
         std::floor(ImGui::GetFontSize() * kAttachmentFontScale);
     const float chipHeight = attachmentChipHeight();
-    ImGui::PushFont(attachmentFont, attachmentFontSize);
+    // PushFont takes an unscaled size
+    ImGui::PushFont(attachmentFont,
+                    attachmentFontSize * ImGui::GetStyle().FontSizeBase / ImGui::GetFontSize());
 
     int removeIndex = -1;
     for (int i = 0; i < static_cast<int>(pendingAttachments.size()); ++i) {

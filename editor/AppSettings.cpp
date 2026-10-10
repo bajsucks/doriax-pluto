@@ -6,6 +6,7 @@
 #include "ai/SecretStore.h"
 #include <fstream>
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 
 namespace doriax::editor {
@@ -96,6 +97,7 @@ float AppSettings::resourcesLeftPanelWidth = 200.0f;
 float AppSettings::codeEditorFontSize = AppSettings::defaultCodeEditorFontSize;
 bool AppSettings::multiViewportEnabled = false;
 bool AppSettings::editorVSyncEnabled = true;
+float AppSettings::uiScale = 1.0f;
 PanelVisibilitySettings AppSettings::panelVisibility;
 ai::Settings AppSettings::aiSettings;
 ai::McpSettings AppSettings::mcpSettings;
@@ -245,6 +247,9 @@ bool AppSettings::loadSettings() {
             if (editorNode["vsync"]) {
                 editorVSyncEnabled = editorNode["vsync"].as<bool>();
             }
+            if (editorNode["ui_scale"]) {
+                setUiScale(editorNode["ui_scale"].as<float>());
+            }
             if (editorNode["panels"]) {
                 auto panelsNode = editorNode["panels"];
                 if (panelsNode["structure"]) panelVisibility.structure = panelsNode["structure"].as<bool>();
@@ -388,6 +393,7 @@ bool AppSettings::saveSettings() {
         YAML::Node editorNode;
         editorNode["multi_viewport"] = multiViewportEnabled;
         editorNode["vsync"] = editorVSyncEnabled;
+        editorNode["ui_scale"] = uiScale;
         YAML::Node panelsNode;
         panelsNode["structure"] = panelVisibility.structure;
         panelsNode["properties"] = panelVisibility.properties;
@@ -635,6 +641,15 @@ bool AppSettings::getEditorVSyncEnabled() {
 
 void AppSettings::setEditorVSyncEnabled(bool enabled) {
     editorVSyncEnabled = enabled;
+}
+
+float AppSettings::getUiScale() {
+    return uiScale;
+}
+
+void AppSettings::setUiScale(float scale) {
+    // clamp lets NaN through
+    uiScale = std::isnan(scale) ? 1.0f : std::clamp(scale, 0.5f, 3.0f);
 }
 
 PanelVisibilitySettings AppSettings::getPanelVisibility() {
