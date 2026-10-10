@@ -467,8 +467,12 @@ void Texture::destroy(){
         }
 
         if (data) {
+            // remove() works on the pool's current copy, which may no longer be this one
+            const bool pooled = data == TextureDataPool::get(id);
             data.reset();
-            TextureDataPool::remove(id);
+            if (pooled) {
+                TextureDataPool::remove(id);
+            }
         }
 
         if (!framebuffer){
