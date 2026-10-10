@@ -438,8 +438,18 @@ void EditorSettingsWindow::drawGeneralSettings() {
                              m_uiScalePercent != 100)) {
             m_uiScalePercent = 100;
         }
-        ImGui::SetNextItemWidth(-1);
-        ImGui::DragInt("##EditorUiScale", &m_uiScalePercent, 1.0f, 50, 300, "%d%%", ImGuiSliderFlags_AlwaysClamp);
+        static constexpr int uiScalePercents[] = { 50, 75, 90, 100, 110, 125, 150, 175, 200, 250, 300 };
+        ImGui::SetNextItemWidth(Theme::dpi(100.0f));
+        if (ImGui::BeginCombo("##EditorUiScale", (std::to_string(m_uiScalePercent) + "%").c_str(), ImGuiComboFlags_HeightLarge)) {
+            for (int percent : uiScalePercents) {
+                const bool selected = percent == m_uiScalePercent;
+                if (ImGui::Selectable((std::to_string(percent) + "%").c_str(), selected)) {
+                    m_uiScalePercent = percent;
+                }
+                if (selected) ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
     });
 }
 
