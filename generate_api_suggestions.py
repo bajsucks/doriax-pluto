@@ -43,6 +43,8 @@ RE_GETTER_CAST = re.compile(r'\((.+?)\([A-Za-z0-9_]+::\*\)')
 RE_GETTER_MEMBER = re.compile(r'&([A-Za-z0-9_]+)::([A-Za-z0-9_]+)$')
 # Containers LuaBridge pushes as a new table
 RE_TABLE_CONTAINER = re.compile(r'(?:vector|array|list|map|unordered_map|set|pair|tuple)\s*<')
+# Lambda binding with a trailing return type: [] (const T& self, ...) -> Type {
+RE_LAMBDA_SIGNATURE = re.compile(r'\[\]\s*\(([^)]*)\)\s*->\s*([^{]+?)\s*\{')
 
 EXCLUDED_HEADER_METHODS = {
     ('EntityHandle', 'addComponent'),
@@ -61,14 +63,15 @@ EXCLUDED_HEADER_METHODS = {
 
 class APISymbol:
     """Represents one symbol in the engine API."""
-    __slots__ = ('name', 'kind', 'detail', 'parent', 'getter')
+    __slots__ = ('name', 'kind', 'detail', 'parent', 'getter', 'signature')
 
-    def __init__(self, name, kind, detail='', parent='', getter=''):
+    def __init__(self, name, kind, detail='', parent='', getter='', signature=None):
         self.name = name
         self.kind = kind
         self.detail = detail
         self.parent = parent
         self.getter = getter  # getter of a writable property
+        self.signature = signature  # (params, return) of a lambda binding
 
     def __repr__(self):
         return f'APISymbol({self.name!r}, {self.kind!r})'
@@ -195,7 +198,8 @@ def parse_binding_file(filepath):
             if not fname.startswith('__'):
                 symbols.append(APISymbol(
                     fname, 'Method',
-                    f'{current_lua_name}:{fname}()', current_lua_name
+                    f'{current_lua_name}:{fname}()', current_lua_name,
+                    signature=_lambda_signature(stripped[m.end():])
                 ))
             continue
 
@@ -364,6 +368,16 @@ def _copied_type(ret, class_names):
     if RE_TABLE_CONTAINER.match(t) or (t in class_names and not re.search(r'[&*]', ret)):
         return t
     return ''
+
+
+def _lambda_signature(text):
+    """(params, return) of a lambda binding, which wins over the C++ header's."""
+    m = RE_LAMBDA_SIGNATURE.search(text)
+    if not m:
+        return None
+    # Lua passes neither self nor the lua_State
+    params = [p for p in m.group(1).split(',')[1:] if 'lua_State' not in p]
+    return _simplify_params(','.join(params)), m.group(2)
 
 
 def _simplify_params(params_str):
@@ -641,7 +655,7 @@ def main():
     # Update existing LuaBridge method symbols with param + return info from C++ headers
     for s in all_symbols:
         if s.kind in ('Method', 'StaticMethod') and s.parent:
-            sig = cpp_signatures.get((s.parent, s.name))
+            sig = s.signature or cpp_signatures.get((s.parent, s.name))
             if sig is not None:
                 sep = '.' if s.kind == 'StaticMethod' else ':'
                 s.detail = _format_detail(s.parent, s.name, sep, sig)

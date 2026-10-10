@@ -18,11 +18,23 @@
   wayland-scanner,
   libffi,
   systemdLibs,
+  lib,
+  # Commit and its date from the flake, null without git info
+  rev ? null,
+  date ? null,
 }:
 
-llvmPackages.stdenv.mkDerivation (finalAttrs: {
+let
+  # date is YYYYMMDDHHMMSS
+  day =
+    if date == null then
+      ""
+    else
+      "-${builtins.substring 0 4 date}-${builtins.substring 4 2 date}-${builtins.substring 6 2 date}";
+in
+llvmPackages.stdenv.mkDerivation {
   pname = "doriax";
-  version = "v0.7.1";
+  version = "0-unstable${day}";
 
   src = ../../.;
 
@@ -51,7 +63,6 @@ llvmPackages.stdenv.mkDerivation (finalAttrs: {
     systemdLibs
   ];
 
-  cmakeFlags = [
-    "-D DORIAXEDITOR_VERSION=${finalAttrs.version}"
-  ];
-})
+  # The build sees no tags, so name it after its commit; without one CMake says "unknown"
+  cmakeFlags = lib.optional (rev != null) "-D DORIAXEDITOR_VERSION=unstable${day}-g${rev}";
+}

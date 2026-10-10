@@ -37,9 +37,12 @@
 #include <chrono>
 #include <filesystem>
 #include <functional>
+#include <map>
 #include <mutex>
 #include <queue>
 #include <thread>
+
+struct ImGuiDockNode;
 
 namespace doriax::editor{
 
@@ -168,6 +171,13 @@ namespace doriax::editor{
         float layoutUiScale = 0.0f;
         bool layoutScaleApplied = false;
 
+        // Sizes scaleDockChildren() capped, so scaling back down restores them.
+        struct CappedDockSize {
+            float capped;
+            float uncapped;
+        };
+        std::map<ImGuiID, CappedDockSize> cappedDockSizes;
+
         AlertData alert;
         ProjectSaveDialog projectSaveDialog;
         SceneSaveDialog sceneSaveDialog;
@@ -218,6 +228,9 @@ namespace doriax::editor{
         void buildDefaultLayout();
         // Matches a layout restored from the ini to the current UI scale.
         void rescaleRestoredLayout();
+        void scaleDockChildren(ImGuiDockNode* node, float ratio);
+        void registerLayoutSettings();
+        void applyUiScale();
         void dockProjectTabs();
         void dockTabWindow(const std::string& windowName, bool force = false);
         void captureTabOrder();

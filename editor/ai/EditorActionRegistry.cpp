@@ -133,7 +133,31 @@ Json propertyValueFields(std::initializer_list<std::pair<const char*, Json>> ext
         {"quat_value", quaternionSchema("Quaternion property value")},
         {"texture_path", stringSchema("Project-relative texture/resource path for Texture properties, inside the assets directory reported by get_project_summary as assets_dir. For .svg sources an optional '?svgScale=N' suffix sets the rasterization scale (e.g. 'ui/icon.svg?svgScale=2'). A cubemap (Sky or ReflectionProbe texture) takes one cross-layout image or six faces joined by '|', ordered +X|-X|+Y|-Y|+Z|-Z")},
         {"entity_value", integerSchema("Entity id for Entity or EntityReference properties")},
-        {"entity_scene_id", integerSchema("Scene id for EntityReference properties, only for an entity in another scene. Omit for the same scene")}
+        {"entity_scene_id", integerSchema("Scene id for EntityReference properties, only for an entity in another scene. Omit for the same scene")},
+        {"bursts_value", {
+            {"type", "array"},
+            {"description", "Particles bursts: the whole list, one entry per burst"},
+            {"items", objectSchema({
+                {"time", numberSchema("Seconds after the emitter starts")},
+                {"min_count", integerSchema("Fewest particles the burst emits")},
+                {"max_count", integerSchema("Most particles the burst emits")}
+            })}
+        }},
+        {"gradient_value", {
+            {"type", "object"},
+            {"description", "Particles colorGradient: color stops over the particle life"},
+            {"additionalProperties", false},
+            {"properties", {
+                {"use_srgb", boolSchema("Colors are sRGB")},
+                {"stops", {
+                    {"type", "array"},
+                    {"items", objectSchema({
+                        {"time", numberSchema("Particle life from 0 to 1")},
+                        {"color", vector3Schema("Stop color")}
+                    })}
+                }}
+            }}
+        }}
     });
     for (const auto& item : extra) {
         fields[item.first] = item.second;
@@ -1046,6 +1070,7 @@ const std::vector<ToolDefinition>& cachedTools() {
                 {"canvas_width", integerSchema("Canvas width in points")},
                 {"canvas_height", integerSchema("Canvas height in points")},
                 {"scaling_mode", stringSchema("fitwidth, fitheight, letterbox, crop, stretch, or native")},
+                {"texture_strategy", stringSchema("none, fit, or resize. fit pads and resize scales non-power-of-two textures to a power of two. The editor applies it when the project is reopened")},
                 {"window_width", integerSchema("Desktop window width in pixels")},
                 {"window_height", integerSchema("Desktop window height in pixels")},
                 {"vsync", boolSchema("Synchronize Play mode and supported desktop builds to the display refresh rate")},
@@ -1328,7 +1353,7 @@ bool hasAnyValueField(const Json& args) {
     static const char* keys[] = {
         "bool_value", "int_value", "number_value", "string_value",
         "vector2_value", "vector3_value", "vector4_value", "quat_value",
-        "texture_path", "font_paths", "entity_value"
+        "texture_path", "font_paths", "entity_value", "bursts_value", "gradient_value"
     };
     for (const char* key : keys) {
         if (args.contains(key)) return true;
@@ -1373,7 +1398,7 @@ std::string EditorActionRegistry::guidance() {
         << "For scripts and engine API code, the Doriax engine source under the editor's engine/ directory (read it with search_engine_source and read_engine_source) is the ONLY source of truth. Use ONLY classes, methods, properties, enums, macros, and constructor overloads you have confirmed exist in that source; if a symbol is not present there it does not exist in Doriax, so do not use it. Never invent APIs or carry over names, macros, or patterns from other engines or frameworks (e.g. Godot GDCLASS, Unreal GENERATED_BODY/UPROPERTY, Qt Q_OBJECT). search_engine_api is only a quick index into that same source; when a symbol is unfamiliar or you are unsure of its exact spelling or overloads, confirm it in the source before writing it (e.g. key codes are Input.KEY_* in Lua but D_KEY_* macros in C++, and Quaternion's axis-angle constructor takes the angle first: Quaternion(angle, axis)).\n"
         << "A C++ method existing on a class does NOT mean Lua can call it. LuaBridge binds many accessors as properties instead of methods, and calling the accessor from Lua fails at runtime with \"attempt to call a nil value (method 'x')\". search_engine_api marks this: kind 'Method' with a ':' in the detail (Body2D:getMass()) is Lua-callable, while kind 'CppMethod' with '::' in the detail (Object::getPosition(), Body3D::setLinearVelocity()) is C++ only and carries lua_callable=false plus a lua_note naming the property to use (object.position, body.linearVelocity). In Lua, read and assign those properties (self.sphere.position = p, body.linearVelocity = Vector3(0,0,0)); never translate a CppMethod into obj:getX()/obj:setX(). If a class has no bound property for what you need either, check the LuaBridge binding source under engine/core/script/binding/ before writing the call.\n"
         << "A .scene file only belongs to the project while project.yaml lists it; an unlisted one is not built, exported, opened, or usable as a child scene, so a scene file that arrived from outside the editor needs add_project_scene first.\n"
-        << "A bundle is only built and registered when a scene instantiates it or when it is listed as standalone, so a bundle that exists only to be spawned from a script with BundleManager needs set_standalone_bundle before createBundle can find it by name. Every createBundle call creates its own instance root and returns it, so the same bundle can be spawned repeatedly; the optional third argument is only the entity the new root is parented to (a name resolved in that scene, an entity id of that scene, or an object carrying its own scene), never the root itself. destroyBundle(scene, root) removes what that spawn created and leaves the parent alone.\n"
+        << "A bundle is only built and registered when a scene instantiates it or when it is listed as standalone, so a bundle that exists only to be spawned from a script with BundleManager needs set_standalone_bundle before createBundle can find it by name. Every createBundle call creates its own instance root and returns it, so the same bundle can be spawned repeatedly; the optional third argument is only the entity the new root is parented to (a name resolved in that scene, an entity id of that scene, or an object carrying its own scene), never the root itself. destroyBundle(scene, root) removes what that spawn created and anything parented under it since, bundles spawned there included, and leaves the parent alone.\n"
         << "When you create a script for requested behavior, write the complete script with update_script_file instead of asking the user to edit it manually.\n"
         << "A ScriptComponent holds a list of script entries; inspect_component on ScriptComponent lists them with index, class name, and file paths. attach_script adds an entry, so use it only for a script the entity does not have yet: to rename or repoint an entry it already has use update_script_entry, and to detach one use remove_script_entry. rename_resource already repoints the attached entries at the renamed file, so after renaming a script only its class name is left to fix with update_script_entry.\n"
         << "A project can declare C++ script directories: get_project_summary reports them as script_dirs and set_project_script_dirs changes them. Each root is an include directory and every source under it is compiled without any ScriptComponent referencing it, so shared helper, utility, and library classes belong there. Create one with create_source_file, which writes a source or header without attaching it to an entity; create_script is only for a script an entity actually runs. A .cpp that is neither under a root nor included by an attached script is not compiled at all, so add the root instead of assuming it builds. The editor also only runs a C++ build when an enabled C++ script is attached to an entity somewhere in the project: Lua scripts never trigger one, so in a Lua-only project the helper sources are compiled first by an export, and a clean startup log is no proof they built.\n"
@@ -1800,7 +1825,12 @@ ValidationResult EditorActionRegistry::validate(const std::string& name, const J
                 return fail(std::string("set_project_settings ") + key + " must be a boolean.");
             }
         }
-        return isWrongTypedString(arguments, "scaling_mode") ? fail("set_project_settings scaling_mode must be a string.") : ok();
+        for (const char* key : {"scaling_mode", "texture_strategy"}) {
+            if (isWrongTypedString(arguments, key)) {
+                return fail(std::string("set_project_settings ") + key + " must be a string.");
+            }
+        }
+        return ok();
     }
     if (name == "create_project" || name == "open_project") {
         return hasString(arguments, "path") ? ok() : fail(name + " requires path.");

@@ -16,7 +16,7 @@ namespace doriax {
 
     // Sent to the platform as integers, so keep the order
     enum class ProductType{
-        INAPP, // one-time product: consumable or not
+        INAPP, // one-time product: consumable or not. Also an iOS non-renewing subscription, which the store never expires: check purchaseTime.
         SUBS
     };
 
@@ -26,7 +26,7 @@ namespace doriax {
         PENDING // waiting for payment: do not grant yet
     };
 
-    // Google Play Billing response codes
+    // Google Play Billing response codes, which iOS maps StoreKit errors to
     enum class BillingResponse{
         SERVICE_TIMEOUT = -3,
         FEATURE_NOT_SUPPORTED = -2,
@@ -91,11 +91,11 @@ namespace doriax {
     };
 
     struct PurchaseDetails{
-        std::string orderId;
+        std::string orderId; // on iOS, the transaction id
         std::string productId;
         std::vector<std::string> productIds;
         ProductType productType = ProductType::INAPP;
-        std::string purchaseToken;
+        std::string purchaseToken; // on iOS, the original transaction id
         long long purchaseTime = 0; // milliseconds since the epoch
         PurchaseState state = PurchaseState::UNSPECIFIED;
         int quantity = 1;
@@ -106,7 +106,7 @@ namespace doriax {
         std::string packageName;
         std::string obfuscatedAccountId;
         std::string obfuscatedProfileId;
-        // Signed purchase data, to verify on a server
+        // Signed purchase data, to verify on a server. On iOS, the transaction JSON and its JWS.
         std::string originalJson;
         std::string signature;
     };
@@ -135,11 +135,12 @@ namespace doriax {
         virtual void acknowledgePurchase(const std::string& purchaseToken) = 0;
         virtual void consumePurchase(const std::string& purchaseToken) = 0;
         virtual void queryPurchases(ProductType type) = 0;
+        virtual void restorePurchases() = 0;
         virtual void openSubscriptionManagement(const std::string& productId) = 0;
         virtual void showInAppMessages() = 0;
     };
 
-    // Google Play Billing on Android. Results arrive as events at the start of a frame.
+    // Google Play Billing on Android and StoreKit 2 on iOS. Results arrive as events at the start of a frame.
     // Acknowledge or consume a purchase within three days, or Google Play refunds it.
     class DORIAX_API InAppPurchase {
 
@@ -176,27 +177,34 @@ namespace doriax {
         static std::vector<ProductDetails> getProducts();
 
         // Needs the product queried first. An empty offerToken buys the first base plan.
+        // iOS ignores offerToken: a product has one plan, with its introductory offer.
         static void purchase(const std::string& productId, const std::string& offerToken = "");
-        // KEEP_EXISTING carries the old plan's payments over and ignores offerToken
+        // KEEP_EXISTING carries the old plan's payments over and ignores offerToken.
+        // iOS just buys the product, and the App Store replaces the one in its group.
         static void changeSubscription(const std::string& productId, const std::string& offerToken, const std::string& oldPurchaseToken, SubscriptionReplacementMode mode = SubscriptionReplacementMode::WITH_TIME_PRORATION);
 
+        // On iOS, acknowledging or consuming finishes the purchase's transactions
         static void acknowledgePurchase(const std::string& purchaseToken);
-        // Consuming also acknowledges, and lets the product be bought again
+        // Consuming also acknowledges, and lets the product be bought again. Grant and save it first,
+        // once per purchaseToken: a purchase can be reported twice, and never again once consumed.
         static void consumePurchase(const std::string& purchaseToken);
 
         // Reports owned purchases with onPurchaseUpdated, then onPurchasesQueried.
         // Call it at startup and on resume.
         static void queryPurchases(ProductType type);
+        // For a Restore Purchases button: queries both types, after an account sync on iOS
+        static void restorePurchases();
         static std::vector<PurchaseDetails> getPurchases();
         static bool isPurchased(const std::string& productId);
 
-        // Hashed user ids that Google Play uses against fraud
+        // Hashed user ids that Google Play uses against fraud. iOS sends a UUID account id as appAccountToken.
         static void setObfuscatedAccountId(const std::string& accountId);
         static void setObfuscatedProfileId(const std::string& profileId);
 
-        // Google Play subscription center, for one subscription or all of them
+        // The store's subscription management, for one subscription or all of them.
+        // iOS shows it over the game and queries the subscriptions again when it closes.
         static void openSubscriptionManagement(const std::string& productId = "");
-        // Messages about subscription payment problems
+        // Messages about subscription payment problems, which iOS shows by itself
         static void showInAppMessages();
 
         static FunctionSubscribe<void(BillingResponse, std::string)> onInitialized;
@@ -218,6 +226,10 @@ namespace doriax {
         static void systemPurchasesQueried(ProductType type, BillingResponse response, const std::string& message, const std::vector<PurchaseDetails>& owned);
         static void systemPurchaseAcknowledged(const std::string& purchaseToken, BillingResponse response, const std::string& message);
         static void systemPurchaseConsumed(const std::string& purchaseToken, BillingResponse response, const std::string& message);
+
+        // Reads the products and purchases the platform wrappers send as JSON
+        static std::vector<ProductDetails> productsFromJson(const std::string& json);
+        static std::vector<PurchaseDetails> purchasesFromJson(const std::string& json);
     };
 
 }

@@ -924,6 +924,8 @@ void Engine::clearComponentSubscriptions(Scene* scene) {
         action.onStop.clear();
         action.onStep.clear();
     }
+
+    scene->getSystem<PhysicsSystem>()->clearSubscriptions();
 }
 
 void Engine::calculateCanvas(){

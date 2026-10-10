@@ -1379,6 +1379,21 @@ Json propertyValueToJson(Project* project, const std::string& propertyName, cons
             if (propertyName == "shaderUniforms") {
                 return shaderUniformValuesJson(*static_cast<ShaderUniformValues*>(property.ref));
             }
+            if (propertyName == "bursts") {
+                Json bursts = Json::array();
+                for (const ParticleBurst& burst : *static_cast<std::vector<ParticleBurst>*>(property.ref)) {
+                    bursts.push_back({{"time", burst.time}, {"min_count", burst.minCount}, {"max_count", burst.maxCount}});
+                }
+                return bursts;
+            }
+            if (propertyName == "colorGradient") {
+                const ParticleColorGradient& gradient = *static_cast<ParticleColorGradient*>(property.ref);
+                Json stops = Json::array();
+                for (const ParticleColorGradientStop& stop : gradient.stops) {
+                    stops.push_back({{"time", stop.time}, {"color", vector3Json(stop.color)}});
+                }
+                return Json{{"use_srgb", gradient.useSRGB}, {"stops", stops}};
+            }
             return Json{{"unsupported", "custom"}};
     }
     return Json();
@@ -1577,6 +1592,61 @@ bool resolveScriptIndex(Project* project, const std::vector<ScriptEntry>& script
 
 bool valueFieldPresent(const Json& args, const char* key) {
     return args.contains(key) && !args[key].is_null();
+}
+
+float optionalNumber(const Json& args, const char* key, float fallback) {
+    const auto it = args.find(key);
+    return (it == args.end() || !it->is_number()) ? fallback : it->get<float>();
+}
+
+// Particles bursts and colorGradient, each set as a whole list
+Command* buildParticleListCommand(Project* project, uint32_t sceneId, Entity entity, ComponentType component,
+                                  const std::string& propertyName, const Json& args, std::string& error,
+                                  std::function<void()> onChanged) {
+    if (propertyName == "bursts") {
+        if (!valueFieldPresent(args, "bursts_value") || !args["bursts_value"].is_array()) {
+            error = "Property requires bursts_value.";
+            return nullptr;
+        }
+        std::vector<ParticleBurst> bursts;
+        for (const Json& item : args["bursts_value"]) {
+            if (!item.is_object()) {
+                error = "Each burst must be an object.";
+                return nullptr;
+            }
+            ParticleBurst burst;
+            burst.time = std::max(0.0f, optionalNumber(item, "time", 0.0f));
+            burst.minCount = std::max(0, static_cast<int>(optionalNumber(item, "min_count", 10.0f)));
+            burst.maxCount = std::max(burst.minCount, static_cast<int>(optionalNumber(item, "max_count", static_cast<float>(burst.minCount))));
+            bursts.push_back(burst);
+        }
+        return new PropertyCmd<std::vector<ParticleBurst>>(project, sceneId, entity, component, propertyName, bursts, onChanged);
+    }
+
+    if (!valueFieldPresent(args, "gradient_value") || !args["gradient_value"].is_object()) {
+        error = "Property requires gradient_value.";
+        return nullptr;
+    }
+    const Json& value = args["gradient_value"];
+    if (!value.contains("stops") || !value["stops"].is_array()) {
+        error = "gradient_value needs stops: [{time, color: {x, y, z}}].";
+        return nullptr;
+    }
+    ParticleColorGradient gradient;
+    if (value.contains("use_srgb") && value["use_srgb"].is_boolean()) {
+        gradient.useSRGB = value["use_srgb"].get<bool>();
+    }
+    for (const Json& item : value["stops"]) {
+        ParticleColorGradientStop stop;
+        if (!item.is_object() || !item.contains("color") || !parseVector3(item["color"], stop.color)) {
+            error = "Each gradient stop needs a time and a color {x, y, z}.";
+            return nullptr;
+        }
+        stop.time = optionalNumber(item, "time", 0.0f);
+        gradient.stops.push_back(stop);
+    }
+    gradient.normalize();
+    return new PropertyCmd<ParticleColorGradient>(project, sceneId, entity, component, propertyName, gradient, onChanged);
 }
 
 Command* buildPropertyCommand(Project* project, uint32_t sceneId, Entity entity, ComponentType component,
@@ -1787,6 +1857,9 @@ Command* buildPropertyCommand(Project* project, uint32_t sceneId, Entity entity,
         }
         case PropertyType::Material:
         case PropertyType::Custom:
+            if (propertyName == "bursts" || propertyName == "colorGradient") {
+                return buildParticleListCommand(project, sceneId, entity, component, propertyName, args, error, onChanged);
+            }
             error = "Property type " + propertyTypeName(property.type) + " is not supported by generic set_component_property.";
             return nullptr;
     }
@@ -4358,7 +4431,11 @@ ActionResult EditorActionExecutor::createBundleFromEntity(const Json& arguments)
     if (!Util::isBundleFile(bundleRel.string())) return failResult("bundle_path must end with .bundle.");
     if (fs::exists(project->getProjectPath() / bundleRel)) return failResult("Bundle file already exists.");
 
-    YAML::Node node = Stream::encodeEntitySelection(std::vector<Entity>{entity}, sceneProject->scene, project, sceneProject);
+    // with its action children, as when the entity is dragged to Resources
+    std::vector<Entity> members{entity};
+    std::vector<Entity> virtualChildren = ProjectUtils::getVirtualChildren(sceneProject->scene, members);
+    members.insert(members.end(), virtualChildren.begin(), virtualChildren.end());
+    YAML::Node node = Stream::encodeEntitySelection(members, sceneProject->scene, project, sceneProject);
     if (!node || !node.IsMap()) return failResult("Failed to encode entity selection.");
     fs::create_directories((project->getProjectPath() / bundleRel).parent_path());
 
@@ -5094,14 +5171,17 @@ ActionResult EditorActionExecutor::importProjectModel(const Json& arguments) {
     std::string entityName = arguments.value("entity_name", relPath.stem().string());
     if (entityName.empty()) entityName = "Model";
 
-    CommandHandle::get(sceneId)->addCommandNoMerge(
-        new ModelLoadCmd(project, sceneId, entityName, position, assetPathFromAi(project, relPath)));
+    ModelLoadCmd* cmd = new ModelLoadCmd(project, sceneId, entityName, position, assetPathFromAi(project, relPath));
+    if (!CommandHandle::get(sceneId)->addCommandNoMerge(cmd)) {
+        return failResult("Failed to import the model.");
+    }
 
     if (resourcesWindow) {
         resourcesWindow->requestThumbnailGeneration(fullPath, false);
     }
 
-    return okResult("Imported project model through ModelLoadCmd.");
+    return okResult("Imported project model through ModelLoadCmd.",
+                    Json{{"scene_id", sceneId}, {"entity_id", cmd->getEntity()}});
 }
 
 ActionResult EditorActionExecutor::searchCuratedAssets(const Json& arguments, const std::atomic<bool>* cancel) {
@@ -5631,6 +5711,14 @@ ActionResult EditorActionExecutor::setProjectSettings(const Json& arguments) {
         }
         project->setScalingMode(scaling);
     }
+    if (arguments.contains("texture_strategy") && arguments["texture_strategy"].is_string()) {
+        const std::string strategy = lower(arguments["texture_strategy"].get<std::string>());
+        const TextureStrategy textureStrategy = Stream::stringToTextureStrategy(strategy);
+        if (Stream::textureStrategyToString(textureStrategy) != strategy) {
+            return failResult("Unknown texture_strategy: " + strategy + ". Use none, fit, or resize.");
+        }
+        project->setTextureStrategy(textureStrategy);
+    }
     if (arguments.contains("canvas_width") || arguments.contains("canvas_height")) {
         project->setCanvasSize(arguments.value("canvas_width", project->getCanvasWidth()),
                                arguments.value("canvas_height", project->getCanvasHeight()));
@@ -5658,6 +5746,7 @@ ActionResult EditorActionExecutor::setProjectSettings(const Json& arguments) {
     return okResult("Changed project settings.", Json{
         {"canvas", {{"width", project->getCanvasWidth()}, {"height", project->getCanvasHeight()}}},
         {"scaling_mode", Stream::scalingModeToString(project->getScalingMode())},
+        {"texture_strategy", Stream::textureStrategyToString(project->getTextureStrategy())},
         {"window", {{"width", project->getWindowWidth()}, {"height", project->getWindowHeight()}}},
         {"vsync", project->isVSyncEnabled()},
         {"loading", loadingSettingsJson(project->getLoadingSettings())},

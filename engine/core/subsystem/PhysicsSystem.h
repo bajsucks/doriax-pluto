@@ -123,6 +123,7 @@ namespace doriax{
 		void setGravity(float x, float y);
 		void setGravity(float x, float y, float z);
 
+		void clearSubscriptions();
 		// Removes the event callbacks with the substring in their tag
 		void removeSubscriptionsByTag(const std::string& substring);
 

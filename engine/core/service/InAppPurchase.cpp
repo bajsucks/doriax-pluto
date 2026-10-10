@@ -5,6 +5,7 @@
 
 #include "Log.h"
 #include "System.h"
+#include "json.hpp"
 #include <algorithm>
 
 using namespace doriax;
@@ -15,13 +16,118 @@ namespace {
     void warnNotAvailable(){
         static bool warned = false;
         if (!warned){
-            Log::warn("%s. Android exports have them when Google Play Billing is enabled in the project settings.", notAvailableMessage);
+            Log::warn("%s. Android and iOS exports have them when Google Play Billing or App Store Purchases is enabled in the project settings.", notAvailableMessage);
             warned = true;
         }
     }
 
     InAppPurchaseBackend* getBackend(){
         return System::instance().getInAppPurchaseBackend();
+    }
+
+    using Json = nlohmann::json;
+
+    std::string jsonString(const Json& json, const char* key){
+        auto it = json.find(key);
+        return (it != json.end() && it->is_string()) ? it->get<std::string>() : std::string();
+    }
+
+    long long jsonInteger(const Json& json, const char* key){
+        auto it = json.find(key);
+        return (it != json.end() && it->is_number_integer()) ? it->get<long long>() : 0;
+    }
+
+    bool jsonBool(const Json& json, const char* key){
+        auto it = json.find(key);
+        return it != json.end() && it->is_boolean() && it->get<bool>();
+    }
+
+    std::vector<std::string> jsonStrings(const Json& json, const char* key){
+        std::vector<std::string> values;
+        auto it = json.find(key);
+        if (it != json.end() && it->is_array()){
+            for (const Json& item : *it){
+                if (item.is_string()) values.push_back(item.get<std::string>());
+            }
+        }
+        return values;
+    }
+
+    ProductDetails parseProduct(const Json& json){
+        ProductDetails product;
+        product.productId = jsonString(json, "productId");
+        product.type = static_cast<ProductType>(jsonInteger(json, "type"));
+        product.title = jsonString(json, "title");
+        product.name = jsonString(json, "name");
+        product.description = jsonString(json, "description");
+        product.price = jsonString(json, "price");
+        product.priceMicros = jsonInteger(json, "priceMicros");
+        product.currencyCode = jsonString(json, "currencyCode");
+
+        auto offers = json.find("offers");
+        if (offers != json.end() && offers->is_array()){
+            for (const Json& offerJson : *offers){
+                ProductOffer offer;
+                offer.offerToken = jsonString(offerJson, "offerToken");
+                offer.offerId = jsonString(offerJson, "offerId");
+                offer.basePlanId = jsonString(offerJson, "basePlanId");
+                offer.tags = jsonStrings(offerJson, "tags");
+
+                auto phases = offerJson.find("pricingPhases");
+                if (phases != offerJson.end() && phases->is_array()){
+                    for (const Json& phaseJson : *phases){
+                        PricingPhase phase;
+                        phase.price = jsonString(phaseJson, "price");
+                        phase.priceMicros = jsonInteger(phaseJson, "priceMicros");
+                        phase.currencyCode = jsonString(phaseJson, "currencyCode");
+                        phase.billingPeriod = jsonString(phaseJson, "billingPeriod");
+                        phase.billingCycleCount = static_cast<int>(jsonInteger(phaseJson, "billingCycleCount"));
+                        phase.recurrenceMode = static_cast<RecurrenceMode>(jsonInteger(phaseJson, "recurrenceMode"));
+                        offer.pricingPhases.push_back(phase);
+                    }
+                }
+                product.offers.push_back(offer);
+            }
+        }
+
+        return product;
+    }
+
+    PurchaseDetails parsePurchase(const Json& json){
+        PurchaseDetails purchase;
+        purchase.orderId = jsonString(json, "orderId");
+        purchase.productIds = jsonStrings(json, "productIds");
+        purchase.productId = purchase.productIds.empty() ? "" : purchase.productIds[0];
+        purchase.productType = static_cast<ProductType>(jsonInteger(json, "productType"));
+        purchase.purchaseToken = jsonString(json, "purchaseToken");
+        purchase.purchaseTime = jsonInteger(json, "purchaseTime");
+        purchase.state = static_cast<PurchaseState>(jsonInteger(json, "state"));
+        purchase.quantity = static_cast<int>(jsonInteger(json, "quantity"));
+        purchase.acknowledged = jsonBool(json, "acknowledged");
+        purchase.autoRenewing = jsonBool(json, "autoRenewing");
+        purchase.suspended = jsonBool(json, "suspended");
+        purchase.packageName = jsonString(json, "packageName");
+        purchase.obfuscatedAccountId = jsonString(json, "obfuscatedAccountId");
+        purchase.obfuscatedProfileId = jsonString(json, "obfuscatedProfileId");
+        purchase.originalJson = jsonString(json, "originalJson");
+        purchase.signature = jsonString(json, "signature");
+        return purchase;
+    }
+
+    template<typename T>
+    std::vector<T> parseList(const std::string& text, T (*parse)(const Json&)){
+        std::vector<T> list;
+        Json json = Json::parse(text, nullptr, false);
+        if (json.is_discarded()){
+            Log::error("The store sent unreadable in-app purchase data");
+        }else if (json.is_object()){
+            list.push_back(parse(json));
+        }else if (json.is_array()){
+            for (const Json& item : json){
+                if (item.is_object()) list.push_back(parse(item));
+            }
+        }
+        return list;
     }
 }
 
@@ -211,6 +317,18 @@ void InAppPurchase::queryPurchases(ProductType type){
     }
 }
 
+void InAppPurchase::restorePurchases(){
+    if (InAppPurchaseBackend* backend = getBackend()){
+        backend->restorePurchases();
+    }else{
+        warnNotAvailable();
+        postEvent([](){
+            onPurchasesQueried.call(ProductType::INAPP, BillingResponse::BILLING_UNAVAILABLE, notAvailableMessage);
+            onPurchasesQueried.call(ProductType::SUBS, BillingResponse::BILLING_UNAVAILABLE, notAvailableMessage);
+        });
+    }
+}
+
 std::vector<PurchaseDetails> InAppPurchase::getPurchases(){
     return purchases;
 }
@@ -278,7 +396,10 @@ void InAppPurchase::systemProductsQueried(BillingResponse response, const std::s
 
 void InAppPurchase::systemPurchaseUpdated(const PurchaseDetails& purchase){
     postEvent([purchase](){
-        storePurchase(purchase);
+        // an iOS purchase waiting for approval has no token yet
+        if (!purchase.purchaseToken.empty()){
+            storePurchase(purchase);
+        }
         onPurchaseUpdated.call(purchase);
     });
 }
@@ -332,4 +453,12 @@ void InAppPurchase::systemPurchaseConsumed(const std::string& purchaseToken, Bil
         }
         onPurchaseConsumed.call(purchaseToken, response, message);
     });
+}
+
+std::vector<ProductDetails> InAppPurchase::productsFromJson(const std::string& json){
+    return parseList(json, parseProduct);
+}
+
+std::vector<PurchaseDetails> InAppPurchase::purchasesFromJson(const std::string& json){
+    return parseList(json, parsePurchase);
 }

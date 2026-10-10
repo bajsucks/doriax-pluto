@@ -2391,6 +2391,7 @@ void editor::SceneRender::updateCameraFrustum(CameraObjects& co, const CameraCom
     bool changed = false;
     if (co.type != cameraComponent.type) changed = true;
     if (co.isMainCamera != isMainCamera) changed = true;
+    if (co.fixedSizeFrustum != fixedSizeFrustum) changed = true;
     if (cameraComponent.type == CameraType::CAMERA_PERSPECTIVE){
         if (co.yfov != cameraComponent.yfov || co.aspect != cameraComponent.aspect ||
             co.nearClip != cameraComponent.nearClip || co.farClip != cameraComponent.farClip){
@@ -2408,6 +2409,7 @@ void editor::SceneRender::updateCameraFrustum(CameraObjects& co, const CameraCom
 
     co.type = cameraComponent.type;
     co.isMainCamera = isMainCamera;
+    co.fixedSizeFrustum = fixedSizeFrustum;
     co.yfov = cameraComponent.yfov;
     co.aspect = cameraComponent.aspect;
     co.nearClip = cameraComponent.nearClip;
@@ -2432,15 +2434,23 @@ void editor::SceneRender::drawCameraFrustumLines(Lines* lines, const CameraCompo
         color = Vector4(0.5f, 1.0f, 0.5f, 1.0f);
     }
 
-    float nearClip = cameraComponent.nearClip;
-    float farClip = cameraComponent.farClip;
-
-    if (fixedSizeFrustum){
-        farClip = nearClip + 2.0f;
-    }
+    Vector2 nearFar = RenderSystem::getCameraNearFar(cameraComponent);
+    float nearClip = nearFar.x;
+    float farClip = nearFar.y;
 
     if (nearClip > farClip) {
         std::swap(nearClip, farClip);
+    }
+
+    if (fixedSizeFrustum){
+        float depth = 2.0f;
+        if (cameraComponent.type == CameraType::CAMERA_ORTHO){
+            // a fixed depth would draw wide ortho views flat
+            float width = std::abs(cameraComponent.rightClip - cameraComponent.leftClip);
+            float height = std::abs(cameraComponent.topClip - cameraComponent.bottomClip);
+            depth = std::max(width, height) / 2.0f;
+        }
+        farClip = std::min(farClip, nearClip + depth);
     }
 
     if (cameraComponent.type == CameraType::CAMERA_PERSPECTIVE){

@@ -97,6 +97,9 @@ namespace doriax {
 
         Vector2 midPoint( const Vector2& vec ) const;
 
+        Vector2 moveTowards( const Vector2& target, float maxDistanceDelta ) const;
+        Vector2 lerp( const Vector2& target, float t ) const;
+
         void makeFloor( const Vector2& cmp );
         void makeCeil( const Vector2& cmp );
 

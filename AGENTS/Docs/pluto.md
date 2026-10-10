@@ -39,6 +39,31 @@ The pin is deliberate, not lazy:
 Upgrading Pluto means changing the tag **and** re-auditing the keyword list, the
 macro shim (below), LuaBridge, and every caveat on this page.
 
+## Upstream sync
+
+This fork tracks `doriaxengine/doriax` through the `upstream` remote and merges
+its `main` into the fork's `main`. As of the last sync, the merged upstream tip
+is **`9e07bcbf`** ("Exported Box2D from the engine library for C++ scripts"); the
+fork's Pluto work still sits on top of it.
+
+Upstream regularly restructures `LuaBinding::initializeLuaScripts` and the
+scripting CMake, so a sync usually conflicts in the same three places, every one
+of which must keep the Pluto behaviour:
+
+- `engine/core/script/LuaBinding.cpp` — take upstream's script-start structure
+  (it is now a `pending` scan plus PASS 1/2/3, with a `loadingLuaScripts`
+  re-entrancy guard), then port this fork's `.pluto`/`.luac` fallback and
+  `luaL_loadbufferx(..., scriptLoadMode(luaFile))` back into the PASS 1 loader.
+- `engine/CMakeLists.txt` — keep both sides: the fork's `plutoc`
+  external-warning suppression **and** upstream's target flags (for example the
+  Box2D export definitions).
+- `README.md` — upstream rewrites it wholesale, so take upstream's version and
+  re-apply the fork's Pluto tagline, notice, feature bullet, and Platforms row.
+
+After resolving, reconfigure with `-DDORIAX_BUILD_TESTS=ON`, build
+`doriax-editor`, and run `ctest`; the two checks below catch keyword drift and a
+broken Pluto runtime.
+
 ## Build integration
 
 `engine/libs/pluto/CMakeLists.txt` is a wrapper, because upstream ships Makefiles

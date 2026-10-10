@@ -68,6 +68,7 @@ namespace doriax{
 
         bool transparent = false;
         bool autoTransparency = true;
+        bool pipelineTransparent = false; // transparent when the pipeline was built
 
         bool hasTextureRect = false;
 

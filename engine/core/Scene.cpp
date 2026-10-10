@@ -14,6 +14,7 @@
 #include "subsystem/ActionSystem.h"
 #include "subsystem/AudioSystem.h"
 #include "subsystem/PhysicsSystem.h"
+#include "manager/BundleManager.h"
 #include "util/Color.h"
 
 using namespace doriax;
@@ -46,6 +47,8 @@ void Scene::init(){
 Scene::~Scene(){
     // sounds of a deleted scene would play on; not in destroy(), which also runs on view recreation
     getSystem<AudioSystem>()->stopSceneSounds();
+    // a later scene at this address would find its bundle instances
+    BundleManager::forgetInstances(this);
     destroy();
 }
 

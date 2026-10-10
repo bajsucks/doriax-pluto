@@ -59,6 +59,7 @@ namespace doriax::editor {
         std::string m_emsdkOverride;
         EmsdkInfo m_emsdkInfo;
         bool m_editorVSyncEnabled = true;
+        int m_uiScalePercent = 100;
         std::filesystem::path m_defaultExportDirectory;
         std::string m_cacheStatus;
 

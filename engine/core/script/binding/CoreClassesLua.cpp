@@ -1363,6 +1363,7 @@ void LuaBinding::registerCoreClasses(lua_State *L){
         .addStaticFunction("acknowledgePurchase", &InAppPurchase::acknowledgePurchase)
         .addStaticFunction("consumePurchase", &InAppPurchase::consumePurchase)
         .addStaticFunction("queryPurchases", &InAppPurchase::queryPurchases)
+        .addStaticFunction("restorePurchases", &InAppPurchase::restorePurchases)
         .addStaticFunction("getPurchases", &InAppPurchase::getPurchases)
         .addStaticFunction("isPurchased", &InAppPurchase::isPurchased)
         .addStaticFunction("setObfuscatedAccountId", &InAppPurchase::setObfuscatedAccountId)

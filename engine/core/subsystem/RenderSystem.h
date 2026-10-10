@@ -803,6 +803,9 @@ namespace doriax{
 
 		static bool isInsideWaterExclusion(const WaterExclusionComponent& exclusion, const Transform& transform, const Vector3& point);
 
+		// near/far as rendered, perspective keeps 0 < near < far
+		static Vector2 getCameraNearFar(const CameraComponent& camera);
+
 		// copies the stacked scene composite to the swapchain (Engine::endCompositeFramebuffer)
 		void presentFramebufferToSwapchain(Framebuffer* source);
 

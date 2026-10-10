@@ -9,6 +9,7 @@ endif()
 option(DORIAX_PHYSICS_2D "Enable Box2D-based 2D physics" ON)
 option(DORIAX_PHYSICS_3D "Enable Jolt-based 3D physics" ON)
 option(DORIAX_ADMOB "Link Google Mobile Ads into iOS builds" ON)
+option(DORIAX_STOREKIT "Compile StoreKit in-app purchases into iOS builds" ON)
 set(DORIAX_WEB_PORTALS none crazygames poki gamedistribution yandex youtube)
 set(DORIAX_WEB_PORTAL none CACHE STRING "Game portal SDK of web builds")
 set_property(CACHE DORIAX_WEB_PORTAL PROPERTY STRINGS ${DORIAX_WEB_PORTALS})
@@ -250,9 +251,15 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
             endif()
         endif()
 
+        # DWARF limits the wasm optimizer, so release builds keep only the function names
+        set(EM_DEBUG_INFO "--profiling-funcs")
+        if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+            set(EM_DEBUG_INFO "-g")
+        endif()
+
         list(APPEND PLATFORM_PROPERTIES
             LINK_FLAGS
-                "-g \
+                "${EM_DEBUG_INFO} \
                 -s INITIAL_MEMORY=256MB \
                 -s STACK_SIZE=4MB \
                 -s EXPORTED_FUNCTIONS=\"['_getScreenWidth','_getScreenHeight','_changeCanvasSize','_main']\" \
@@ -465,7 +472,8 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fobjc-arc")
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fobjc-arc")
-        set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15")
+        # Xcode 27 starts at macOS 12
+        set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0")
 
         # Only the Xcode generator assembles the real .app that the storyboard
         # entry point in platform/apple needs, shared with iOS. Every other
@@ -504,6 +512,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
             list(APPEND PLATFORM_RESOURCES
                 ${PLATFORM_ROOT}/macos/Main.storyboard
             )
+            set(BUNDLE_RESOURCES_DIR $<TARGET_BUNDLE_CONTENT_DIR:${APP_NAME}>/Resources)
 
             list(APPEND PLATFORM_PROPERTIES
                 MACOSX_BUNDLE_INFO_PLIST "${DORIAX_ROOT}/workspaces/xcode/macos/Info.plist"
@@ -589,12 +598,15 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
             ${PLATFORM_ROOT}/ios/main.m
             ${PLATFORM_ROOT}/ios/AppDelegate.h
             ${PLATFORM_ROOT}/ios/AppDelegate.m
+            ${PLATFORM_ROOT}/ios/SceneDelegate.h
+            ${PLATFORM_ROOT}/ios/SceneDelegate.m
             ${PLATFORM_ROOT}/ios/EngineView.h
             ${PLATFORM_ROOT}/ios/EngineView.mm
             ${PLATFORM_ROOT}/ios/ViewController.h
             ${PLATFORM_ROOT}/ios/ViewController.m
             ${PLATFORM_ROOT}/ios/AdMobAdapter.h
             ${PLATFORM_ROOT}/ios/AdMobAdapter.m
+            ${PLATFORM_ROOT}/ios/StoreKitAdapter.h
             ${PLATFORM_ROOT}/Renderer.h
             ${PLATFORM_ROOT}/Renderer.mm
             ${PLATFORM_ROOT}/DoriaxApple.h
@@ -607,12 +619,17 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
             ${PLATFORM_ROOT}/ios/LaunchScreen.storyboard
             ${PLATFORM_ROOT}/ios/Main.storyboard
         )
+        set(BUNDLE_RESOURCES_DIR $<TARGET_BUNDLE_DIR:${APP_NAME}>)
 
         list(APPEND PLATFORM_LIBS
             -ObjC
 
             # GameController framework for gamepad input (DoriaxGameController.mm)
             "-framework GameController"
+
+            # Audio session and units for miniaudio
+            "-framework AVFoundation"
+            "-framework AudioToolbox"
         )
 
         if(DORIAX_ADMOB)
@@ -637,7 +654,21 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
                     ${GOOGLE_MOBILE_ADS_ROOT}/UserMessagingPlatform.xcframework/ios-arm64_x86_64-simulator/UserMessagingPlatform.framework
                 )
             endif()
+        endif()
 
+        if(DORIAX_STOREKIT)
+            add_definitions("-DDORIAX_STOREKIT")
+
+            # StoreKit 2 is Swift only; the adapter implements its header, which needs Swift 6.1
+            enable_language(Swift)
+            list(APPEND PLATFORM_SOURCE ${PLATFORM_ROOT}/ios/StoreKitAdapter.swift)
+
+            list(APPEND PLATFORM_PROPERTIES
+                XCODE_ATTRIBUTE_SWIFT_OBJC_BRIDGING_HEADER "${PLATFORM_ROOT}/ios/StoreKitAdapter.h"
+            )
+        endif()
+
+        if(DORIAX_ADMOB OR DORIAX_STOREKIT)
             list(APPEND PLATFORM_PROPERTIES
                 XCODE_ATTRIBUTE_SWIFT_VERSION "5.0"
                 XCODE_ATTRIBUTE_LD_RUNPATH_SEARCH_PATHS "/usr/lib/swift @executable_path/Frameworks"
@@ -649,7 +680,8 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fobjc-arc")
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fobjc-arc")
-        set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0")
+        # StoreKit 2 and Xcode 27 start at iOS 15
+        set(CMAKE_OSX_DEPLOYMENT_TARGET "15.0")
 
         list(APPEND PLATFORM_PROPERTIES
             XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER ${APP_BUNDLE_IDENTIFIER}
@@ -778,6 +810,14 @@ endforeach()
 # not in the list above. It builds upstream luac.cpp, which is not ours to fix.
 if(TARGET plutoc)
     target_compile_options(plutoc PRIVATE ${EXTERNAL_WARNING_FLAG})
+endif()
+
+# C++ scripts link only the engine library, so it has to export Box2D
+if(DORIAX_SHARED AND DORIAX_PHYSICS_2D)
+    target_compile_definitions(box2d PRIVATE box2d_EXPORTS)
+    if(MINGW)
+        target_compile_options(box2d PRIVATE "SHELL:-include \"${CMAKE_CURRENT_SOURCE_DIR}/platform/win/Box2DExport.h\"")
+    endif()
 endif()
 
 if(DEFINED NO_LUA_INIT)
@@ -1079,6 +1119,19 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
             COMMAND "${CMAKE_COMMAND}" -E copy_directory ${PROJECT_ROOT}/lua ${LUA_DEST_DIR}
         )
         install(DIRECTORY ${LUA_DEST_DIR} DESTINATION bin)
+    endif()
+
+    # Apple apps read the assets and scripts from inside their bundle
+    if(DEFINED BUNDLE_RESOURCES_DIR)
+        foreach(PROJECT_CONTENT assets lua)
+            if(EXISTS "${PROJECT_ROOT}/${PROJECT_CONTENT}")
+                add_custom_command(
+                    TARGET ${APP_NAME} POST_BUILD
+                    COMMAND "${CMAKE_COMMAND}" -E remove_directory ${BUNDLE_RESOURCES_DIR}/${PROJECT_CONTENT}
+                    COMMAND "${CMAKE_COMMAND}" -E copy_directory ${PROJECT_ROOT}/${PROJECT_CONTENT} ${BUNDLE_RESOURCES_DIR}/${PROJECT_CONTENT}
+                )
+            endif()
+        endforeach()
     endif()
 
     set_target_properties(

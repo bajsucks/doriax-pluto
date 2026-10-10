@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>A lightweight native C++ engine for 2D and 3D games, with a visual editor and scripting.</strong>
+  <strong>A lightweight C++ engine for 2D and 3D games, with a visual editor and scripting in Pluto or C++.</strong>
 </p>
 
 > **This fork runs Pluto, not vanilla Lua.** The scripting runtime is
@@ -19,20 +19,10 @@
 > an existing `.lua` file stops parsing.
 
 <p align="center">
-  <strong>Your game. Your source. Your build.</strong>
-</p>
-
-<p align="center">
   <a href="https://doriax.org/#download"><strong>Download</strong></a> ·
   <a href="https://docs.doriax.org"><strong>Documentation</strong></a> ·
-  <a href="https://github.com/doriaxengine/doriax/releases"><strong>Releases</strong></a> ·
+  <a href="#example-games"><strong>Examples</strong></a> ·
   <a href="https://discord.gg/yXXDyJf3gT"><strong>Discord</strong></a>
-</p>
-
-<p align="center">
-  <a href="https://www.youtube.com/watch?v=3eqhaAZBNss">
-    <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-pirate-adventure.png" alt="Watch Doriax Engine in action">
-  </a>
 </p>
 
 <p align="center">
@@ -44,98 +34,114 @@
   <a href="https://discord.gg/yXXDyJf3gT"><img src="https://img.shields.io/discord/1356958061880934480?label=Discord&logo=discord&style=flat&color=5865F2" alt="Join the Doriax Discord"></a>
 </p>
 
-## Why Doriax?
-
-Doriax is for developers who want a smaller, native, code-transparent engine without giving up a visual editor. It combines scene authoring, scripting, shader tooling, builds, and exports in one open-source workflow.
-
-- **Lightweight** — a lean, data-oriented runtime that keeps abstractions and engine overhead under control
-- **Native C++** — native platform and graphics backends, with C++ available throughout the stack
-- **Pluto and C++ together** — prototype quickly in Pluto (`.pluto`) or Lua (`.lua`), write native gameplay code in C++, or mix both. **Project Settings > Directories** picks the extension new scripts use, and **Build > Script Compilation** chooses whether exports ship the source or precompiled `.luac` bytecode.
-- **Visual workflow** — edit 2D, 3D, and UI scenes with a hierarchy, inspector, resources, animation timeline, and play mode
-- **ECS and data-oriented** — shared 2D/3D runtime designed around cache-friendly component data
-- **Open and hackable** — MIT-licensed engine code and readable exported projects, with no closed build pipeline
-- **Cross-platform** — target Windows, Linux, macOS, Android, iOS, and HTML5
-
-## Native projects you control
-
-**Source Code** export produces a standalone CMake project containing generated C++ scene and bundle code, your Lua and C++ scripts, assets, platform backends, compiled shaders, and the engine source it needs.
-
-Export converts `.scene` and `.bundle` authoring data into C++ factory functions that call the public engine API, and compiles your C++ scripts unchanged alongside them, so scene setup runs as compiled code with no editor file format left to parse at runtime. Lua scripts, textures, models, and audio stay runtime resources. See the [export guide](https://docs.doriax.org/editor/export/#from-editor-data-to-runtime-code) for the generated output structure and asset filtering.
-
-The exported project is yours: inspect the result, add native integrations, change the engine, and compile the game yourself outside the editor with standard native toolchains.
-
-When you want a finished artifact instead, use **Desktop** export to build a ready-to-run native binary for the current computer, or **Web** export to build HTML and WebAssembly with Emscripten.
-
-## Editor workflow
-
-- Build 2D and 3D scenes with sprites, tilemaps, models, cameras, lights, and reusable entities
-- Edit component properties, project resources, animations, bones, and terrain without leaving the editor
-- Write Lua and C++ in the integrated code editor with engine API completion
-- Fork the built-in Mesh (color and depth), UI, Points, Lines, and Sky shaders, plus custom shaders for ordered post-process passes, with live viewport recompilation and custom uniforms editable in the editor or set from scripts
-- Run the game in play mode, inspect build output, and export scenes, assets, scripts, engine files, and compiled shaders
-- Optionally call on the built-in AI assistant to inspect the project, create entities, draft Lua and C++ scripts, and invoke builds, with preview-then-approve, auto-run-read-only, and full-agent modes deciding how much it may do on its own
-
 <p align="center">
-  <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-lost-slime-3d.png" alt="3D platformer level in the Doriax 3D editor" width="48%">
-  <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-2d-sprite.png" alt="Sprite and tilemap tools in the Doriax 2D editor" width="48%">
-</p>
-<p align="center">
-  <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-code.png" alt="Integrated code editor with Lua API completion in Doriax" width="48%">
-  <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/runtime-first-ui-scene.png" alt="UI scene in Doriax" width="48%">
-</p>
-<p align="center">
-  <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-ai-chat.png" alt="Doriax AI assistant creating entities" width="48%">
-  <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-bones.png" alt="Bone animation tools in Doriax" width="48%">
+  <a href="https://www.youtube.com/watch?v=3eqhaAZBNss">
+    <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-pirate-adventure.png" alt="The Doriax editor with a 3D adventure scene, linking to the introduction video">
+  </a>
+  <br>
+  <a href="https://www.youtube.com/watch?v=3eqhaAZBNss">Watch the introduction video</a>
 </p>
 
-## Engine features
+Doriax is a free, open-source game engine with a small, data-oriented C++ runtime and a desktop editor for building 2D, 3D, and UI scenes. You can script in Pluto or Lua, in C++, or mix them. Your game can be exported as a standalone CMake project that includes the engine source, so you can build it yourself for Windows, Linux, macOS, Android, iOS, or the web, and change anything you like.
 
-- Shared ECS runtime for 2D and 3D scenes, with scene layers and serialization
-- Sprites, tilemaps, and polygons, plus 2D lights, normal maps, and occluder shadows
-- GLTF and OBJ models with skeletal animation, morph targets, and mesh instancing
-- PBR materials with dynamic lights and cascaded shadows, sky-driven IBL, SSAO, fog, and planar mirrors
-- Keyframe tracks, runtime actions with easing, crossfade blending, and sprite-sheet animation
-- Particle systems and heightmap terrain with clipmap LOD and sculpting tools
-- UI toolkit with anchors, containers, text, images, buttons, scrollbars, and other widgets
-- Integrated Box2D and Jolt Physics support for 2D/3D bodies, shapes, and joints
-- Spatial 3D audio, texture and shader pools, and multithreaded asynchronous resource loading
+## Example games
 
-## Platform support
+Click a screenshot to play the game in your browser. Each one is a regular Doriax project, so you can also clone it and open it in the editor.
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <a href="https://doriaxengine.github.io/lostslime3d/"><img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-lost-slime-3d.png" alt="Lost Slime 3D level open in the Doriax editor"></a>
+      <br><strong>Lost Slime 3D</strong><br>
+      3D platformer · <a href="https://doriaxengine.github.io/lostslime3d/">Play</a> · <a href="https://github.com/doriaxengine/lostslime3d">Source</a>
+    </td>
+    <td width="50%" align="center">
+      <a href="https://doriaxengine.github.io/lostslime/"><img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-2d-sprite.png" alt="Lost Slime level open in the Doriax 2D editor"></a>
+      <br><strong>Lost Slime</strong><br>
+      2D platformer · <a href="https://doriaxengine.github.io/lostslime/">Play</a> · <a href="https://github.com/doriaxengine/lostslime">Source</a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
+      <a href="https://doriaxengine.github.io/tappyplane/"><img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-play-mode.png" alt="Tappy Plane running in the Doriax editor's play mode"></a>
+      <br><strong>Tappy Plane</strong><br>
+      Endless flyer · <a href="https://doriaxengine.github.io/tappyplane/">Play</a> · <a href="https://github.com/doriaxengine/tappyplane">Source</a>
+    </td>
+    <td width="50%" align="center">
+      <a href="https://doriaxengine.github.io/bastionvale/"><img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-bastion-vale.png" alt="Bastion Vale tower defence map open in the Doriax editor"></a>
+      <br><strong>Bastion Vale</strong><br>
+      3D tower defence · <a href="https://doriaxengine.github.io/bastionvale/">Play</a> · <a href="https://github.com/doriaxengine/bastionvale">Source</a>
+    </td>
+  </tr>
+</table>
+
+## Screenshots
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-rainforest.png" alt="Rainforest scene in the Doriax editor" width="48%">
+  <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-bones.png" alt="Animated character with its bones shown in the Doriax editor" width="48%">
+</p>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-code.png" alt="Code editor with Lua API completion in Doriax" width="48%">
+  <img src="https://raw.githubusercontent.com/doriaxengine/doriax-site/main/screenshots/editor-ai-chat.png" alt="The Doriax AI assistant creating entities" width="48%">
+</p>
+
+More in the [gallery](https://doriax.org/#gallery) on the website.
+
+## Features
+
+- Visual editor for 2D, 3D, and UI scenes, with a hierarchy, inspector, resource browser, and play mode
+- Pluto (`.pluto`), Lua (`.lua`), and C++ scripting on the same engine API, with completion in the built-in code editor
+- ECS runtime shared by 2D and 3D
+- Sprites, tilemaps, and polygons, with 2D lights, normal maps, and shadows
+- glTF, OBJ, and FBX models with skeletal animation, morph targets, instancing, and LOD
+- PBR rendering with cascaded shadows, image-based lighting, SSAO, SSR, fog, water, mirrors, and reflection probes
+- Built-in shaders you can fork and edit, plus custom post-processing passes, recompiled live in the viewport
+- Animation timeline with keyframes and bone editing, plus sprite-sheet animation, tweened actions, and blending
+- Terrain you can sculpt and paint, rendered with clipmap LOD
+- UI widgets with anchors and layout containers
+- Particle systems, Box2D and Jolt physics, 3D audio, and multithreaded resource loading
+- AdMob ads and in-app purchases on Android and iOS, plus SDKs for web game portals such as CrazyGames and Poki
+- Optional AI assistant that can look through your project, create entities, write scripts, and run builds, doing only as much on its own as you allow
+
+## Exporting your game
+
+**Source Code** export writes a standalone CMake project. Your scenes become generated C++ that calls the public engine API, your C++ scripts are compiled alongside them unchanged, and Pluto/Lua scripts and assets are kept as runtime resources. **Build > Script Compilation** decides whether those scripts ship as source or as precompiled `.luac` bytecode that loads in place of the `.pluto`/`.lua` file. The project also contains the platform backends, compiled shaders, and the engine source it needs, so you can open it, change anything (the engine included), and build it with the usual native toolchains, without the editor.
+
+If you just want something to run, **Desktop** export builds a native executable for your computer, and **Web** export builds HTML and WebAssembly with Emscripten. The [export guide](https://docs.doriax.org/editor/export/#from-editor-data-to-runtime-code) explains what gets generated.
+
+## Platforms
 
 | Area | Support |
 | --- | --- |
 | Editor | Windows, Linux, macOS |
 | Export targets | Windows, Linux, macOS, Android, iOS, HTML5 |
-| Rendering backends | OpenGL/OpenGL ES, Vulkan, Metal, Direct3D 11 |
 | Scripting | Pluto (`.pluto`), Lua (`.lua`), C++ |
+| Graphics APIs | OpenGL, OpenGL ES, Vulkan, Metal, Direct3D 11 |
 
-Backend availability depends on the target platform. OpenGL is the default editor backend on Windows and Linux, while macOS uses Metal; Vulkan can be selected on Windows or Linux at configure time.
+Which graphics APIs are available depends on the target platform.
 
-## Get started
+## Getting started
 
-Download the latest tagged release from the [Doriax website](https://doriax.org/#download) or the [GitHub releases page](https://github.com/doriaxengine/doriax/releases), then follow [Your First Project](https://docs.doriax.org/getting-started/first-project/) to create a scene, attach a script, and run it in the editor.
+Download the editor from the [website](https://doriax.org/#download) or the [releases page](https://github.com/doriaxengine/doriax/releases), then follow [Your First Project](https://docs.doriax.org/getting-started/first-project/) to create a scene, attach a script, and run it.
 
-> [!IMPORTANT]
-> **Tagged release:** recommended for projects. **`main` build:** the newest development version, which may contain regressions, incomplete work, or breaking changes.
+Use a tagged release for real projects. Builds from `main` have the newest changes, but they can also have regressions, unfinished work, or breaking changes.
 
-### Build from source
+The editor also runs from the command line to export projects and generate shaders, for example in CI. See [Command-Line Tools](https://docs.doriax.org/editor/command-line/).
 
-All platforms require:
+## Building from source
 
-- A C++17 compiler: MSVC, GCC, or Clang
-- CMake 3.27 or newer (required by the bundled shader compiler)
-- Python 3
-
-Clone the repository before following the instructions for your platform:
+You need a C++17 compiler (MSVC, GCC, or Clang), CMake 3.27 or newer (the bundled shader compiler requires it), and Python 3. Clone the repository, then follow the steps for your platform:
 
 ```bash
 git clone https://github.com/doriaxengine/doriax.git
 cd doriax
 ```
 
-#### Linux (Ubuntu 26.04)
+<details>
+<summary><strong>Linux (Ubuntu 26.04)</strong></summary>
 
-Ubuntu 26.04 includes a recent enough CMake in its official repositories, so no third-party package source is required:
+Ubuntu 26.04 ships a recent enough CMake, so the official repositories are all you need:
 
 ```bash
 sudo apt-get update
@@ -156,7 +162,10 @@ To create a redistributable install tree under `dist/`:
 cmake --install build --prefix dist
 ```
 
-#### macOS
+</details>
+
+<details>
+<summary><strong>macOS</strong></summary>
 
 Install the Xcode Command Line Tools, CMake, and Ninja:
 
@@ -175,11 +184,12 @@ To create a redistributable app under `dist/bin/`:
 cmake --install build --prefix dist
 ```
 
-#### Windows (Visual Studio)
+</details>
 
-The official Windows download is built with MSVC. C++ scripts played inside that editor must use an MSVC-compatible toolchain with the same architecture; MSYS2 GCC cannot link against its engine library. In **Project Settings > Build**, select an available compatible compiler or **Default**, which resolves to a compatible toolchain. See [Building for Windows](https://docs.doriax.org/building/windows/) for setup details. Lua-only projects can play inside the editor without a C++ compiler; exporting a project still requires build tools.
+<details>
+<summary><strong>Windows (Visual Studio)</strong></summary>
 
-Install Python 3 and Visual Studio 2022 or newer with the **Desktop development with C++** workload and **C++ CMake tools for Windows** component. Run these commands from a Developer PowerShell or Developer Command Prompt:
+Install Python 3 and Visual Studio 2022 or newer with the **Desktop development with C++** workload and the **C++ CMake tools for Windows** component. Then, from a Developer PowerShell or Developer Command Prompt:
 
 ```powershell
 cmake -S . -B build -G "Visual Studio 17 2022" -A x64
@@ -187,19 +197,24 @@ cmake --build build --config Release --target doriax-editor doriax-editor-cmd
 build\Release\doriax-editor.exe
 ```
 
-If you use Visual Studio 2026, replace the generator with `"Visual Studio 18 2026"`. The explicit `doriax-editor-cmd` target is required because the console executable is excluded from the default build.
+For Visual Studio 2026, use the `"Visual Studio 18 2026"` generator. `doriax-editor-cmd` is the console version of the editor, used for command-line work. It is not part of the default build, which is why it is listed explicitly.
 
-To install the editor, CLI executable, runtime library, and engine files under `dist/bin/`:
+To install the editor, the console executable, the runtime library, and the engine files under `dist/bin/`:
 
 ```powershell
 cmake --install build --prefix dist --config Release
 ```
 
-#### Windows (MSYS2 UCRT64, source build)
+To play C++ scripts inside the editor, they have to be built with a toolchain compatible with the editor itself: for the official download, that means MSVC with the same architecture. Lua-only projects play without a C++ compiler, but exporting still needs build tools. See [Building for Windows](https://docs.doriax.org/building/windows/) for details.
 
-There is no separate UCRT64 release package. To use GCC for C++ Play, build the editor and engine with the same UCRT64 toolchain used for your scripts. UCRT64 GCC and MSVC C++ binaries are incompatible. Keep the editor, engine DLL, and import library from the same build together.
+</details>
 
-Install [MSYS2](https://www.msys2.org/), update it with `pacman -Syu` (reopen the terminal and repeat if requested), then run the following in the **MSYS2 UCRT64** terminal from the repository directory:
+<details>
+<summary><strong>Windows (MSYS2 UCRT64)</strong></summary>
+
+Only needed if you want to build C++ scripts with GCC. The official download is built with MSVC, and MSVC and UCRT64 GCC binaries can't be mixed, so the editor, the engine, and your scripts all have to come from the same UCRT64 toolchain. There is no UCRT64 release package.
+
+Install [MSYS2](https://www.msys2.org/) and update it with `pacman -Syu` (reopen the terminal and repeat if it asks). Then, in the **MSYS2 UCRT64** terminal, from the repository directory:
 
 ```bash
 pacman -S --needed git mingw-w64-ucrt-x86_64-toolchain \
@@ -212,13 +227,16 @@ cmake --build build-ucrt64 --target doriax-editor doriax-editor-cmd
 ./build-ucrt64/doriax-editor.exe
 ```
 
-Launch the editor from that terminal so it can find the UCRT64 compiler, `mingw32-make` (included in the toolchain package), and runtime DLLs. Select the UCRT64 GCC kit in **Project Settings > Build**. The editor's own Ninja build and the generated scripts' MinGW Makefiles build can use different generators while sharing the same compiler.
+Start the editor from that terminal so it finds the compiler, `mingw32-make`, and the runtime DLLs, and select the UCRT64 GCC kit in **Project Settings > Build**. If an older project keeps its previous compiler setup, close the editor and delete only the project's `.doriax/build` folder.
 
-To validate a source build, create a project with a C++ script, press Play, stop, edit the script, and press Play again. Confirm that compilation, linking, and plugin loading succeed. The existing MinGW CI job is not a dedicated UCRT64 Play test, so this source-build path still needs validation on Windows. If an older project retains the previous compiler configuration, close the editor and remove only the project's `.doriax/build` directory before retrying.
+This path is newer and less tested than the MSVC build. If C++ scripts fail to compile or load in Play, please open an issue.
 
-#### Optional Vulkan editor
+</details>
 
-The editor defaults to OpenGL on Windows and Linux and to Metal on macOS. To use Vulkan on Windows or Linux, install the Vulkan SDK and add `-DGRAPHIC_BACKEND=vulkan` to that platform's configure command. A separate build directory lets you keep both backends configured:
+<details>
+<summary><strong>Vulkan editor (optional)</strong></summary>
+
+The editor uses OpenGL on Windows and Linux and Metal on macOS. To build it with Vulkan on Windows or Linux, install the Vulkan SDK and add `-DGRAPHIC_BACKEND=vulkan` to the configure command. A separate build directory lets you keep both backends:
 
 ```bash
 cmake -S . -B build-vulkan -G Ninja \
@@ -227,55 +245,33 @@ cmake -S . -B build-vulkan -G Ninja \
 cmake --build build-vulkan --target doriax-editor
 ```
 
-The example above uses the Linux Ninja toolchain. On Windows, add `-DGRAPHIC_BACKEND=vulkan` to the Visual Studio configure command instead.
+On Windows, add the same flag to the Visual Studio configure command instead.
 
-## Command-line tools
+</details>
 
-The editor executable also exposes automation commands for project export and standalone shader generation:
+## Follow the project
 
-```bash
-doriax-editor export --help
-doriax-editor shaders --help
-```
+Doriax is in active development. The easiest way to keep up is to star or watch this repository (**Watch > Custom > Releases** notifies you of each new version). You can also join the [Discord](https://discord.gg/yXXDyJf3gT) to ask questions and share what you're making, and follow along on [YouTube](https://www.youtube.com/@doriaxengine) and [X](https://x.com/doriaxengine).
 
-Windows release packages use `doriax-editor-cmd.exe` for console automation; the Windows build instructions above create it alongside the GUI editor.
+If Doriax is useful to you, you can support its development through [GitHub Sponsors](https://github.com/sponsors/eduardodoria) or [Patreon](https://www.patreon.com/doriax).
 
-## Try it in your browser
+## Contributing
 
-These small projects demonstrate real Doriax builds running on the web. Play them, then inspect the source:
+Bug reports, ideas, and pull requests are welcome. For larger changes, open an issue or bring it up on Discord first so we can agree on the approach.
 
-- **Character Control** — [Play](https://doriaxengine.github.io/charactercontrol/) · [Source](https://github.com/doriaxengine/charactercontrol)
-- **Tappy Plane** — [Play](https://doriaxengine.github.io/tappyplane/) · [Source](https://github.com/doriaxengine/tappyplane)
-- **Lost Slime** — [Play](https://doriaxengine.github.io/lostslime/) · [Source](https://github.com/doriaxengine/lostslime)
-
-## Repository layout
-
-- `editor/` — desktop editor, AI assistant, project tools, build orchestration, and export flow
-- `engine/` — ECS runtime, platform layers, rendering, scripting, and project templates
-- `shadercompiler/` — shader compilation and cross-platform translation
-- `libs/` — bundled third-party dependencies
-
-## Project links
-
-- [Website](https://doriax.org)
-- [Documentation](https://docs.doriax.org)
-- [Your First Project](https://docs.doriax.org/getting-started/first-project/)
-- [Releases](https://github.com/doriaxengine/doriax/releases)
-- [Issues](https://github.com/doriaxengine/doriax/issues)
-- [Discord](https://discord.gg/yXXDyJf3gT)
-
-Issues and pull requests are welcome. For substantial changes, start with an issue or discuss the proposal with the community on Discord.
+- `editor/`: desktop editor, AI assistant, project tools, build, and export
+- `engine/`: runtime (ECS, rendering, platform layers, scripting) and project templates
+- `shadercompiler/`: shader compilation and cross-platform translation
+- `libs/`: bundled third-party libraries
 
 ## Project history and development
 
-Doriax started in 2015 as Supernova Engine, a code-first game-development API. Public development began with the [initial commit in July 2016](https://github.com/doriaxengine/doriax/commit/88561113), and the full history is in this repository. The visual editor started in 2024 in a [separate editor repository](https://github.com/eduardodoria/doriax-editor), then named `supernova-editor`, after building complete projects with code alone proved impractical.
+Doriax started in 2015 as Supernova Engine, a code-only game engine. Public development began with the [first commit in July 2016](https://github.com/doriaxengine/doriax/commit/88561113), and the full history is in this repository. Building complete games with code alone turned out to be impractical, so in 2024 I started a visual editor in a [separate repository](https://github.com/eduardodoria/doriax-editor), then called `supernova-editor`.
 
-The architecture, technical direction, and engineering decisions are made by the maintainer. Over the past year, AI coding tools have been used for bounded work: repetitive implementation, investigation, documentation, and review. The maintainer reviews and adapts what those tools produce.
+Version 0.5.5 was the last release under the Supernova name, and 0.6 the first as Doriax. Some internal folders and older links still use the Supernova name while the transition finishes.
 
-This is separate from Doriax's optional built-in AI assistant, which is an editor feature users choose to enable.
-
-Version `0.5.5` was the final release under the Supernova name, and `0.6` is the first Doriax release. Some internal folders and older external references may still use the Supernova name while the transition continues.
+About the use of AI: the architecture, technical direction, and engineering decisions are mine. Over the past year I have used AI coding tools for well-defined tasks such as repetitive implementation, investigation, documentation, and review, and I review and adapt what they produce. This is separate from the AI assistant inside the editor, which is an optional feature you choose to turn on.
 
 ## License
 
-Doriax Engine is available under the [MIT License](LICENSE) and can be used in personal and commercial projects. Bundled third-party libraries retain their respective licenses.
+Doriax is released under the [MIT License](LICENSE) and can be used in personal and commercial projects. Bundled third-party libraries keep their own licenses.

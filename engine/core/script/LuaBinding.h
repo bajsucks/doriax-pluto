@@ -74,9 +74,10 @@ namespace doriax {
         static void removeScriptSubscriptions(Scene* scene, int luaRef);
         static void releaseLuaRef(int luaRef);
 
-        // For editor scripts use
+        // Starts only the scripts not started yet, such as a spawned bundle's
         static void initializeLuaScripts(Scene* scene);
         static void cleanupLuaScripts(Scene* scene);
+        static void cleanupLuaScripts(Scene* scene, Entity entity);
         static void clearLoadedProjectModules();
 
         static std::string getLuaStackErrorString(lua_State* L, int index = -1);

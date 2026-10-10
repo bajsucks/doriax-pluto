@@ -1156,7 +1156,7 @@ void editor::SceneRender2D::update(std::vector<Entity> selEntities, std::vector<
                     co.lines->setVisible(true);
 
                     bool isMainCam = (mainCamera == entity);
-                    updateCameraFrustum(co, cameraComp, isMainCam);
+                    updateCameraFrustum(co, cameraComp, isMainCam, !displaySettings.showFullFrustum);
                 }else{
                     co.icon->setVisible(false);
                     co.lines->clearLines();

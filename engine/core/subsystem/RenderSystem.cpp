@@ -5627,10 +5627,12 @@ bool RenderSystem::loadPoints(Entity entity, PointsComponent& points, uint16_t p
 
     points.needUpdateTexture = false;
 
-    if (!render.endLoad(pipelines, false, true, CullingMode::BACK, WindingOrder::CCW)){
+    // no depth write: transparent quads would hide the points drawn after them
+    if (!render.endLoad(pipelines, false, !points.transparent, CullingMode::BACK, WindingOrder::CCW)){
         return false;
     }
 
+    points.pipelineTransparent = points.transparent;
     points.needReload = false;
     points.loadCalled = true;
     SystemRender::addQueueCommand(&changeLoaded, new check_load_t{scene, entity});
@@ -7102,7 +7104,8 @@ void RenderSystem::updateCamera(CameraComponent& camera, Transform& transform){
     }else if (camera.type == CameraType::CAMERA_ORTHO) {
         camera.projectionMatrix = Matrix4::orthoMatrix(camera.leftClip, camera.rightClip, camera.bottomClip, camera.topClip, camera.nearClip, camera.farClip);
     }else if (camera.type == CameraType::CAMERA_PERSPECTIVE){
-        camera.projectionMatrix = Matrix4::perspectiveMatrix(camera.yfov, camera.aspect, camera.nearClip, camera.farClip);
+        Vector2 nearFar = getCameraNearFar(camera);
+        camera.projectionMatrix = Matrix4::perspectiveMatrix(camera.yfov, camera.aspect, nearFar.x, nearFar.y);
     }
 
     if (camera.useTarget){
@@ -7917,11 +7920,22 @@ void RenderSystem::sortInstancedMesh(InstancedMeshComponent& instmesh, MeshCompo
         instmesh.needUpdateBuffer = true;
 }
 
+Vector2 RenderSystem::getCameraNearFar(const CameraComponent& camera){
+    if (camera.type != CameraType::CAMERA_PERSPECTIVE){
+        return Vector2(camera.nearClip, camera.farClip);
+    }
+
+    float nearClip = std::max(camera.nearClip, 0.001f);
+    float farClip = std::max(camera.farClip, nearClip + 0.001f);
+    return Vector2(nearClip, farClip);
+}
+
 void RenderSystem::configureLightShadowNearFar(LightComponent& light, const CameraComponent& camera){
     if (light.automaticShadowCamera){
-        light.shadowCameraNearFar.x = camera.nearClip;
+        Vector2 nearFar = getCameraNearFar(camera);
+        light.shadowCameraNearFar.x = nearFar.x;
         if (light.range == 0.0){
-            light.shadowCameraNearFar.y = camera.farClip;
+            light.shadowCameraNearFar.y = nearFar.y;
         }else{
             light.shadowCameraNearFar.y = light.range;
         }
@@ -8973,6 +8987,10 @@ void RenderSystem::update(double dt){
                         points.needReload = true;
                     }
                 }
+            }
+
+            if (points.transparent != points.pipelineTransparent){
+                points.needReload = true;
             }
 
             if (points.loaded && points.needReload){

@@ -23,6 +23,11 @@
 
 using namespace doriax;
 
+// release sokol passes no message, the item name still says what failed
+#define _SG_LOGITEM_XMACRO(item, msg) #item,
+static const char* sokolLogItems[] = { _SG_LOG_ITEMS };
+#undef _SG_LOGITEM_XMACRO
+
 void sokol_log(const char* tag,                // e.g. 'sg'
                     uint32_t log_level,             // 0=panic, 1=error, 2=warn, 3=info
                     uint32_t log_item_id,           // SG_LOGITEM_*
@@ -30,6 +35,9 @@ void sokol_log(const char* tag,                // e.g. 'sg'
                     uint32_t line_nr,               // line number in sokol_gfx.h
                     const char* filename_or_null,   // source filename, may be nullptr in release mode
                     void* user_data){
+    if (!message_or_null && log_item_id < sizeof(sokolLogItems) / sizeof(sokolLogItems[0])){
+        message_or_null = sokolLogItems[log_item_id];
+    }
     // The GL backend warns (and logs the resource name) when the driver strips an unused
     // uniform block or image-sampler. This is benign and expected for custom/simplified
     // shaders that don't use every binding their variant provides, so log it at debug only.

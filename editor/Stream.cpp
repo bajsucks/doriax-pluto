@@ -1839,6 +1839,7 @@ YAML::Node editor::Stream::encodeSceneDisplaySettings(const SceneDisplaySettings
     sceneNode["showAllBones"]         = ds.showAllBones;
     sceneNode["showAllBodies"]        = ds.showAllBodies;
     sceneNode["hideCameraView"]       = ds.hideCameraView;
+    sceneNode["showFullFrustum"]      = ds.showFullFrustum;
     sceneNode["hideLightIcons"]       = ds.hideLightIcons;
     sceneNode["hideSoundIcons"]       = ds.hideSoundIcons;
     sceneNode["hideContainerGuides"]  = ds.hideContainerGuides;
@@ -1865,6 +1866,7 @@ void editor::Stream::decodeSceneDisplaySettings(const YAML::Node& node, SceneDis
     if (node["showAllBones"])         ds.showAllBones         = node["showAllBones"].as<bool>();
     if (node["showAllBodies"])        ds.showAllBodies        = node["showAllBodies"].as<bool>();
     if (node["hideCameraView"])       ds.hideCameraView       = node["hideCameraView"].as<bool>();
+    if (node["showFullFrustum"])      ds.showFullFrustum      = node["showFullFrustum"].as<bool>();
     if (node["hideLightIcons"])       ds.hideLightIcons       = node["hideLightIcons"].as<bool>();
     if (node["hideSoundIcons"])       ds.hideSoundIcons       = node["hideSoundIcons"].as<bool>();
     if (node["hideContainerGuides"])  ds.hideContainerGuides  = node["hideContainerGuides"].as<bool>();
@@ -2042,6 +2044,7 @@ YAML::Node editor::Stream::encodeProject(Project* project) {
         if (ios.admobEnabled != defaultIOS.admobEnabled) iosNode["admobEnabled"] = ios.admobEnabled;
         if (!ios.admobAppId.empty()) iosNode["admobAppId"] = ios.admobAppId;
         if (!ios.trackingUsageDescription.empty()) iosNode["trackingUsageDescription"] = ios.trackingUsageDescription;
+        if (ios.storeKitEnabled != defaultIOS.storeKitEnabled) iosNode["storeKitEnabled"] = ios.storeKitEnabled;
         if (iosNode.size() != 0) root["ios"] = iosNode;
     }
 
@@ -2383,6 +2386,7 @@ void editor::Stream::decodeProject(Project* project, const YAML::Node& node, con
         if (iosNode["admobEnabled"].IsDefined()) ios.admobEnabled = iosNode["admobEnabled"].as<bool>();
         if (iosNode["admobAppId"]) ios.admobAppId = iosNode["admobAppId"].as<std::string>();
         if (iosNode["trackingUsageDescription"]) ios.trackingUsageDescription = iosNode["trackingUsageDescription"].as<std::string>();
+        if (iosNode["storeKitEnabled"].IsDefined()) ios.storeKitEnabled = iosNode["storeKitEnabled"].as<bool>();
     }
 
     if (node["android"] && node["android"].IsMap()) {
@@ -2767,30 +2771,31 @@ namespace {
 
 // Only the keys that hold entity nodes: a component carries entity ids of its own, a model's
 // bones for one, and those are not ids this scene hands out.
-Entity lastSerializedEntity(const YAML::Node& entityNode) {
+void collectSerializedEntities(const YAML::Node& entityNode, std::unordered_set<Entity>& ids) {
     if (!entityNode || !entityNode.IsMap())
-        return NULL_ENTITY;
+        return;
 
-    Entity last = NULL_ENTITY;
     if (entityNode["entity"]) {
-        last = entityNode["entity"].as<Entity>();
+        ids.insert(entityNode["entity"].as<Entity>());
     }
 
     if (entityNode["children"] && entityNode["children"].IsSequence()) {
         for (const auto& child : entityNode["children"]) {
-            last = std::max(last, lastSerializedEntity(child));
+            collectSerializedEntities(child, ids);
         }
     }
 
     // the scene entities an instance keeps under its bundle root, stored nowhere else
     if (entityNode["bundleLocalEntities"] && entityNode["bundleLocalEntities"].IsSequence()) {
         for (const auto& local : entityNode["bundleLocalEntities"]) {
-            last = std::max(last, lastSerializedEntity(local));
+            collectSerializedEntities(local, ids);
         }
     }
-
-    return last;
 }
+
+// scene ids not decoded yet, which bundle members decoded first leave free
+thread_local const EntityRegistry* pendingSceneRegistry = nullptr;
+thread_local std::unordered_set<Entity>* pendingSceneEntities = nullptr;
 
 }
 
@@ -2802,11 +2807,26 @@ void editor::Stream::decodeSceneProjectEntities(Project* project, SceneProject* 
 
     // a bundle instance is rebuilt as the root holding it is decoded, so its members draw from
     // the allocator while entities further down the file are still waiting to be recreated
-    Entity lastEntity = NULL_ENTITY;
+    std::unordered_set<Entity> sceneIds;
     for (const auto& entityNode : entitiesNode){
-        lastEntity = std::max(lastEntity, lastSerializedEntity(entityNode));
+        collectSerializedEntities(entityNode, sceneIds);
+    }
+    Entity lastEntity = NULL_ENTITY;
+    for (Entity id : sceneIds){
+        lastEntity = std::max(lastEntity, id);
     }
     sceneProject->scene->setLastEntity(lastEntity);
+
+    struct PendingScope {
+        PendingScope(const EntityRegistry* registry, std::unordered_set<Entity>* ids) {
+            pendingSceneRegistry = registry;
+            pendingSceneEntities = ids;
+        }
+        ~PendingScope() {
+            pendingSceneRegistry = nullptr;
+            pendingSceneEntities = nullptr;
+        }
+    } pendingScope(sceneProject->scene, &sceneIds);
 
     for (const auto& entityNode : entitiesNode){
         decodeEntity(entityNode, sceneProject->scene, &sceneProject->entities, project, sceneProject);
@@ -3548,10 +3568,18 @@ std::vector<Entity> editor::Stream::decodeEntity(const YAML::Node& entityNode, E
         if (entityNode["entity"]){
             Entity serializedEntity = entityNode["entity"].as<Entity>();
             entity = serializedEntity;
-            if (!registry->recreateEntity(entity)){
+
+            // bundle members are decoded without a scene project, scene entities with one
+            const bool loadingScene = pendingSceneEntities && registry == pendingSceneRegistry;
+            if (loadingScene && !sceneProject && pendingSceneEntities->count(serializedEntity)){
+                entity = registry->createUserEntity();
+            }else if (!registry->recreateEntity(entity)){
                 if (createNewIfExists){
                     entity = registry->createUserEntity();
                 }
+            }
+            if (loadingScene && sceneProject){
+                pendingSceneEntities->erase(serializedEntity);
             }
             if (entityRemap && entity != serializedEntity) {
                 (*entityRemap)[serializedEntity] = entity;
