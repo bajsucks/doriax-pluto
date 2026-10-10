@@ -2042,7 +2042,7 @@ void editor::SceneRender3D::update(std::vector<Entity> selEntities, std::vector<
                 currentIconCameras.insert(entity);
                 bool newCamera = instanciateCameraObject(entity);
                 createOrUpdateCameraIcon(entity, transform, newCamera);
-                createCameraFrustum(entity, transform, cameraComp, true, mainCamera == entity);
+                createCameraFrustum(entity, transform, cameraComp, !displaySettings.showFullFrustum, mainCamera == entity);
 
                 if (displaySettings.hideCameraView) {
                     cameraObjects[entity].icon->setVisible(false);

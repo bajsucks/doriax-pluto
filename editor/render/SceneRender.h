@@ -26,6 +26,7 @@ namespace doriax::editor{
         bool showAllBones        = false;
         bool showAllBodies       = false;
         bool hideCameraView      = false;
+        bool showFullFrustum     = false;
         bool hideLightIcons      = false;
         bool hideSoundIcons      = false;
         bool hideContainerGuides = false;
@@ -50,6 +51,7 @@ namespace doriax::editor{
 
         CameraType type = CameraType::CAMERA_UI;
         bool isMainCamera = false;
+        bool fixedSizeFrustum = true;
         float yfov = 0;
         float aspect = 0;
         float nearClip = 0;

@@ -2176,6 +2176,7 @@ void editor::SceneWindow::show() {
                         drawSettingRow(ICON_FA_CUBES " Show all bodies", sceneProject.displaySettings.showAllBodies, notStopped);
 
                         drawSettingRow(ICON_FA_CAMERA " Hide camera view", sceneProject.displaySettings.hideCameraView);
+                        drawSettingRow(ICON_FA_EXPAND " Show full camera frustum", sceneProject.displaySettings.showFullFrustum);
                         drawSettingRow(ICON_FA_LIGHTBULB " Hide light icons", sceneProject.displaySettings.hideLightIcons, sceneProject.sceneType != SceneType::SCENE_3D);
                         drawSettingRow(ICON_FA_VOLUME_HIGH " Hide sound icons", sceneProject.displaySettings.hideSoundIcons);
 

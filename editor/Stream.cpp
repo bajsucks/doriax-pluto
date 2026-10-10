@@ -1839,6 +1839,7 @@ YAML::Node editor::Stream::encodeSceneDisplaySettings(const SceneDisplaySettings
     sceneNode["showAllBones"]         = ds.showAllBones;
     sceneNode["showAllBodies"]        = ds.showAllBodies;
     sceneNode["hideCameraView"]       = ds.hideCameraView;
+    sceneNode["showFullFrustum"]      = ds.showFullFrustum;
     sceneNode["hideLightIcons"]       = ds.hideLightIcons;
     sceneNode["hideSoundIcons"]       = ds.hideSoundIcons;
     sceneNode["hideContainerGuides"]  = ds.hideContainerGuides;
@@ -1865,6 +1866,7 @@ void editor::Stream::decodeSceneDisplaySettings(const YAML::Node& node, SceneDis
     if (node["showAllBones"])         ds.showAllBones         = node["showAllBones"].as<bool>();
     if (node["showAllBodies"])        ds.showAllBodies        = node["showAllBodies"].as<bool>();
     if (node["hideCameraView"])       ds.hideCameraView       = node["hideCameraView"].as<bool>();
+    if (node["showFullFrustum"])      ds.showFullFrustum      = node["showFullFrustum"].as<bool>();
     if (node["hideLightIcons"])       ds.hideLightIcons       = node["hideLightIcons"].as<bool>();
     if (node["hideSoundIcons"])       ds.hideSoundIcons       = node["hideSoundIcons"].as<bool>();
     if (node["hideContainerGuides"])  ds.hideContainerGuides  = node["hideContainerGuides"].as<bool>();
