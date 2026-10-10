@@ -61,6 +61,16 @@ static int vectorMul(lua_State* L){
     return 1;
 }
 
+// LuaBridge adds C functions to mutable values only, const ones (box.minimum) need it too
+template <class T>
+static void addConstVectorMul(lua_State* L){
+    lua_rawgetp(L, LUA_REGISTRYINDEX, luabridge::detail::getConstRegistryKey<T>());
+    lua_pushliteral(L, "__mul");
+    lua_pushcfunction(L, &vectorMul<T>);
+    lua_rawset(L, -3);
+    lua_pop(L, 1);
+}
+
 void LuaBinding::registerMathClasses(lua_State *L){
 #ifndef DISABLE_LUA_BINDINGS
 
@@ -120,6 +130,7 @@ void LuaBinding::registerMathClasses(lua_State *L){
         .addFunction("normalizedCopy", &Vector2::normalizedCopy)
         .addFunction("reflect", &Vector2::reflect)
         .endClass();
+    addConstVectorMul<Vector2>(L);
 
     luabridge::getGlobalNamespace(L)
         .beginClass<Vector3>("Vector3")
@@ -166,6 +177,7 @@ void LuaBinding::registerMathClasses(lua_State *L){
         .addFunction("perpendicular", &Vector3::perpendicular)
         .addFunction("reflect", &Vector3::reflect)
         .endClass();
+    addConstVectorMul<Vector3>(L);
 
     luabridge::getGlobalNamespace(L)
         .beginClass<Vector4>("Vector4")
@@ -203,6 +215,7 @@ void LuaBinding::registerMathClasses(lua_State *L){
         .addFunction("lerp", &Vector4::lerp)
         .addFunction("isNaN", &Vector4::isNaN)
         .endClass();
+    addConstVectorMul<Vector4>(L);
 
     luabridge::getGlobalNamespace(L)
         .beginClass<Rect>("Rect")
